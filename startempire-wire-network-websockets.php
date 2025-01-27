@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:     Startempire Wire Network Websockets - Plugin to provide websocket support for the Startempire Wire Network. WordPress-based, server-agnostic, able integrate with any server. Handles real-time features like chat, notifications, and data syncing.
+ * Plugin Name:     Startempire Wire Network Websockets - This plugin provides websocket support for the Startempire Wire Network. WordPress-based, server-agnostic, able integrate with any server. Handles real-time features like chat, notifications, and data syncing.
  * Plugin URI:      https://startempirewire.network/
  * Description:     Plugin to provide websocket support for the Startempire Wire Network. WordPress-based, server-agnostic, able integrate with any server. Handles real-time features like chat, notifications, and data syncing.
  * Author:          Startempire Wire
