@@ -1,115 +1,283 @@
-=== Startempire Wire Network Websockets ===
-Contributors: (this should be a list of wordpress.org userid's)
-Donate link: https://example.com/
-Tags: comments, spam
-Requires at least: 4.5
-Tested up to: 6.7.1
-Requires PHP: 5.6
-Stable tag: 0.1.0
-License: GPLv2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+=== Startempire Wire Network WebSockets ===
+Contributors: startempirewire
+Donate link: https://startempirewire.com/donate
+Tags: websocket, realtime, communication, api
+Requires at least: 5.8
+Tested up to: 6.5
+Requires PHP: 7.4
+Stable tag: 1.0.0
+License: GPLv3
+License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-Here is a short description of the plugin.  This should be no more than 150 characters.  No markup here.
+Enterprise-grade WebSocket solution for WordPress with real-time communication features.
 
 == Description ==
+**Startempire Wire Network WebSockets** is a high-performance WebSocket implementation for WordPress that enables:
 
-This is the long description.  No limit, and you can use Markdown (as well as in the following sections).
-
-For backwards compatibility, if this section is missing, the full length of the short description will be used, and
-Markdown parsed.
-
-A few notes about the sections above:
-
-*   "Contributors" is a comma separated list of wp.org/wp-plugins.org usernames
-*   "Tags" is a comma separated list of tags that apply to the plugin
-*   "Requires at least" is the lowest version that the plugin will work on
-*   "Tested up to" is the highest version that you've *successfully used to test the plugin*. Note that it might work on
-higher versions... this is just the highest one you've verified.
-*   Stable tag should indicate the Subversion "tag" of the latest stable version, or "trunk," if you use `/trunk/` for
-stable.
-
-    Note that the `readme.txt` of the stable tag is the one that is considered the defining one for the plugin, so
-if the `/trunk/readme.txt` file says that the stable tag is `4.3`, then it is `/tags/4.3/readme.txt` that'll be used
-for displaying information about the plugin.  In this situation, the only thing considered from the trunk `readme.txt`
-is the stable tag pointer.  Thus, if you develop in trunk, you can update the trunk `readme.txt` to reflect changes in
-your in-development version, without having that information incorrectly disclosed about the current stable version
-that lacks those changes -- as long as the trunk's `readme.txt` points to the correct stable tag.
-
-    If no stable tag is provided, it is assumed that trunk is stable, but you should specify "trunk" if that's where
-you put the stable version, in order to eliminate any doubt.
+* Real-time bidirectional communication
+* Tiered access control based on membership levels
+* Seamless integration with Wirebot.chat services
+* Hybrid WebSocket/WebRTC architecture
+* Enterprise-grade security with JWT authentication
 
 == Installation ==
+1. Upload plugin files to `/wp-content/plugins/`
+2. Activate through WordPress admin
+3. Install Node.js dependencies:
 
-This section describes how to install the plugin and get it working.
+    cd wp-content/plugins/startempire-wire-network-websockets/node-server
+    npm install --production
 
-e.g.
+4. Configure environment variables in `.env`
+5. Start service via WP-CLI:
 
-1. Upload `plugin-name.php` to the `/wp-content/plugins/` directory
-1. Activate the plugin through the 'Plugins' menu in WordPress
-1. Place `<?php do_action('plugin_name_hook'); ?>` in your templates
+    wp sewn-ws server start
+
+6. Configure firewall rules to allow WebSocket traffic on port 8080
+7. Enable TLS encryption in plugin settings
+
+== REST API Endpoints ==
+| Endpoint                | Method | Description                     |
+|-------------------------|--------|---------------------------------|
+| /sewn-ws/v1/config      | GET    | Server configuration           |
+| /sewn-ws/v1/broadcast   | POST   | Global message broadcast       |
+| /sewn-ws/v1/status      | GET    | Connection statistics          |
 
 == Frequently Asked Questions ==
 
-= A question that someone might have =
+= What WebSocket features are included? =
+- Real-time messaging
+- Presence tracking
+- File transfer (WebRTC)
+- Cross-domain communication
 
-An answer to that question.
+= How does Wirebot.chat integration work? =
+Premium users can enable:
+- Priority message routing
+- Collaborative editing sessions
+- Enterprise-grade broadcasting
 
-= What about foo bar? =
-
-Answer to foo bar dilemma.
-
-== Screenshots ==
-
-1. This screen shot description corresponds to screenshot-1.(png|jpg|jpeg|gif). Note that the screenshot is taken from
-the /assets directory or the directory that contains the stable readme.txt (tags or trunk). Screenshots in the /assets
-directory take precedence. For example, `/assets/screenshot-1.png` would win over `/tags/4.3/screenshot-1.png`
-(or jpg, jpeg, gif).
-2. This is the second screen shot
+= What are the system requirements? =
+- WordPress 5.8+
+- PHP 7.4+
+- Node.js 16.x
+- 1GB+ RAM recommended
 
 == Changelog ==
 
 = 1.0 =
-* A change since the previous version.
-* Another change.
+* Initial release
+* Core WebSocket implementation
+* Tiered access control
+* Wirebot.chat integration
 
 = 0.5 =
-* List versions from most recent at top to oldest at bottom.
+* Beta release
+* Basic WebSocket functionality
+* Admin dashboard prototype
 
 == Upgrade Notice ==
 
 = 1.0 =
-Upgrade notices describe the reason a user should upgrade.  No more than 300 characters.
+**Major Update** - Requires Node.js 16.x+ and PHP 7.4+. Includes new security features.
 
 = 0.5 =
-This version fixes a security related bug.  Upgrade immediately.
+Initial beta release - Not recommended for production use.
 
-== Arbitrary section ==
+== Support ==
+Contact support@startempirewire.com for technical assistance.
 
-You may provide arbitrary sections, in the same format as the ones above.  This may be of use for extremely complicated
-plugins where more information needs to be conveyed that doesn't fit into the categories of "description" or
-"installation."  Arbitrary sections will be shown below the built-in sections outlined above.
+STARTEMPIRE WIRE NETWORK WEBSOCKETS DOCUMENTATION
+==================================================
 
-== A brief Markdown Example ==
+1. ARCHITECTURE OVERVIEW
+-----------------------
 
-Ordered list:
+1.1 System Diagram
+[WordPress] ↔ [REST API] ↔ [WebSocket Server] ↔ [WebRTC Service]
+                ↑               ↑               ↑
+            [Auth Service]  [Message Broker] [File Transfer]
 
-1. Some feature
-1. Another feature
-1. Something else about the plugin
+1.2 Core Components
+- SEWN_WebSocket_Server: Main WebSocket handler
+- SEWN_Auth_Manager: JWT authentication
+- SEWN_Protocol_Adapter: WebSocket/WebRTC bridge
+- SEWN_Monitoring: Real-time metrics collector
 
-Unordered list:
+2. INSTALLATION & SETUP
+-----------------------
 
-* something
-* something else
-* third thing
+2.1 Requirements
+- WordPress 5.8+
+- PHP 7.4+ (with sodium extension)
+- Node.js 16.x
+- Redis 6.2+ (recommended)
 
-Here's a link to [WordPress](https://wordpress.org/ "Your favorite software") and one to [Markdown's Syntax Documentation][markdown syntax].
-Titles are optional, naturally.
+2.2 Installation Steps
+1. Upload plugin via WP Admin
+2. Install dependencies:
+   cd wp-content/plugins/startempire-wire-network-websockets/node-server
+   npm install --production
+3. Configure .env:
+   WS_PORT=8080
+   JWT_SECRET=your-secret-key
+   REDIS_URL=redis://localhost:6379
+4. Start service:
+   wp sewn-ws server start
 
-[markdown syntax]: https://daringfireball.net/projects/markdown/syntax
-            "Markdown is what the parser uses to process much of the readme file"
+3. CONFIGURATION
+----------------
 
-Markdown uses email style notation for blockquotes and I've been told:
-> Asterisks for *emphasis*. Double it up  for **strong**.
+3.1 wp-config.php Settings
+define('SEWN_WS_ENCRYPTION_KEY', 'your-encryption-key');
+define('SEWN_WS_MAX_CONNECTIONS', 1000);
 
-`<?php code(); // goes in backticks ?>`
+3.2 Admin Settings (WP Admin → WebSocket → Settings)
+- Port Configuration
+- TLS Certificate Path
+- Rate Limiting Rules
+- WebRTC ICE Servers
+
+4. API DOCUMENTATION
+-------------------
+
+4.1 REST Endpoints
+POST /sewn-ws/v1/auth → Generate JWT
+  Params: username, password
+  Response: { token: "jwt-token", expires: 3600 }
+
+GET /sewn-ws/v1/stats → Connection Statistics
+  Response: 
+  {
+    connections: 142,
+    bandwidth: "1.2GB",
+    uptime: "36h"
+  }
+
+4.2 WebSocket Protocol
+wss://yoursite.com:8080/ws
+
+Handshake Headers:
+Authorization: Bearer <JWT>
+X-SEWN-Protocol: v1.2
+
+Message Format:
+{
+  "event": "message|file|presence",
+  "data": {},
+  "timestamp": 1625097600
+}
+
+5. HOOKS & FILTERS
+-------------------
+
+5.1 Authentication Hooks
+add_filter('sewn_ws_validate_token', function($user_id, $token) {
+  // Custom token validation
+  return $user_id;
+});
+
+5.2 Connection Lifecycle
+add_action('sewn_ws_client_connect', function($client_id) {
+  error_log("Client connected: " . $client_id);
+});
+
+add_action('sewn_ws_client_disconnect', function($client_id) {
+  // Cleanup resources
+});
+
+6. SECURITY PROTOCOLS
+---------------------
+
+6.1 Authentication Flow
+1. Client → WP: Authenticate via REST
+2. WP → Client: JWT (valid 1h)
+3. Client → WS: Connect with JWT
+4. WS → WP: Validate JWT
+5. WS ↔ Client: Secured connection
+
+6.2 Encryption Standards
+- TLS 1.3 mandatory
+- JWT HS256 signing
+- Message payload encryption (XChaCha20)
+
+7. TROUBLESHOOTING
+------------------
+
+7.1 Common Issues
+
+Issue: Connection Timeout
+Solution:
+1. Verify firewall rules
+2. Check WS_PORT availability
+3. Test with: telnet yoursite.com 8080
+
+Issue: JWT Validation Failures
+1. Ensure system clocks are synchronized
+2. Verify JWT_SECRET matches between WP and WS
+3. Check token expiration time
+
+8. DEVELOPER GUIDE
+------------------
+
+8.1 Extending Protocols
+
+class CustomProtocol extends SEWN_Protocol_Base {
+  public function handleMessage($message) {
+    // Custom message processing
+  }
+}
+
+add_filter('sewn_ws_protocols', function($protocols) {
+  $protocols['custom'] = CustomProtocol::class;
+  return $protocols;
+});
+
+9. MONITORING & ANALYTICS
+-------------------------
+
+9.1 Key Metrics
+- ws_connections_active
+- ws_messages_per_second
+- ws_bandwidth_usage
+- ws_error_rate
+
+9.2 Prometheus Configuration
+- Endpoint: /metrics
+- Scrape interval: 15s
+- Alert rules:
+  - High error rate
+  - Connection saturation
+
+10. SUPPORT & MAINTENANCE
+-------------------------
+
+Support Channels:
+- Email: support@startempirewire.com
+- SLA Response Times:
+  - Critical: 1h
+  - High: 4h
+  - Normal: 24h
+
+Maintenance Schedule:
+- Security patches: Weekly
+- Major updates: Quarterly
+- Protocol upgrades: Bi-annually
+
+APPENDICES
+----------
+
+A. Glossary
+- ICE: Interactive Connectivity Establishment
+- JWT: JSON Web Token
+- STUN: Session Traversal Utilities for NAT
+
+B. CLI Reference
+wp sewn-ws server restart
+wp sewn-ws stats --format=json
+wp sewn-ws client list
+
+C. Legal
+- License: GPLv3
+- Data Policy: https://startempirewire.com/privacy
+- SLA Terms: https://startempirewire.com/sla
