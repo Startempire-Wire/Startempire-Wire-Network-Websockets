@@ -42,6 +42,8 @@ class Core {
             new Admin_Notices();
         }
         
+        $this->init_ring_leader_integration();
+        
         // ... rest of initialization code ...
     }
 
@@ -81,5 +83,79 @@ class Core {
             error_log('Ring Leader auth failed: ' . $e->getMessage());
             return $this->fallback_auth();
         }
+    }
+
+    private function init_ring_leader_integration() {
+        // PRESERVE AND EXPAND EXISTING ROUTER
+        add_action('sewn_ringleader_message', function($message) {
+            $router = [
+                'parent-to-extension' => 'chrome-extension',
+                'connect-to-parent' => 'wordpress-admin',
+                'user-to-user' => 'direct-message',
+                'parent-to-connect' => 'connect-plugin',
+                'connect-to-extension' => 'chrome-extension',
+                'extension-to-parent' => 'wordpress-admin',
+                'extension-to-connect' => 'connect-plugin',
+                'extension-to-extension' => 'direct-message'
+            ];
+            
+            if(isset($router[$message['type']])) {
+                Server_Controller::broadcast(
+                    $router[$message['type']], 
+                    json_encode($message['data'])
+                );
+            }
+        });
+
+        // ADD NEW CHANNEL SYSTEM ALONGSIDE EXISTING
+        add_action('sewn_ws_ready', function() {
+            $this->message_broker = new MessageBroker(
+                get_option('sewn_ws_ringleader_endpoint'),
+                $this->get_auth_token()
+            );
+            
+            $this->create_content_channels([
+                'member_updates',
+                'content_distribution',
+                'network_health'
+            ]);
+        });
+    }
+}
+
+class WS_Auth_Handler {
+    public function authenticate_connection($connection) {
+        $token = $this->get_auth_token($connection);
+        
+        // Verify against Ring Leader's system (handles WP admins)
+        if (!function_exists('startempire_wire_network_ring_leader_verify_token')) {
+            require_once WP_PLUGIN_DIR . '/startempire-wire-network-ring-leader/includes/auth-functions.php';
+        }
+        
+        $user_id = startempire_wire_network_ring_leader_verify_token($token);
+        
+        // First check WordPress admin status from verification
+        if ($user_id && user_can($user_id, 'manage_network')) {
+            return $this->grant_admin_access($connection, $user_id);
+        }
+        
+        // Then check membership tier for non-admins
+        if ($user_id && $this->check_membership_access($user_id)) {
+            return $this->grant_member_access($connection, $user_id);
+        }
+        
+        return $this->reject_connection($connection);
+    }
+    
+    private function check_membership_access($user_id) {
+        $tier = get_user_meta($user_id, 'startempire_membership_tier', true);
+        return in_array($tier, ['freewire', 'wire', 'extrawire']);
+    }
+    
+    private function grant_admin_access($connection, $user_id) {
+        $connection->user_id = $user_id;
+        $connection->access_level = 'admin';
+        do_action('sewn_ws_admin_connected', $connection);
+        return true;
     }
 } 

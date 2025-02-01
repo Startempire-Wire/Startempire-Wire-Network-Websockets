@@ -7,8 +7,8 @@
  * Author:            Startempire Wire
  * Author URI:        https://startempirewire.com/
  * Text Domain:       sewn-ws
- * Domain Path:       /languages
- * Namespace:         SEWN
+ * Domain Path:       /languages/
+ * Namespace:         SEWN\WebSockets
  *
  * @package           Startempire_Wire_Network_Websockets
  */
