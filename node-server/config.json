@@ -1,0 +1,1 @@
+{"port":8080,"tls":{"enabled":false,"cert":"","key":""},"origins":["https:\/\/gpt-stuff.local","chrome-extension:\/\/your-extension-id"]}

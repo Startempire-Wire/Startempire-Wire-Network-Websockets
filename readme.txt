@@ -12,13 +12,16 @@ License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Enterprise-grade WebSocket solution for WordPress with real-time communication features.
 
 == Description ==
-**Startempire Wire Network WebSockets** is a high-performance WebSocket implementation for WordPress that enables:
+**Startempire Wire Network WebSockets** is an server agnostic high-performance WebSocket implementation built on top of Socket.io for WordPress that enables:
 
 * Real-time bidirectional communication
-* Tiered access control based on membership levels
-* Seamless integration with Wirebot.chat services
-* Hybrid WebSocket/WebRTC architecture
+* Integration points for external services
+* Hybrid WebSocket/WebRTC & Socket.io architecture
 * Enterprise-grade security with JWT authentication
+* Comprehensive documentation & Admin dashboard
+* Agnostic architecture that can be used on any server or service
+* Built with performance, scalability, and ease of use in mind
+* Uses AsyncAPI to describe our WebSocket-based APIs (https://www.asyncapi.com/)
 
 == Installation ==
 1. Upload plugin files to `/wp-content/plugins/`
@@ -51,7 +54,7 @@ Enterprise-grade WebSocket solution for WordPress with real-time communication f
 - File transfer (WebRTC)
 - Cross-domain communication
 
-= How does Wirebot.chat integration work? =
+= How does External Service Integration work? =
 Premium users can enable:
 - Priority message routing
 - Collaborative editing sessions
@@ -68,8 +71,7 @@ Premium users can enable:
 = 1.0 =
 * Initial release
 * Core WebSocket implementation
-* Tiered access control
-* Wirebot.chat integration
+* External Service Integration
 
 = 0.5 =
 * Beta release

@@ -1,0 +1,114 @@
+asyncapi: 2.5.0
+info:
+  title: Startempire Wire Network WebSocket API
+  version: 1.0.0
+  description: |
+    WebSocket API for real-time communication in the Startempire Wire Network.
+    Enables bidirectional communication between network members and services.
+
+servers:
+  production:
+    url: wss://startempirewire.network
+    protocol: wss
+    description: Production WebSocket server
+    security:
+      - jwt: []
+
+channels:
+  /messages:
+    publish:
+      summary: Send a message to a channel
+      operationId: sendMessage
+      message:
+        $ref: '#/components/messages/ChatMessage'
+    subscribe:
+      summary: Receive messages from a channel
+      operationId: receiveMessage
+      message:
+        $ref: '#/components/messages/ChatMessage'
+
+  /presence:
+    subscribe:
+      summary: Receive presence updates
+      operationId: receivePresence
+      message:
+        $ref: '#/components/messages/PresenceEvent'
+
+  /status:
+    subscribe:
+      summary: Receive server status updates
+      operationId: receiveStatus
+      message:
+        $ref: '#/components/messages/StatusUpdate'
+
+components:
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  messages:
+    ChatMessage:
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [message, file]
+          content:
+            type: string
+          timestamp:
+            type: integer
+          sender:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        required:
+          - type
+          - content
+          - timestamp
+          - sender
+
+    PresenceEvent:
+      payload:
+        type: object
+        properties:
+          event:
+            type: string
+            enum: [join, leave]
+          userId:
+            type: string
+          timestamp:
+            type: integer
+        required:
+          - event
+          - userId
+          - timestamp
+
+    StatusUpdate:
+      payload:
+        type: object
+        properties:
+          status:
+            type: string
+            enum: [online, offline, error]
+          connections:
+            type: integer
+          uptime:
+            type: integer
+        required:
+          - status
+          - connections
+          - uptime
+
+tags:
+  - name: messages
+    description: Message-related operations
+  - name: presence
+    description: User presence operations
+  - name: status
+    description: Server status operations 
