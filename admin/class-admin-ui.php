@@ -14,8 +14,9 @@ class Admin_UI {
         add_action('admin_init', [$this, 'register_settings']);
         
         // Add AJAX handlers
-        add_action('wp_ajax_sewn_ws_server_control', [$this, 'handle_ajax']);
+        add_action('wp_ajax_sewn_ws_control', [$this, 'handle_server_control']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_ajax']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
     }
 
     public function register_settings() {
@@ -116,15 +117,13 @@ class Admin_UI {
         $node_check = new Node_Check();
         $node_status = $node_check->check_server_status();
         
-        // Pass variables explicitly to view
         $data = [
             'node_status' => $node_status ?: ['version' => 'Unknown', 'running' => false],
             'connections' => Process_Manager::get_active_connections(),
-            'error_logs' => Error_Handler::get_recent_errors()
+            'message_rates' => Process_Manager::get_message_throughput()
         ];
         
-        extract($data);
-        include plugin_dir_path(__FILE__) . 'views/dashboard.php';
+        include plugin_dir_path(__DIR__) . 'admin/views/dashboard.php';
 
         add_meta_box('sewn-ws-controls', 'Server Controls', [$this, 'render_controls']);
         add_meta_box('sewn-ws-stats', 'Real-time Stats', [$this, 'render_stats']);
@@ -157,43 +156,55 @@ class Admin_UI {
         include plugin_dir_path(__DIR__) . 'admin/views/module-settings.php';
     }
 
-    public function handle_ajax() {
-        if ($_POST['action'] === 'sewn_ws_server_control') {
+    public function handle_server_control() {
+        try {
             check_ajax_referer('sewn_ws_control', 'nonce');
             
-            $command = $_POST['command'];
-            $server = new Server_Manager();
+            $command = $_POST['command'] ?? '';
+            $controller = new Server_Controller();
             
-            if ($command === 'start') {
-                $server->start();
-            } elseif ($command === 'stop') {
-                $server->stop();
+            if(!method_exists($controller, $command)) {
+                throw new \Exception("Invalid server command: $command");
             }
             
-            wp_send_json_success();
-        }
-        
-        if ($_GET['action'] === 'sewn_ws_get_stats') {
-            $stats = get_transient('sewn_ws_stats');
-            wp_send_json_success([
-                'connections' => $stats['connections'] ?? 0,
-                'bandwidth' => size_format($stats['bandwidth'] ?? 0, 2)
+            $result = $controller->$command();
+            wp_send_json_success($result);
+            
+        } catch(\Exception $e) {
+            wp_send_json_error([
+                'message' => $e->getMessage(),
+                'debug' => $this->get_debug_info()
             ]);
         }
     }
 
-    public function handle_ajax_server_control() {
-        check_ajax_referer('sewn_ws_control', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Unauthorized']);
-            return;
-        }
-        
-        $command = sanitize_text_field($_POST['command']);
-        $server = new Server_Manager();
-        
+    public function handle_ajax() {
         try {
+            // Add action verification
+            if (!isset($_POST['action']) || $_POST['action'] !== 'sewn_ws_control') {
+                throw new Exception('Invalid AJAX action');
+            }
+            
+            if (!wp_verify_nonce($_POST['nonce'], 'sewn_ws_control')) {
+                throw new Exception('Invalid security nonce');
+            }
+
+            if (!current_user_can('manage_options')) {
+                throw new Exception('Current user lacks manage_options capability');
+            }
+
+            if (!isset($_POST['command'])) {
+                throw new Exception('Missing command parameter');
+            }
+            
+            $command = sanitize_text_field($_POST['command']);
+            $server = new Server_Manager();
+            
+            // Log attempt
+            error_log("Server control command received: " . $command);
+            error_log("User agent: " . $_SERVER['HTTP_USER_AGENT']);
+            error_log("IP address: " . $_SERVER['REMOTE_ADDR']);
+
             switch ($command) {
                 case 'start':
                     $result = $server->start();
@@ -205,12 +216,60 @@ class Admin_UI {
                     $result = $server->restart();
                     break;
                 default:
-                    throw new Exception('Invalid command');
+                    throw new Exception("Invalid command: $command");
             }
             
-            wp_send_json_success(['status' => $result]);
+            wp_send_json_success([
+                'status' => $result,
+                'debug' => [
+                    'node_version' => exec('node -v'),
+                    'npm_version' => exec('npm -v'),
+                    'system_user' => exec('whoami'),
+                    'node_dir' => SEWN_WS_NODE_DIR,
+                    'dir_exists' => file_exists(SEWN_WS_NODE_DIR),
+                    'dir_perms' => substr(sprintf('%o', fileperms(SEWN_WS_NODE_DIR)), -4)
+                ]
+            ]);
+            
         } catch (Exception $e) {
-            wp_send_json_error(['message' => $e->getMessage()]);
+            $errorData = [
+                'message' => $e->getMessage(),
+                'debug' => [
+                    'php_version' => phpversion(),
+                    'wp_version' => get_bloginfo('version'),
+                    'server_software' => $_SERVER['SERVER_SOFTWARE'],
+                    'node_path' => defined('SEWN_WS_NODE_DIR') ? SEWN_WS_NODE_DIR : 'undefined',
+                    'current_user' => get_current_user_id(),
+                    'user_caps' => array_keys(wp_get_current_user()->allcaps)
+                ]
+            ];
+            error_log("AJAX Error: " . print_r($errorData, true));
+            wp_send_json_error($errorData);
+        }
+    }
+
+    public function enqueue_scripts() {
+        wp_enqueue_script(
+            'sewn-ws-admin',
+            plugins_url('assets/js/admin.js', dirname(__FILE__)),
+            ['jquery'],
+            filemtime(plugin_dir_path(dirname(__FILE__)) . 'assets/js/admin.js'),
+            true
+        );
+
+        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+            'nonce' => wp_create_nonce('sewn_ws_control'),
+            'ajax_url' => admin_url('admin-ajax.php')
+        ]);
+    }
+
+    public function handle_server_action() {
+        if (!current_user_can('manage_network')) {
+            wp_send_json_error('Insufficient privileges');
+        }
+        
+        if (!$this->rate_limiter->check('server_controls', 3, 'per_minute')) {
+            wp_send_json_error('Too many requests');
         }
     }
 }

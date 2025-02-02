@@ -186,3 +186,17 @@
         margin: 5px 0;
     }
 }
+
+/* Remove tier-specific styles only */
+.stats-card .tier-badge,
+.stats-card .membership-indicator {
+    display: none;
+}
+
+/* Keep existing card structure */
+.stats-card {
+    /* Original styles remain */
+    padding: 20px;
+    margin-bottom: 20px;
+    background: #fff;
+}

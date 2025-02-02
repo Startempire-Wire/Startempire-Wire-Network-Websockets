@@ -6,45 +6,42 @@ class AuthManager {
 
     async validateToken(token) {
         try {
-            // Check if admin token (for any WordPress installation)
-            if (await this.isWordPressAdmin(token)) {
+            // First check WordPress admin status
+            const wpDecoded = jwt.verify(token, process.env.WP_JWT_SECRET);
+            if (wpDecoded.isAdmin) {
+                return this.adminPayload(wpDecoded);
+            }
+
+            // Then check API keys
+            const apiKey = await this.validateApiKey(token);
+            if (apiKey.valid) {
                 return {
-                    isAdmin: true,
-                    source: 'wordpress',
-                    capabilities: ['all']
+                    source: 'api-key',
+                    tier: apiKey.tier,
+                    capabilities: this.getTierCapabilities(apiKey.tier)
                 };
             }
 
-            // Check if Ring Leader token
-            if (await this.isRingLeaderToken(token)) {
-                // Trust Ring Leader's role/capability assignments
-                return await this.getRingLeaderCapabilities(token);
-            }
-
-            // Check if valid API key
-            if (await this.isValidApiKey(token)) {
-                return {
-                    isAdmin: false,
-                    source: 'api',
-                    capabilities: await this.getApiKeyCapabilities(token)
-                };
-            }
-
-            // Default public access
+            // Finally check user tier
             return {
-                isAdmin: false,
-                source: 'public',
-                capabilities: ['connect', 'subscribe']
+                source: 'wordpress',
+                capabilities: this.getTierCapabilities(wpDecoded.tier),
+                tier: wpDecoded.tier
             };
 
-        } catch (error) {
-            console.error('Token validation error:', error);
-            return {
-                isAdmin: false,
-                source: 'public',
-                capabilities: ['connect', 'subscribe']
-            };
+        } catch (err) {
+            return this.handleAuthError(err);
         }
+    }
+
+    getTierCapabilities(tier) {
+        const tiers = {
+            free: ['connect', 'subscribe'],
+            freewire: ['connect', 'subscribe', 'publish'],
+            wire: ['connect', 'subscribe', 'publish', 'moderate'],
+            admin: ['all']
+        };
+        return tiers[tier] || tiers.free;
     }
 
     async getRingLeaderCapabilities(token) {

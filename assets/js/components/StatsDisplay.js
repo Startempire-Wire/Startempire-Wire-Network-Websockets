@@ -87,18 +87,14 @@ class StatsDisplay {
     }
 
     update(data) {
-        // Update numeric displays
-        this.elements.connections.textContent = data.connections;
-        this.elements.bandwidth.textContent = this.formatBandwidth(data.bandwidth);
-        this.elements.errorRate.textContent = `${data.errorRate}%`;
+        // Keep existing connection tracking
+        this.metrics.connections.add(data.connections);
+        this.metrics.bandwidth.add(data.bandwidth);
 
-        // Update history
-        this.updateHistory('connections', data.connections);
-        this.updateHistory('bandwidth', data.bandwidth);
-        this.updateHistory('errors', data.errorRate);
-
-        // Update graphs
-        this.updateGraphs();
+        // Remove tier-specific updates
+        document.getElementById('live-connections').textContent = data.connections;
+        document.getElementById('message-throughput').textContent =
+            `${data.message_rate}/s | ${data.bandwidth} MBps`;
     }
 
     updateHistory(metric, value) {
@@ -130,5 +126,37 @@ class StatsDisplay {
         }
 
         return `${value.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    async refreshStats() {
+        try {
+            const response = await fetch('/wp-json/sewn-ws/v1/stats', {
+                headers: {
+                    'Authorization': `Bearer ${sewn_ws_admin.jwt}`
+                }
+            });
+
+            const data = await response.json();
+            this.updateConnectionsChart(data.connections);
+            this.updateBandwidthChart(data.throughput);
+            this.updateSystemStats(data.system);
+
+        } catch (error) {
+            console.error('Stats fetch failed:', error);
+        }
+    }
+
+    connectToStatsSocket() {
+        this.socket = new WebSocket(`wss://${window.location.host}/ws-admin`);
+
+        this.socket.onmessage = (event) => {
+            this.updateDisplays(JSON.parse(event.data));
+            this.updateSystemStats(event.data.system);
+        };
+    }
+
+    updateSystemStats(stats) {
+        document.getElementById('cpu-usage').textContent = `${stats.cpu}%`;
+        document.getElementById('memory-usage').textContent = `${stats.memory} MB`;
     }
 } 

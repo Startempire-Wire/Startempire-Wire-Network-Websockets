@@ -13,6 +13,8 @@ class Module_Admin {
         add_action('admin_menu', [$this, 'add_menu_items']);
         add_action('admin_init', [$this, 'handle_module_actions']);
         add_action('admin_init', [$this, 'register_module_settings']);
+        add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
     }
 
     public function add_menu_items() {
@@ -230,5 +232,22 @@ class Module_Admin {
         
         // Pass variables to the view
         include plugin_dir_path(__DIR__) . 'admin/views/module-settings.php';
+    }
+
+    public function handle_stats_request() {
+        check_ajax_referer('sewn_ws_nonce', 'nonce');
+        
+        wp_send_json_success([
+            'connections' => get_transient('sewn_ws_connections'),
+            'status' => get_option('sewn_ws_server_status')
+        ]);
+    }
+
+    public function enqueue_scripts() {
+        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sewn_ws_nonce'),
+            // ... other vars ...
+        ]);
     }
 }

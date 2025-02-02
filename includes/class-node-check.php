@@ -126,4 +126,26 @@ class Node_Check {
         exec("ps -o etime= -p $pid", $output);
         return !empty($output[0]) ? trim($output[0]) : null;
     }
+
+    public static function get_connection_count() {
+        $status = self::check_server_status();
+        return $status['connections'] ?? 0;
+    }
+
+    public static function get_message_throughput() {
+        // Implementation would query Node.js server
+        return [
+            'incoming' => get_transient('sewn_ws_msg_in_rate'),
+            'outgoing' => get_transient('sewn_ws_msg_out_rate')
+        ];
+    }
+
+    public static function get_active_rooms() {
+        global $wpdb;
+        return $wpdb->get_results(
+            "SELECT room_name, COUNT(*) as connections 
+             FROM {$wpdb->prefix}sewn_ws_connections 
+             GROUP BY room_name"
+        );
+    }
 } 

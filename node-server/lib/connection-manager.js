@@ -4,6 +4,7 @@ class ConnectionManager {
         this.stats = stats;
         this.connections = new Map();
         this.rooms = new Map();
+        this.adminConnections = new Set();
     }
 
     handleConnection(socket) {
@@ -32,6 +33,12 @@ class ConnectionManager {
         });
 
         console.log(`User ${userId} connected`);
+
+        if (authResult.adminOverride) {
+            this.adminConnections.add(socket.id);
+            socket.join('admin-channel');
+            socket._capabilities = ['all'];
+        }
     }
 
     handleDisconnection(socket) {

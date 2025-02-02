@@ -45,6 +45,8 @@ class Core {
         $this->init_ring_leader_integration();
         
         // ... rest of initialization code ...
+
+        add_action('wp_ajax_sewn_ws_channel_stats', [Server_Controller::class, 'handle_channel_stats']);
     }
 
     public function show_node_warning() {

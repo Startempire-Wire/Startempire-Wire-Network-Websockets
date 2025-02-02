@@ -27,6 +27,24 @@ class REST_API {
                 'permission_callback' => [$this, 'check_permissions']
             ]
         ]);
+
+        register_rest_route('sewn-ws/v1', '/auth', [
+            'methods' => 'POST',
+            'callback' => [$this, 'generate_jwt'],
+            'permission_callback' => '__return_true'
+        ]);
+
+        register_rest_route('sewn-ws/v1', '/stats', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_live_stats'],
+            'permission_callback' => [$this, 'check_stats_permissions']
+        ]);
+
+        register_rest_route('sewn-ws/v1', '/server/status', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_server_status'],
+            'permission_callback' => [$this, 'check_permissions']
+        ]);
     }
 
     private function check_permissions() {
@@ -73,11 +91,34 @@ class REST_API {
     public function get_server_status() {
         $node = new Node_Check();
         $status = $node->check_server_status();
-
+        
         return rest_ensure_response([
             'running' => $status['running'],
             'version' => $status['version'],
-            'uptime' => $status['uptime'] ?? null
+            'uptime' => $status['uptime'] ?? 0,
+            'connections' => Node_Check::get_connection_count()
         ]);
+    }
+
+    public function generate_jwt(WP_REST_Request $request) {
+        // JWT generation logic
+        return rest_ensure_response([
+            'token' => $jwt,
+            'expires' => 3600
+        ]);
+    }
+
+    public function get_live_stats() {
+        $stats = [
+            'connections' => Node_Check::get_connection_count(),
+            'throughput' => Node_Check::get_message_throughput(),
+            'rooms' => Node_Check::get_active_rooms(),
+            'system' => Node_Check::get_system_stats()
+        ];
+        return rest_ensure_response($stats);
+    }
+
+    public function check_stats_permissions() {
+        return current_user_can('manage_options');
     }
 }

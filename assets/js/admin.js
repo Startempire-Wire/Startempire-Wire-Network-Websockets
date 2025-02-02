@@ -83,7 +83,7 @@ class WebSocketAdmin {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    action: 'sewn_ws_server_control',
+                    action: 'sewn_ws_control',
                     command: action,
                     nonce: sewn_ws_admin.nonce
                 })
@@ -120,14 +120,19 @@ class WebSocketAdmin {
     }
 
     startStatsPolling() {
-        setInterval(() => {
+        this.pollInterval = setInterval(() => {
             this.updateStats();
         }, 2000);
+
+        // Clean up when tab is closed
+        window.addEventListener('beforeunload', () => {
+            clearInterval(this.pollInterval);
+        });
     }
 
     async updateStats() {
         try {
-            const response = await fetch(sewn_ws_admin.ajax_url + '?action=sewn_ws_get_stats');
+            const response = await fetch(`${sewn_ws_admin.ajax_url}?action=sewn_ws_get_stats&nonce=${sewn_ws_admin.nonce}`);
             const data = await response.json();
             this.statsDisplay.update(data);
         } catch (error) {
@@ -220,4 +225,37 @@ class WebSocketAdmin {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.wsAdmin = new WebSocketAdmin();
+});
+
+jQuery(document).ready(function ($) {
+    $('.server-control').on('click', function (e) {
+        e.preventDefault();
+        const button = $(this);
+        const command = button.data('command');
+
+        button.prop('disabled', true)
+            .find('.loading-dots').show();
+        button.data('original-text', button.find('.button-text').text());
+        button.find('.button-text').text(button.data('loading-text'));
+
+        $('.status-dot').removeClass('error success').addClass('starting');
+        $('.loading-spinner').show();
+
+        $.ajax({
+            url: sewn_ws_admin.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'sewn_ws_control',
+                command: command,
+                nonce: sewn_ws_admin.nonce
+            },
+            success: function (response) {
+                // ... rest of your existing success handler ...
+            },
+            error: function (jqXHR) {
+                // ... rest of your existing error handler ...
+            }
+        });
+    });
 });

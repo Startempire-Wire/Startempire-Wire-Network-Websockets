@@ -146,7 +146,12 @@ define('SEWN_WS_MAX_CONNECTIONS', 1000);
 4.1 REST Endpoints
 POST /sewn-ws/v1/auth → Generate JWT
   Params: username, password
-  Response: { token: "jwt-token", expires: 3600 }
+  Response: { 
+    token: "jwt-token", 
+    expires: 3600,
+    isAdmin: true,
+    tier: "admin"
+  }
 
 GET /sewn-ws/v1/stats → Connection Statistics
   Response: 
@@ -157,7 +162,9 @@ GET /sewn-ws/v1/stats → Connection Statistics
   }
 
 4.2 WebSocket Protocol
-wss://yoursite.com:8080/ws
+- WordPress administrators get full system access
+- Users inherit capabilities from their tier
+- Tiers temporarily based on WordPress roles
 
 Handshake Headers:
 Authorization: Bearer <JWT>

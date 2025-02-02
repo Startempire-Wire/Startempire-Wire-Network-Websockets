@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const winston = require('winston');
 const Redis = require('redis');
+const wpdb = require('wpdb');
 
 dotenv.config(); // Load environment variables from .env
 
@@ -49,6 +50,18 @@ const stats = {
         presence: { messages: 0, errors: 0, subscribers: 0 },
         status: { messages: 0, errors: 0, subscribers: 0 },
     },
+    tiers: {
+        free: { connections: 0, bandwidth: 0 },
+        wire: { connections: 0, bandwidth: 0 },
+        extraWire: { connections: 0, bandwidth: 0 }
+    },
+};
+
+// Add these metrics collection endpoints
+const metrics = {
+    connections: 0,
+    messagesIn: 0,
+    messagesOut: 0
 };
 
 // JWT Authentication Middleware (for channels other than /admin)
@@ -106,6 +119,8 @@ messageNamespace.on('connection', socket => {
     logger.info(`User connected to /message: ${socket.user ? socket.user.userId : 'unknown'}`);
     stats.channels.message.subscribers++;
     emitChannelStats('message');
+    stats.tiers[socket.user.tier].connections++;
+    stats.tiers[socket.user.tier].bandwidth += socket.bytesReceived;
 
     socket.on('message', (message) => {
         logger.info('Received message:', message, 'from user:', socket.user ? socket.user.userId : 'unknown');
@@ -177,6 +192,7 @@ function emitStats() {
 
     // Emit to admin namespace
     io.of('/admin').emit('stats_update', stats);
+    stats.tiers = this.tiers;
 }
 
 function emitChannelStats(channelName) {
@@ -186,6 +202,21 @@ function emitChannelStats(channelName) {
 
 // Stats update interval - send stats to admin dashboard every 2 seconds
 setInterval(emitStats, 2000);
+
+// Add these metrics collection endpoints
+const metrics = {
+    connections: 0,
+    messagesIn: 0,
+    messagesOut: 0
+};
+
+setInterval(() => {
+    // Store rates in transients for PHP access
+    wpdb.setTransient('sewn_ws_msg_in_rate', metrics.messagesIn);
+    wpdb.setTransient('sewn_ws_msg_out_rate', metrics.messagesOut);
+    metrics.messagesIn = 0;
+    metrics.messagesOut = 0;
+}, 1000);
 
 io.listen(PORT, () => {
     logger.info(`WebSocket server listening on port ${PORT}`);

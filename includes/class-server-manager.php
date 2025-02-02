@@ -46,4 +46,33 @@ class Server_Manager {
         $this->restart_server();
         return $this->check_server_status()->healthy;
     }
+
+    public function start() {
+        try {
+            $output = [];
+            $return_var = 0;
+            $command = 'npm run start --prefix ' . escapeshellarg(SEWN_WS_NODE_DIR);
+            error_log("Attempting to start server with command: " . $command);
+            
+            exec($command, $output, $return_var);
+            error_log("Node.js start output: " . print_r($output, true));
+            error_log("Exit code: " . $return_var);
+
+            if ($return_var !== 0) {
+                $errorMessage = "Node.js Start Failed (Code $return_var): " . implode("\n", $output);
+                error_log($errorMessage);
+                throw new Exception($errorMessage);
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            error_log("Server Start Exception: " . $e->getMessage());
+            error_log("PHP Version: " . phpversion());
+            error_log("WP Version: " . get_bloginfo('version'));
+            error_log("Node Path: " . SEWN_WS_NODE_DIR);
+            error_log("Current User: " . get_current_user_id());
+            error_log("Server OS: " . PHP_OS);
+            throw $e;
+        }
+    }
 } 

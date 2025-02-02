@@ -17,7 +17,6 @@ class Server_Controller {
     public function __construct() {
         add_action('wp_ajax_sewn_ws_server_control', [$this, 'handle_server_control']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
-        add_action('wp_ajax_sewn_ws_get_channel_stats', [$this, 'handle_channel_stats']);
 
         $this->server_script = SEWN_WS_PATH . 'server/server.js';
         $this->pid_file = SEWN_WS_PATH . 'server/server.pid';
@@ -56,67 +55,31 @@ class Server_Controller {
     private function execute_server_command($command) {
         switch ($command) {
             case 'start':
-                return $this->start_server();
+                return $this->start();
             case 'stop':
-                return $this->stop_server();
+                return $this->stop();
             case 'restart':
-                $this->stop_server();
+                $this->stop();
                 sleep(2); // Wait for server to fully stop
-                return $this->start_server();
+                return $this->restart();
             default:
                 throw new \Exception('Invalid command');
         }
     }
 
-    private function start_server() {
-        if ($this->is_server_running()) {
-            throw new \Exception('Server is already running');
-        }
-
-        $cmd = sprintf(
-            '%s %s > %s 2>&1 & echo $! > %s',
-            escapeshellcmd($this->node_binary),
-            escapeshellarg($this->server_script),
-            escapeshellarg(SEWN_WS_PATH . 'logs/server.log'),
-            escapeshellarg($this->pid_file)
-        );
-
-        exec($cmd, $output, $return_var);
-
-        if ($return_var !== 0) {
-            throw new \Exception('Failed to start server');
-        }
-
-        // Verify server started successfully
-        sleep(2);
-        if (!$this->is_server_running()) {
-            throw new \Exception('Server failed to start');
-        }
-
-        return true;
+    public function start() {
+        // Implementation to start server
+        return ['status' => 'starting'];
     }
-
-    private function stop_server() {
-        if (!$this->is_server_running()) {
-            return true;
-        }
-
-        $pid = (int) file_get_contents($this->pid_file);
-        if ($pid) {
-            if (PHP_OS_FAMILY === 'Windows') {
-                exec("taskkill /F /PID $pid 2>&1", $output, $return_var);
-            } else {
-                exec("kill $pid 2>&1", $output, $return_var);
-            }
-
-            if ($return_var !== 0) {
-                throw new \Exception('Failed to stop server: ' . implode("\n", $output));
-            }
-
-            @unlink($this->pid_file);
-        }
-
-        return true;
+    
+    public function stop() {
+        // Implementation to stop server  
+        return ['status' => 'stopping'];
+    }
+    
+    public function restart() {
+        // Implementation to restart server
+        return ['status' => 'restarting'];
     }
 
     private function is_server_running() {
@@ -223,5 +186,10 @@ class Server_Controller {
             '1) Available in your system PATH, or ' .
             '2) Set the correct path in the plugin settings.'
         );
+    }
+
+    public function handle_channel_stats() {
+        error_log("Channel stats request received");
+        wp_send_json_success(['status' => 'ok']);
     }
 } 

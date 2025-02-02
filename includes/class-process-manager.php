@@ -88,6 +88,24 @@ class Process_Manager {
         
         file_put_contents(SEWN_WS_NODE_SERVER . 'config.json', json_encode($config));
     }
+
+    public static function get_message_throughput() {
+        return [
+            'current' => (float) get_option('sewn_ws_msg_rate_current', 0),
+            'max' => (float) get_option('sewn_ws_msg_rate_max', 0)
+        ];
+    }
+
+    public static function calculate_throughput() {
+        $history = get_option('sewn_ws_msg_rate_history', []);
+        $current = count($history) > 0 ? end($history) : 0;
+        $max = $history ? max($history) : 0;
+        
+        update_option('sewn_ws_msg_rate_current', $current);
+        update_option('sewn_ws_msg_rate_max', $max);
+        
+        return $current;
+    }
 }
 
 // Add to admin notices
