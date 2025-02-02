@@ -219,3 +219,32 @@ add_action('init', function() {
     new Stats_Handler();
     new Log_Handler();
 });
+
+require_once __DIR__ . '/includes/class-module-registry.php';
+
+// Initialize modules after core
+add_action('sewn_ws_after_core_init', function() {
+    $registry = new Module_Registry();
+    
+    // Register core modules
+    $registry->register(new Modules\Discord\Discord_Module());
+    $registry->register(new Modules\Startempire\Startempire_Module());
+    $registry->register(new Modules\Wirebot\Wirebot_Module());
+    
+    // Initialize module admin
+    new Module_Admin($registry);
+    
+    // Late initialization
+    $registry->init_modules();
+});
+
+/**
+ * Load admin functionality
+ */
+// if (is_admin()) {
+//     require_once __DIR__ . '/admin/class-admin-notices.php';
+//     require_once __DIR__ . '/admin/class-admin-ui.php';
+//     require_once __DIR__ . '/admin/class-settings.php';
+    
+//     new Admin_UI();
+// }

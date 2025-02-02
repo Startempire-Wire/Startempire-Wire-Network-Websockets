@@ -47,14 +47,6 @@ function sewn_ws_register_menu() {
     
     error_log('[SEWN] Main menu registered');
     
-    add_submenu_page(
-        'sewn-ws-dashboard',
-        __('Settings', 'sewn-ws'),
-        __('Settings', 'sewn-ws'),
-        'manage_options',
-        'sewn-ws-settings',
-        'sewn_ws_render_settings'
-    );
     
     error_log('[SEWN] Submenu items registered');
 }

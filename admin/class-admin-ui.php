@@ -3,7 +3,13 @@
 namespace SEWN\WebSockets;
 
 class Admin_UI {
+    private $registry;
+
     public function __construct() {
+        $this->registry = Module_Registry::get_instance();
+        $this->registry->discover_modules();
+        $this->registry->init_modules();
+        
         add_action('admin_menu', [$this, 'add_menu_items']);
         add_action('admin_init', [$this, 'register_settings']);
         
@@ -13,20 +19,29 @@ class Admin_UI {
     }
 
     public function register_settings() {
-        // Add Node.js path setting
-        register_setting('sewn_ws_settings', 'sewn_ws_node_path', [
-            'type' => 'string',
-            'description' => 'Custom path to Node.js binary',
-            'sanitize_callback' => 'sanitize_text_field',
-            'default' => ''
+        register_setting('sewn_ws_settings', 'sewn_ws_port', [
+            'type' => 'integer',
+            'description' => 'WebSocket server port',
+            'default' => 8080,
+            'sanitize_callback' => 'absint'
         ]);
 
+        add_settings_section(
+            'server_config',
+            __('Server Configuration', 'sewn-ws'),
+            null,
+            'sewn-ws-settings'
+        );
+
         add_settings_field(
-            'sewn_ws_node_path',
-            'Node.js Binary Path',
-            [$this, 'render_node_path_field'],
-            'sewn-ws-settings', // Your settings page slug
-            'sewn_ws_server_settings' // Your settings section
+            'sewn_ws_port',
+            __('WebSocket Port', 'sewn-ws'),
+            function() {
+                $port = get_option('sewn_ws_port', 8080);
+                echo "<input type='number' name='sewn_ws_port' value='$port' min='1024' max='65535'>";
+            },
+            'sewn-ws-settings',
+            'server_config'
         );
     }
 
@@ -46,38 +61,54 @@ class Admin_UI {
     }
 
     public function add_menu_items() {
-        error_log('[SEWN] Attempting to register admin menu');
-        
-        if (!class_exists('SEWN\WebSockets\Node_Check') || !Node_Check::meets_requirements()) {
-            error_log('[SEWN] Menu hidden - Node.js requirements not met');
-            return;
-        }
-
-        error_log('[SEWN] Registering main menu item');
+        // Main menu
         add_menu_page(
             __('WebSocket Server', 'sewn-ws'),
-            __('WebSocket', 'sewn-ws'),
+            __('WebSocket Server', 'sewn-ws'),
             'manage_options',
-            'sewn-ws',
+            'sewn-ws-dashboard',
             [$this, 'render_dashboard'],
-            'dashicons-networking',
-            80
+            'dashicons-networking'
         );
 
-        add_submenu_page('sewn-ws', 
+        // Dashboard submenu
+        add_submenu_page(
+            'sewn-ws-dashboard',
             __('Dashboard', 'sewn-ws'),
             __('Dashboard', 'sewn-ws'),
             'manage_options',
-            'sewn-ws',
+            'sewn-ws-dashboard',
             [$this, 'render_dashboard']
         );
 
-        add_submenu_page('sewn-ws',
+        // Settings submenu
+        add_submenu_page(
+            'sewn-ws-dashboard',
             __('Settings', 'sewn-ws'),
             __('Settings', 'sewn-ws'),
             'manage_options',
             'sewn-ws-settings',
             [$this, 'render_settings']
+        );
+
+        // Modules submenu
+        add_submenu_page(
+            'sewn-ws-dashboard',
+            __('Modules', 'sewn-ws'),
+            __('Modules', 'sewn-ws'),
+            'manage_options',
+            'sewn-ws-modules',
+            [$this, 'render_modules_page']
+        );
+
+        // Fixed hidden submenu registration
+        add_submenu_page(
+            'sewn-ws-dashboard', // Parent slug instead of null
+            __('Module Settings', 'sewn-ws'),
+            '', // Empty menu title
+            'manage_options',
+            'sewn-ws-module-settings',
+            [$this, 'render_module_settings_page']
         );
     }
 
@@ -107,6 +138,23 @@ class Admin_UI {
     public function render_settings() {
         // Implementation of render_settings method
         include plugin_dir_path(__FILE__) . 'views/settings.php';
+    }
+
+    public function render_modules_page() {
+        $modules = $this->registry->get_modules();
+        $registry = $this->registry; // Pass registry to view
+        include plugin_dir_path(__DIR__) . 'admin/views/modules-list.php';
+    }
+
+    public function render_module_settings_page() {
+        $module_slug = isset($_GET['module']) ? sanitize_key($_GET['module']) : '';
+        $module = $this->registry->get_module($module_slug);
+        
+        if (!$module || !$module instanceof Module_Base) {
+            wp_die(__('Invalid module or module not loaded', 'sewn-ws'));
+        }
+        
+        include plugin_dir_path(__DIR__) . 'admin/views/module-settings.php';
     }
 
     public function handle_ajax() {

@@ -1,11 +1,16 @@
 <?php
-namespace SEWN\WebSockets\Modules;
+namespace SEWN\WebSockets\Protocols;
 
 use SEWN\WebSockets\Protocol_Base;
 
+
 class Discord_Protocol extends Protocol_Base {
     private $discord_client;
-    
+
+    // Implements Discord-specific message handling
+    // Contains business logic for Discord integration
+    // Handles actual communication with Discord APIs
+
     public function register() {
         add_action('sewn_ws_register_protocols', [$this, 'register_protocol']);
         add_action('sewn_ws_init', [$this, 'init_discord_client']);
