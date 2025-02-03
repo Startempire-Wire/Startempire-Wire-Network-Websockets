@@ -188,7 +188,7 @@ class Module_Admin {
     }
 
     public function render_setting_field($args) {
-        $value = get_option("sewn_ws_module_{$args['module']}_settings")[$args['name']] ?? '';
+        $value = get_option(sprintf(SEWN_WS_MODULE_SETTINGS_PREFIX, $args['module']))[$args['name']] ?? '';
         $name = "sewn_ws_module_{$args['module']}_settings[{$args['name']}]";
         
         switch ($args['type']) {
@@ -244,10 +244,15 @@ class Module_Admin {
     }
 
     public function enqueue_scripts() {
-        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+        wp_enqueue_script(SEWN_WS_SCRIPT_HANDLE_ADMIN);
+        wp_localize_script(SEWN_WS_SCRIPT_HANDLE_ADMIN, 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sewn_ws_nonce'),
-            // ... other vars ...
+            'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
+            'port' => get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT)
         ]);
+    }
+
+    public function get_module_settings($module_slug) {
+        return get_option(sprintf(SEWN_WS_MODULE_SETTINGS_PREFIX, $module_slug), []);
     }
 }

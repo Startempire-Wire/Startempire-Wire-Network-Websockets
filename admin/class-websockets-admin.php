@@ -1,7 +1,14 @@
 <?php
-namespace SEWN\WebSockets;
+namespace SEWN\WebSockets\Admin;
 
 if (!defined('ABSPATH')) exit;
+
+use SEWN\WebSockets\Admin\Admin_UI;
+use SEWN\WebSockets\Admin\Module_Admin;
+use SEWN\WebSockets\Admin\Settings;
+use SEWN\WebSockets\Admin\Settings_Page;
+use SEWN\WebSockets\Module_Registry;
+
 
 class Websockets_Admin {
     private static $instance = null;
@@ -92,10 +99,9 @@ class Websockets_Admin {
     }
 
     public function register_settings() {
-        register_setting('sewn_ws_settings', 'sewn_ws_port', [
-            'type' => 'integer',
+        register_setting(SEWN_WS_SETTINGS_GROUP, SEWN_WS_OPTION_PORT, [
             'sanitize_callback' => [$this, 'sanitize_port'],
-            'default' => 8080
+            'default' => SEWN_WS_DEFAULT_PORT
         ]);
 
         register_setting('sewn_ws_settings', 'sewn_ws_ssl_enabled', [
@@ -103,6 +109,14 @@ class Websockets_Admin {
             'sanitize_callback' => 'rest_sanitize_boolean',
             'default' => false
         ]);
+
+        add_settings_field(
+            'sewn_ws_port',
+            __('WebSocket Port', SEWN_WS_TEXT_DOMAIN),
+            [$this, 'render_port_field'],
+            SEWN_WS_ADMIN_MENU_SLUG,
+            'main'
+        );
     }
 
     public function sanitize_port($value) {

@@ -1,6 +1,12 @@
 <?php
+namespace SEWN\WebSockets\Admin;
 
-namespace SEWN\WebSockets;
+use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Module_Registry;
+use SEWN\WebSockets\Node_Check;
+use SEWN\WebSockets\Process_Manager;
+use SEWN\WebSockets\Server_Controller;
+use SEWN\WebSockets\Server_Process;
 
 class Admin_UI {
     private static $instance = null;
@@ -26,7 +32,7 @@ class Admin_UI {
         // Add AJAX handlers
         add_action('wp_ajax_sewn_ws_control', [$this, 'handle_server_control']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_ajax']);
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
     }
 
     public function register_settings() {
@@ -145,7 +151,7 @@ class Admin_UI {
     }
 
     public function handle_ajax() {
-        check_ajax_referer('sewn_ws_admin_nonce', 'nonce');
+        check_ajax_referer(SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Unauthorized', 403);
@@ -237,31 +243,21 @@ class Admin_UI {
         return file_get_contents('/var/log/websocket.log');
     }
 
-    public function enqueue_scripts() {
-        $plugin_path = plugin_dir_path(dirname(__FILE__)) . 'assets/js/admin.js';
-        
+    public function enqueue_assets() {
+        wp_enqueue_style(
+            'sewn-ws-admin',
+            plugin_dir_url(dirname(__FILE__)) . 'assets/css/admin.css',
+            [],
+            SEWN_WS_VERSION
+        );
+
         wp_enqueue_script(
             'sewn-ws-admin',
-            plugins_url('assets/js/admin.js', dirname(__FILE__)),
-            [],
-            filemtime($plugin_path),
+            plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js',
+            ['jquery'],
+            SEWN_WS_VERSION,
             true
         );
-        
-        // Add module type attribute
-        add_filter('script_loader_tag', function($tag, $handle) {
-            if ($handle === 'sewn-ws-admin') {
-                return str_replace(' src', ' type="module" src', $tag);
-            }
-            return $tag;
-        }, 10, 2);
-    
-        // Localize script variables
-        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sewn_ws_admin_nonce'),
-            'port' => get_option('sewn_ws_port', 3000)
-        ]);
     }
 
     public function handle_server_action() {

@@ -12,15 +12,25 @@
  *
  * @package           Startempire_Wire_Network_Websockets
  */
-
+ 
 // Add this at the VERY TOP of the file
 namespace SEWN\WebSockets;
+use SEWN\WebSockets\Admin\Module_Admin;
+use SEWN\WebSockets\Admin\Websockets_Admin;
+use SEWN\WebSockets\Module_Registry;
+
+// Define Global Constants
+require_once __DIR__ . '/includes/constants.php';
 
 // Before any other code
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 defined('ABSPATH') || exit;
+
+
+
+
 
 // Add at the very top of the plugin file
 try {

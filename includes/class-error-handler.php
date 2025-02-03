@@ -1,6 +1,8 @@
 <?php
 namespace SEWN\WebSockets;
 
+use SEWN\WebSockets\Exception;
+
 class Error_Handler {
     const LOG_FILE = 'sewn-ws-errors.log';
     const MAX_ENTRIES = 50;

@@ -1,5 +1,6 @@
 <?php
 namespace SEWN\WebSockets\Admin;
+use SEWN\WebSockets\Admin\Settings;
 
 class Settings_Page {
     private static $instance = null;
@@ -53,6 +54,15 @@ class Settings_Page {
             [$this, 'render_dashboard'],
             'dashicons-networking',
             80
+        );
+
+        add_submenu_page(
+            SEWN_WS_ADMIN_MENU_SLUG,
+            __('WebSocket Server Settings', SEWN_WS_TEXT_DOMAIN),
+            __('Settings'),
+            'manage_options',
+            SEWN_WS_ADMIN_MENU_SLUG . '-settings',
+            [$this, 'render_dashboard']
         );
     }
 

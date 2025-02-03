@@ -8,6 +8,7 @@
 
 namespace SEWN\WebSockets;
 
+
 // Exit if accessed directly.
 if (!defined('ABSPATH')) {
     exit;
