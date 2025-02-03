@@ -3,7 +3,16 @@
 namespace SEWN\WebSockets;
 
 class Admin_UI {
+    private static $instance = null;
     private $registry;
+    private $connections = [];
+
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
     public function __construct() {
         $this->registry = Module_Registry::get_instance();
@@ -180,24 +189,15 @@ class Admin_UI {
 
     public function handle_ajax() {
         try {
-            // Add action verification
-            if (!isset($_POST['action']) || $_POST['action'] !== 'sewn_ws_control') {
-                throw new Exception('Invalid AJAX action');
-            }
+            // Add WordPress AJAX action verification
+            check_ajax_referer('sewn_ws_nonce', 'nonce');
             
-            if (!wp_verify_nonce($_POST['nonce'], 'sewn_ws_control')) {
-                throw new Exception('Invalid security nonce');
+            // Validate required parameters
+            if(empty($_POST['command'])) {
+                throw new \Exception('Missing command parameter');
             }
 
-            if (!current_user_can('manage_options')) {
-                throw new Exception('Current user lacks manage_options capability');
-            }
-
-            if (!isset($_POST['command'])) {
-                throw new Exception('Missing command parameter');
-            }
-            
-            $command = sanitize_text_field($_POST['command']);
+            $command = sanitize_key($_POST['command']);
             $server = new Server_Manager();
             
             // Log attempt
@@ -271,5 +271,20 @@ class Admin_UI {
         if (!$this->rate_limiter->check('server_controls', 3, 'per_minute')) {
             wp_send_json_error('Too many requests');
         }
+    }
+
+    public function init_websocket_connections() {
+        // Add connection cleanup at start
+        $this->cleanup_connections();
+        // Rest of existing code
+    }
+    
+    private function cleanup_connections() {
+        foreach ($this->connections as $conn) {
+            if ($conn->isConnected()) {
+                $conn->close();
+            }
+        }
+        $this->connections = [];
     }
 }

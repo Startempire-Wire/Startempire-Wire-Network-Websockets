@@ -125,8 +125,7 @@ add_action('plugins_loaded', function() {
             
             // Only load core if requirements met
             require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-core.php';
-            $core = new Core();
-            $core->init();
+            $core = Core::get_instance();
         });
         
     } catch(\Throwable $e) {
@@ -190,8 +189,8 @@ spl_autoload_register(function ($class) {
 
 // INIT HOOK
 add_action('init', function() {
-    $core = new Core();
-    $core->init();
+    $core = Core::get_instance();
+    $core::get_instance();
 });
 
 // Initialize plugin
@@ -199,8 +198,8 @@ add_action('plugins_loaded', function() {
     error_log('[SEWN] Plugin loaded - initializing');
     
     require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-core.php';
-    $core = new Core();
-    $core->init();
+    $core = Core::get_instance();
+    $core::get_instance();
     
     error_log('[SEWN] Core initialized');
 });

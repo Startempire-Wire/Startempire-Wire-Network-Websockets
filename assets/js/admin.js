@@ -1,5 +1,4 @@
-// # Dashboard interactivity
-
+// Dashboard interactivity
 // Import components
 import { StatsDisplay } from './components/StatsDisplay.js';
 import { ServerControls } from './components/ServerControls.js';
@@ -219,6 +218,23 @@ class WebSocketAdmin {
         setTimeout(() => {
             alert.remove();
         }, 5000);
+    }
+
+    async connectRealTimeFeed() {
+        this.socket = new WebSocket(`wss://${location.host}/sewn-ws`);
+
+        this.socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            this.statsDisplay.update(data);
+
+            // New MVP-critical integrations
+            if (data.type === 'member_activity') {
+                this.updateMemberMap(data.members);
+            }
+            if (data.type === 'content_distribution') {
+                this.updateContentFlow(data.metrics);
+            }
+        };
     }
 }
 
