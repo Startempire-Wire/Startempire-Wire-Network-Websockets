@@ -21,7 +21,6 @@ class Admin_UI {
         $this->registry->discover_modules();
         $this->registry->init_modules();
         
-        add_action('admin_menu', [$this, 'add_menu_items']);
         add_action('admin_init', [$this, 'register_settings']);
         
         // Add AJAX handlers
@@ -70,58 +69,6 @@ class Admin_UI {
             Leave empty to use auto-detection.
         </p>
         <?php
-    }
-
-    public function add_menu_items() {
-        // Main menu
-        add_menu_page(
-            __('WebSocket Server', 'sewn-ws'),
-            __('WebSocket Server', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-dashboard',
-            [$this, 'render_dashboard'],
-            'dashicons-networking'
-        );
-
-        // Dashboard submenu
-        add_submenu_page(
-            'sewn-ws-dashboard',
-            __('Dashboard', 'sewn-ws'),
-            __('Dashboard', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-dashboard',
-            [$this, 'render_dashboard']
-        );
-
-        // Settings submenu
-        add_submenu_page(
-            'sewn-ws-dashboard',
-            __('Settings', 'sewn-ws'),
-            __('Settings', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-settings',
-            [$this, 'render_settings']
-        );
-
-        // Modules submenu
-        add_submenu_page(
-            'sewn-ws-dashboard',
-            __('Modules', 'sewn-ws'),
-            __('Modules', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-modules',
-            [$this, 'render_modules_page']
-        );
-
-        // Fixed hidden submenu registration
-        add_submenu_page(
-            'sewn-ws-dashboard', // Parent slug instead of null
-            __('Module Settings', 'sewn-ws'),
-            '', // Empty menu title
-            'manage_options',
-            'sewn-ws-module-settings',
-            [$this, 'render_module_settings_page']
-        );
     }
 
     public function render_dashboard() {

@@ -106,7 +106,7 @@ add_action('plugins_loaded', function() {
         }
         
         // Load admin UI unconditionally
-        require_once SEWN_WS_PATH . 'admin' . DIRECTORY_SEPARATOR . 'class-admin-ui.php';
+        require_once SEWN_WS_PATH . 'admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php';
         
         // Defer all other checks to admin_init
         add_action('admin_init', function() {
@@ -140,7 +140,7 @@ add_action('admin_init', function() {
         $required_files = [
             'includes' . DIRECTORY_SEPARATOR . 'class-node-check.php',
             'includes' . DIRECTORY_SEPARATOR . 'class-core.php',
-            'admin' . DIRECTORY_SEPARATOR . 'class-admin-ui.php'
+            'admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php'
         ];
         
         foreach ($required_files as $file) {
@@ -165,26 +165,25 @@ add_action('admin_init', function() {
 
 // AUTOLOADER FIX
 spl_autoload_register(function ($class) {
-    $prefix = SEWN_WS_NS . '\\';
-    $base_dirs = [SEWN_WS_PATH . 'includes/', SEWN_WS_PATH . 'admin/'];
-    
-    if (strpos($class, $prefix) !== 0) return;
-    
-    $relative_class = substr($class, strlen($prefix));
-    $class_file = 'class-' . strtolower(str_replace(['\\', '_'], '-', $relative_class)) . '.php';
-    
-    foreach ($base_dirs as $base_dir) {
-        $file = $base_dir . $class_file;
+    $prefix = 'SEWN\\WebSockets\\';
+    $len = strlen($prefix);
+    if (strncmp($prefix, $class, $len) !== 0) {
+        return;
+    }
+    $relative_class = substr($class, $len);
+    $parts = explode('\\', $relative_class);
+
+    // Explicit handling for Admin namespace classes
+    if ($parts[0] === 'Admin') {
+        $class_name = str_replace('_', '-', strtolower(implode('-', $parts)));
+        $file = plugin_dir_path(__FILE__) . 'admin/class-' . $class_name . '.php';
         if (file_exists($file)) {
-            require $file;
+            require_once $file;
             return;
         }
     }
-    
-    // Fallback for Exception class
-    if ($relative_class === 'Exception') {
-        require SEWN_WS_PATH . 'includes/class-exception.php';
-    }
+
+    // ... rest of existing autoloader code ...
 });
 
 // INIT HOOK
@@ -207,8 +206,8 @@ add_action('plugins_loaded', function() {
 // Initialize admin UI
 add_action('plugins_loaded', function() {
     if (is_admin()) {
-        new Admin_UI();
-        error_log('[SEWN] Admin UI initialized');
+        Websockets_Admin::get_instance();
+        error_log('[SEWN] Admin system initialized');
     }
 });
 
