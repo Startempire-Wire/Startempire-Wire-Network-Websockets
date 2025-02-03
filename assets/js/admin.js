@@ -6,10 +6,21 @@ import { LogViewer } from './components/LogViewer.js';
 import { TimeSeriesMetric } from './components/TimeSeriesMetric.js';
 
 class WebSocketAdmin {
+    static instance = null;
+
     constructor() {
+        if (WebSocketAdmin.instance) {
+            return WebSocketAdmin.instance;
+        }
+
+        this.pendingRequests = new Map();
+        this.abortController = null;
+        this.statsErrorCount = 0;
+        this.statsMaxErrors = 3;
+        this.pollingBaseDelay = 10000; // 10 seconds
+        this.serverStatus = 'stopped'; // Track server state
         this.initializeComponents();
         this.bindEvents();
-        this.startStatsPolling();
         this.initializeWebSocket();
         this.statsDisplay = new StatsDisplay();
         this.serverControls = new ServerControls();
@@ -27,6 +38,18 @@ class WebSocketAdmin {
             memory: new TimeSeriesMetric('#memory-graph'),
             errors: new TimeSeriesMetric('#error-graph')
         };
+
+        // Add nonce verification
+        this.nonce = sewn_ws_admin?.nonce || '';
+        if (!this.nonce) {
+            console.error('WebSocket admin nonce not found');
+            this.showAlert('Configuration error: Missing security token');
+            return;
+        }
+
+        WebSocketAdmin.instance = this;
+        this._boundBeforeUnload = () => this.destroy();
+        window.addEventListener('beforeunload', this._boundBeforeUnload);
     }
 
     initializeComponents() {
@@ -49,58 +72,79 @@ class WebSocketAdmin {
     }
 
     bindEvents() {
-        // Server control events
-        document.querySelectorAll('.sewn-ws-control').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const action = e.target.dataset.action;
-                await this.handleServerAction(action);
-            });
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('[data-action]');
+            if (button && button.dataset.action) {
+                e.preventDefault();
+                this.handleServerAction(button.dataset.action);
+            }
         });
 
-        // Log filter events
-        document.getElementById('log-level').addEventListener('change', (e) => {
-            this.logViewer.setLevel(e.target.value);
-        });
+        // Keep existing log viewer handlers
+        document.querySelector('#log-level').addEventListener('change', () => this.logViewer.filterLogs());
+        document.querySelector('#clear-logs').addEventListener('click', () => this.logViewer.clearLogs());
 
-        // Clear logs
-        document.getElementById('clear-logs').addEventListener('click', () => {
-            this.logViewer.clear();
+        // Add emergency stop button handler
+        document.getElementById('emergency-stop').addEventListener('click', () => {
+            this.cancelPendingRequests();
         });
     }
 
     async handleServerAction(action) {
-        const button = document.querySelector(`[data-action="${action}"]`);
-        const originalText = button.textContent;
+        // Cancel any existing request for this action
+        if (this.pendingRequests.has(action)) {
+            this.pendingRequests.get(action).abort();
+        }
 
+        const controller = new AbortController();
+        this.pendingRequests.set(action, controller);
+
+        const button = document.querySelector(`[data-action="${action}"]`);
         try {
             button.disabled = true;
-            button.textContent = '...';
+            button.innerHTML = `<span class="button-text">${action}ping...</span> 
+                              <span class="loading-dots"></span>`;
 
             const response = await fetch(sewn_ws_admin.ajax_url, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-WP-Nonce': this.nonce
                 },
                 body: new URLSearchParams({
-                    action: 'sewn_ws_control',
+                    action: 'sewn_ws_server_control',
                     command: action,
-                    nonce: sewn_ws_admin.nonce
+                    nonce: this.nonce
                 })
             });
 
-            const data = await response.json();
-
-            if (data.success) {
-                this.showNotice('success', data.message);
-                this.updateServerStatus(data.status);
-            } else {
-                this.showNotice('error', data.message);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Server request failed');
             }
+
+            const data = await response.json();
+            this.updateServerStatus(data.status);
+
+            // Control stats polling based on new status
+            if (data.status === 'Running') {
+                this.startStatsPolling();
+            } else {
+                this.stopStatsPolling();
+            }
+
         } catch (error) {
-            this.showNotice('error', 'Server action failed: ' + error.message);
+            const errorMessage = `Server ${action} failed:\n` +
+                `- ${error.message || 'Unknown error'}\n` +
+                `- PHP: ${error.php_version || 'unknown'}\n` +
+                `- Node Path: ${error.node_path || 'undefined'}`;
+
+            console.error('Server control error:', error);
+            this.showAlert(errorMessage);
         } finally {
+            this.pendingRequests.delete(action);
             button.disabled = false;
-            button.textContent = originalText;
+            button.innerHTML = `<span class="button-text">${action.charAt(0).toUpperCase() + action.slice(1)} Server</span>`;
         }
     }
 
@@ -118,25 +162,54 @@ class WebSocketAdmin {
         }, 5000);
     }
 
-    startStatsPolling() {
-        this.pollInterval = setInterval(() => {
-            this.updateStats();
-        }, 2000);
+    async startStatsPolling() {
+        // Add cleanup before restarting
+        if (this.statsInterval) {
+            clearInterval(this.statsInterval);
+        }
 
-        // Clean up when tab is closed
-        window.addEventListener('beforeunload', () => {
-            clearInterval(this.pollInterval);
-        });
+        const fetchStats = async () => {
+            try {
+                const response = await fetch(sewn_ws_admin.ajax_url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        action: 'sewn_ws_get_stats',
+                        nonce: sewn_ws_admin.nonce
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const data = await response.json();
+                this.statsErrorCount = 0; // Reset error counter
+                this.updateMetrics(data);
+
+            } catch (error) {
+                console.error('Stats polling error:', error);
+                if (++this.statsErrorCount >= this.statsMaxErrors) {
+                    console.warn('Max stats errors reached - stopping polling');
+                    clearInterval(this.statsInterval);
+                }
+            }
+        };
+
+        // Initial fetch with backoff
+        const initialDelay = Math.min(
+            this.pollingBaseDelay * Math.pow(2, this.statsErrorCount),
+            300000 // Max 5 minutes
+        );
+
+        this.statsInterval = setInterval(() => {
+            fetchStats().catch(() => { }); // Prevent unhandled promise rejection
+        }, initialDelay);
     }
 
-    async updateStats() {
-        try {
-            const response = await fetch(`${sewn_ws_admin.ajax_url}?action=sewn_ws_get_stats&nonce=${sewn_ws_admin.nonce}`);
-            const data = await response.json();
-            this.statsDisplay.update(data);
-        } catch (error) {
-            console.error('Failed to update stats:', error);
-        }
+    stopStatsPolling() {
+        clearInterval(this.statsInterval);
+        this.statsErrorCount = 0;
     }
 
     updateServerStatus(status) {
@@ -236,42 +309,50 @@ class WebSocketAdmin {
             }
         };
     }
+
+    cancelPendingRequests() {
+        this.pendingRequests.forEach(controller => controller.abort());
+        this.pendingRequests.clear();
+    }
+
+    destroy() {
+        this.stopStatsPolling();
+        this.cancelPendingRequests();
+        window.removeEventListener('beforeunload', this._boundBeforeUnload);
+        WebSocketAdmin.instance = null;
+
+        // Cleanup metrics
+        Object.values(this.metrics).forEach(metric => metric.destroy());
+    }
+
+    async checkInitialStatus() {
+        try {
+            const response = await fetch(sewn_ws_admin.ajax_url, {
+                method: 'POST',
+                body: new URLSearchParams({
+                    action: 'sewn_ws_get_status',
+                    nonce: sewn_ws_admin.nonce
+                })
+            });
+
+            const data = await response.json();
+            this.updateServerStatus(data.status);
+
+            // Only start polling if server was already running
+            if (data.status === 'Running') {
+                this.startStatsPolling();
+            }
+        } catch (error) {
+            console.error('Initial status check failed:', error);
+        }
+    }
 }
 
-// Initialize when DOM is ready
+// Initialize without auto-starting anything
 document.addEventListener('DOMContentLoaded', () => {
-    window.wsAdmin = new WebSocketAdmin();
-});
-
-jQuery(document).ready(function ($) {
-    $('.server-control').on('click', function (e) {
-        e.preventDefault();
-        const button = $(this);
-        const command = button.data('command');
-
-        button.prop('disabled', true)
-            .find('.loading-dots').show();
-        button.data('original-text', button.find('.button-text').text());
-        button.find('.button-text').text(button.data('loading-text'));
-
-        $('.status-dot').removeClass('error success').addClass('starting');
-        $('.loading-spinner').show();
-
-        $.ajax({
-            url: sewn_ws_admin.ajax_url,
-            type: 'POST',
-            dataType: 'json',
-            data: {
-                action: 'sewn_ws_control',
-                command: command,
-                nonce: sewn_ws_admin.nonce
-            },
-            success: function (response) {
-                // ... rest of your existing success handler ...
-            },
-            error: function (jqXHR) {
-                // ... rest of your existing error handler ...
-            }
-        });
-    });
+    if (!window.wsAdmin) {
+        window.wsAdmin = new WebSocketAdmin();
+        // Manual server status check instead of auto-polling
+        window.wsAdmin.checkInitialStatus();
+    }
 });

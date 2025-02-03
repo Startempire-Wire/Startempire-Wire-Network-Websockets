@@ -6,6 +6,8 @@ class Admin_UI {
     private static $instance = null;
     private $registry;
     private $connections = [];
+    private $server_process = null;
+    private $status_lock = false;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -126,8 +128,16 @@ class Admin_UI {
         $node_check = new Node_Check();
         $node_status = $node_check->check_server_status();
         
+        // Add these MVP-critical metrics
+        $health_metrics = [
+            'message_queue' => Process_Manager::get_message_queue_depth(),
+            'connection_failure_rate' => Process_Manager::get_failure_rates(),
+            'bandwidth_usage' => Process_Manager::get_bandwidth_usage()
+        ];
+        
         $data = [
-            'node_status' => $node_status ?: ['version' => 'Unknown', 'running' => false],
+            'node_status' => $node_status,
+            'health_metrics' => $health_metrics, // New metrics
             'connections' => Process_Manager::get_active_connections(),
             'message_rates' => Process_Manager::get_message_throughput()
         ];
@@ -188,78 +198,122 @@ class Admin_UI {
     }
 
     public function handle_ajax() {
+        check_ajax_referer('sewn_ws_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized', 403);
+        }
+
+        $action = $_REQUEST['action'] ?? '';
+        
+        if ($action === 'sewn_ws_get_status') {
+            $status = $this->get_server_status(); // Implement your status check
+            wp_send_json_success(['status' => $status]);
+        }
+        
+        if ($action === 'sewn_ws_get_stats') {
+            $stats = [
+                'connections' => count($this->connections),
+                'memory' => memory_get_usage(true),
+                'errors' => $this->error_count
+            ];
+            wp_send_json_success($stats);
+        }
+        
+        $command = sanitize_text_field($_POST['command']);
+        $response = [
+            'status' => 'error',
+            'message' => 'Unknown command'
+        ];
+
+        if ($this->status_lock) {
+            wp_send_json_error('Another operation is in progress', 423);
+        }
+
+        $this->status_lock = true;
+        
         try {
-            // Add WordPress AJAX action verification
-            check_ajax_referer('sewn_ws_nonce', 'nonce');
-            
-            // Validate required parameters
-            if(empty($_POST['command'])) {
-                throw new \Exception('Missing command parameter');
-            }
-
-            $command = sanitize_key($_POST['command']);
-            $server = new Server_Manager();
-            
-            // Log attempt
-            error_log("Server control command received: " . $command);
-            error_log("User agent: " . $_SERVER['HTTP_USER_AGENT']);
-            error_log("IP address: " . $_SERVER['REMOTE_ADDR']);
-
             switch ($command) {
                 case 'start':
-                    $result = $server->start();
+                    if ($this->is_server_running()) {
+                        throw new Exception('Server already running');
+                    }
+                    
+                    $this->server_process = new Server_Process();
+                    $started = $this->server_process->start();
+                    
+                    if (!$started) {
+                        throw new Exception('Failed to start server: ' 
+                            . $this->server_process->get_last_error());
+                    }
+                    
+                    $response = [
+                        'status' => 'running',
+                        'message' => 'Server started successfully'
+                    ];
                     break;
+                    
                 case 'stop':
-                    $result = $server->stop();
+                    if ($this->server_process && $this->server_process->is_running()) {
+                        $this->server_process->stop();
+                        $this->cleanup_connections();
+                    }
+                    $response = [
+                        'status' => 'stopped', 
+                        'message' => 'Server stopped'
+                    ];
                     break;
-                case 'restart':
-                    $result = $server->restart();
-                    break;
+                    
                 default:
-                    throw new Exception("Invalid command: $command");
+                    throw new Exception('Invalid command');
             }
             
-            wp_send_json_success([
-                'status' => $result,
-                'debug' => [
-                    'node_version' => exec('node -v'),
-                    'npm_version' => exec('npm -v'),
-                    'system_user' => exec('whoami'),
-                    'node_dir' => SEWN_WS_NODE_DIR,
-                    'dir_exists' => file_exists(SEWN_WS_NODE_DIR),
-                    'dir_perms' => substr(sprintf('%o', fileperms(SEWN_WS_NODE_DIR)), -4)
-                ]
-            ]);
+            $this->status_lock = false;
+            wp_send_json_success($response);
             
         } catch (Exception $e) {
-            $errorData = [
+            $this->status_lock = false;
+            $this->cleanup_connections();
+            wp_send_json_error([
                 'message' => $e->getMessage(),
-                'debug' => [
-                    'php_version' => phpversion(),
-                    'wp_version' => get_bloginfo('version'),
-                    'server_software' => $_SERVER['SERVER_SOFTWARE'],
-                    'node_path' => defined('SEWN_WS_NODE_DIR') ? SEWN_WS_NODE_DIR : 'undefined',
-                    'current_user' => get_current_user_id(),
-                    'user_caps' => array_keys(wp_get_current_user()->allcaps)
-                ]
-            ];
-            error_log("AJAX Error: " . print_r($errorData, true));
-            wp_send_json_error($errorData);
+                'logs' => $this->get_recent_server_logs()
+            ], 500);
         }
     }
 
+    private function is_server_running() {
+        // Implement actual server status check
+        return file_exists('/tmp/websocket.pid');
+    }
+    
+    private function get_recent_server_logs() {
+        return file_get_contents('/var/log/websocket.log');
+    }
+
     public function enqueue_scripts() {
+        $plugin_path = plugin_dir_path(dirname(__FILE__)) . 'assets/js/admin.js';
+        
         wp_enqueue_script(
             'sewn-ws-admin',
             plugins_url('assets/js/admin.js', dirname(__FILE__)),
-            ['jquery'],
-            filemtime(plugin_dir_path(dirname(__FILE__)) . 'assets/js/admin.js'),
+            [],
+            filemtime($plugin_path),
             true
         );
-
+        
+        // Add module type attribute
+        add_filter('script_loader_tag', function($tag, $handle) {
+            if ($handle === 'sewn-ws-admin') {
+                return str_replace(' src', ' type="module" src', $tag);
+            }
+            return $tag;
+        }, 10, 2);
+    
+        // Localize script variables
         wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
-            'nonce' => wp_create_nonce('sewn_ws_control'),
-            'ajax_url' => admin_url('admin-ajax.php')
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sewn_ws_admin_nonce'),
+            'port' => get_option('sewn_ws_port', 3000)
         ]);
     }
 

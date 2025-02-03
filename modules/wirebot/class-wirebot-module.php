@@ -1,18 +1,40 @@
 <?php
-namespace SEWN\WebSockets\Modules\Wirebot;
+namespace SEWN\WebSockets\Modules\Wirebot; // Same as Discord's namespace structure
 
-use SEWN\WebSockets\Modules\Module_Base;
-use SEWN\WebSockets\AI\Wirebot_Handler;
+use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Protocols\Wirebot_Protocol; // Same pattern as Discord
 
 class Wirebot_Module extends Module_Base {
-    private $bot_handler;
+    public function init() {
+        if (!$this->check_dependencies()) {
+            return;
+        }
+        $this->protocol = new Wirebot_Protocol();
+        $this->protocol->register();
+        
+        add_action('sewn_ws_module_ready', [$this, 'register_hooks']);
+        $this->initialize_bot();
+    }
+
+    public function check_dependencies() {
+        if (!class_exists('SEWN\WebSockets\Protocols\Wirebot_Protocol')) {
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-error"><p>';
+                _e('Wirebot Module requires WebSockets Protocol handler', 'sewn-ws');
+                echo '</p></div>';
+            });
+            return false;
+        }
+        return true;
+    }
 
     public function metadata(): array {
         return [
-            'name' => 'WireBot Integration',
-            'slug' => 'wirebot',
-            'description' => 'AI-powered network assistant integration',
+            'module_slug' => 'wirebot',
+            'name' => __('WireBot Integration', 'sewn-ws'),
             'version' => '1.1.0',
+            'description' => __('AI-powered network assistant integration', 'sewn-ws'),
+            'author' => 'StartEmpire Team',
             'dependencies' => ['screenshots']
         ];
     }
@@ -72,12 +94,6 @@ class Wirebot_Module extends Module_Base {
         ];
     }
 
-    public function init() {
-        $this->check_dependencies();
-        $this->initialize_bot();
-        $this->register_hooks();
-    }
-
     private function initialize_bot() {
         $this->bot_handler = new Wirebot_Handler(
             get_option('sewn_ws_wirebot_model', 'claude-3'),
@@ -85,7 +101,7 @@ class Wirebot_Module extends Module_Base {
         );
     }
 
-    private function register_hooks() {
+    public function register_hooks() {
         add_filter('sewn_ws_message_handlers', [$this, 'register_handlers']);
         add_action('sewn_ws_client_message', [$this, 'handle_client_message']);
         add_filter('sewn_ws_ai_response', [$this, 'filter_responses']);

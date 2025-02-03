@@ -23,32 +23,49 @@ class Server_Controller {
     }
 
     public function handle_server_control() {
-        check_ajax_referer('sewn_ws_control', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => 'Insufficient permissions']);
-        }
-
-        $command = sanitize_text_field($_POST['command'] ?? '');
-        $valid_commands = ['start', 'stop', 'restart'];
-        
-        if (!in_array($command, $valid_commands)) {
-            wp_send_json_error(['message' => 'Invalid command']);
-        }
-
         try {
-            // Only try to get node binary when actually executing a command
-            if ($this->node_binary === null) {
+            // Verify nonce first
+            check_ajax_referer('sewn_ws_control', 'nonce');
+            
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error([
+                    'message' => 'Insufficient permissions',
+                    'php_version' => PHP_VERSION,
+                    'node_path' => $this->node_binary
+                ], 403);
+                return;
+            }
+
+            $command = sanitize_text_field($_POST['command'] ?? '');
+            if (!in_array($command, ['start', 'stop', 'restart'])) {
+                throw new \Exception('Invalid command');
+            }
+
+            // Initialize node binary path
+            if (!$this->node_binary) {
                 $this->node_binary = $this->get_node_binary();
             }
-            
+
+            if (!$this->node_binary) {
+                throw new \Exception('Node.js binary not found. Please check server requirements.');
+            }
+
+            // Execute command and return response
             $result = $this->execute_server_command($command);
             wp_send_json_success([
-                'message' => "Server {$command} successful",
-                'status' => $this->get_server_status()
+                'status' => $this->get_server_status(),
+                'message' => "Server {$command} executed successfully",
+                'php_version' => PHP_VERSION,
+                'node_path' => $this->node_binary
             ]);
+
         } catch (\Exception $e) {
-            wp_send_json_error(['message' => $e->getMessage()]);
+            error_log('WebSocket Server Control Error: ' . $e->getMessage());
+            wp_send_json_error([
+                'message' => $e->getMessage(),
+                'php_version' => PHP_VERSION,
+                'node_path' => $this->node_binary ?? 'undefined'
+            ], 500);
         }
     }
 
@@ -134,58 +151,38 @@ class Server_Controller {
     }
 
     private function get_node_binary() {
-        // First check if there's a custom path set in the options
+        // Check custom path first
         $custom_path = get_option('sewn_ws_node_path');
         if ($custom_path && file_exists($custom_path)) {
             return $custom_path;
         }
 
-        if (PHP_OS_FAMILY === 'Windows') {
-            // Check common Windows paths
-            $possible_paths = [
-                'node.exe',
-                'C:\\Program Files\\nodejs\\node.exe',
-                'C:\\Program Files (x86)\\nodejs\\node.exe'
-            ];
-            
-            foreach ($possible_paths as $path) {
-                if (file_exists($path)) {
-                    return $path;
-                }
-            }
-        } else {
-            // Check common Unix paths
-            $possible_paths = [
-                '/usr/local/bin/node',
-                '/usr/bin/node',
-                '/opt/local/bin/node',
-                '/usr/local/bin/nodejs',
-                '/usr/bin/nodejs'
-            ];
-            
-            foreach ($possible_paths as $path) {
-                if (file_exists($path)) {
-                    return $path;
-                }
-            }
-            
-            // Try using which command as fallback
-            exec('which node 2>&1', $output, $return_var);
-            if ($return_var === 0) {
-                return trim($output[0]);
-            }
-            
-            exec('which nodejs 2>&1', $output, $return_var);
-            if ($return_var === 0) {
-                return trim($output[0]);
+        // Log the node detection attempt
+        error_log('Attempting to detect Node.js binary...');
+
+        $paths = PHP_OS_FAMILY === 'Windows' 
+            ? ['node.exe', 'C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe']
+            : ['/usr/bin/node', '/usr/local/bin/node', '/opt/node/bin/node'];
+
+        foreach ($paths as $path) {
+            if (file_exists($path)) {
+                error_log("Node.js binary found at: {$path}");
+                return $path;
             }
         }
-        
-        throw new \Exception(
-            'Node.js binary not found. Please make sure Node.js is installed and either: ' .
-            '1) Available in your system PATH, or ' .
-            '2) Set the correct path in the plugin settings.'
-        );
+
+        // Try which command on Unix systems
+        if (PHP_OS_FAMILY !== 'Windows') {
+            exec('which node 2>&1', $output, $return_var);
+            if ($return_var === 0) {
+                $path = trim($output[0]);
+                error_log("Node.js binary found using which: {$path}");
+                return $path;
+            }
+        }
+
+        error_log('Node.js binary not found in any standard location');
+        return null;
     }
 
     public function handle_channel_stats() {

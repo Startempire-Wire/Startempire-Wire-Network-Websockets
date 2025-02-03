@@ -32,6 +32,12 @@ class Stats_Handler {
     }
 
     public function handle_stats_request() {
+        $server_controller = Server_Controller::get_instance();
+        
+        if (!$server_controller->is_server_running()) {
+            wp_send_json_error(['message' => 'Server not running'], 409);
+        }
+        
         check_ajax_referer('sewn_ws_admin');
         
         if (!current_user_can('manage_options')) {

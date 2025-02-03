@@ -36,6 +36,15 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
                     <?php _e('Stop', 'sewn-ws') ?>
                 </button>
             </div>
+            <div class="emergency-controls">
+                <button type="button" 
+                        id="emergency-stop"
+                        class="button button-danger"
+                        title="Cancel all pending requests">
+                    <span class="dashicons dashicons-dismiss"></span>
+                    Emergency Stop
+                </button>
+            </div>
         </div>
 
         <!-- Real-time Stats -->
@@ -112,6 +121,15 @@ button[disabled] .loading-dots {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.button-danger {
+    background: #dc3232;
+    border-color: #dc3232;
+    color: white;
+}
+.button-danger:hover {
+    background: #a82828;
 }
 </style>
 
@@ -208,6 +226,28 @@ jQuery(document).ready(function($) {
     }
 
     // Stats polling
+    let statsPollInterval = null;
+
+    function startStatsPolling() {
+        if (!statsPollInterval) {
+            statsPollInterval = setInterval(updateStats, 5000);
+        }
+    }
+
+    function stopStatsPolling() {
+        if (statsPollInterval) {
+            clearInterval(statsPollInterval);
+            statsPollInterval = null;
+        }
+    }
+
+    // Update the initial status check to control polling
+    $.get(ajaxurl, {action: 'sewn_ws_get_status'}, function(response) {
+        if (response.status.running) {
+            startStatsPolling();
+        }
+    });
+
     function updateStats() {
         $.get(ajaxurl, {
             action: 'sewn_ws_get_stats'
@@ -216,7 +256,6 @@ jQuery(document).ready(function($) {
             $('#message-throughput').text(response.message_rate + ' msg/s');
         });
     }
-    setInterval(updateStats, 2000);
 
     function updateChannelStats() {
         $.post(ajaxurl, {

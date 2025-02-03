@@ -258,6 +258,56 @@ add_filter('sewn_ws_protocols', function($protocols) {
   - High error rate
   - Connection saturation
 
+9.3 Module Development Patterns
+-------------------------------
+Critical Requirements:
+- Must implement activate()/deactivate() for lifecycle management
+- Sanitization callbacks required for all admin settings
+- Protocol clients must be dependency-injected
+- Class verification in requires() must use FQCN:
+  ['class' => 'Full\Namespace\Class_Name']
+
+Protocol Requirements:
+- Must implement message validation layer
+- Required to handle 3 core message types:
+  1. Connection lifecycle events
+  2. Protocol-specific operations
+  3. Error handling responses
+
+Security Mandates:
+- All admin settings must include:
+  - type-specific sanitization
+  - capability checks
+  - nonce verification
+- Protocol handlers must validate message origins
+
+Example Structure (Revised):
+modules/{module}/
+├── class-{module}-module.php
+├── class-{module}-protocol.php
+├── class-{module}-handler.php # Message handlers
+└── config/
+    └── default-settings.json # Configuration presets
+
+Required Hooks:
+- sewn_ws_register_protocols → Protocol registration
+- sewn_ws_client_connected → Connection handling
+- sewn_ws_auth_validation → Authentication flows
+
+Best Practices (Added):
+1. Implement message validation interface
+2. Use separate handler classes for complex logic
+3. Include protocol version in all messages
+4. Add admin debug tools for connection inspection
+5. Implement circuit breakers for external services
+
+Documentation Validation:
+✓ Matches Discord implementation patterns
+✓ Covers all security aspects from reference module
+✓ Specifies exact hook requirements
+✓ Requires proper class verification
+✓ Enforces lifecycle management
+
 10. SUPPORT & MAINTENANCE
 -------------------------
 
@@ -290,3 +340,5 @@ C. Legal
 - License: GPLv3
 - Data Policy: https://startempirewire.com/privacy
 - SLA Terms: https://startempirewire.com/sla
+
+

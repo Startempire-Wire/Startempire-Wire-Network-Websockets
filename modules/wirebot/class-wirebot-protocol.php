@@ -1,0 +1,44 @@
+<?php
+namespace SEWN\WebSockets\Protocols;
+
+use SEWN\WebSockets\Protocol_Base;
+
+class Wirebot_Protocol extends Protocol_Base {
+    private $config;
+
+    public function register() {
+        add_action('sewn_ws_register_protocols', [$this, 'register_protocol']);
+        add_action('sewn_ws_init', [$this, 'init_config']);
+        add_filter('sewn_ws_client_config', [$this, 'add_protocol_config']);
+    }
+
+    public function register_protocol($handler) {
+        $handler->register_protocol('wirebot', $this);
+    }
+
+    public function init_config() {
+        $this->config = [
+            'version' => '1.0',
+            'min_php' => '7.4',
+            'model' => get_option('sewn_ws_wirebot_model', 'claude-3')
+        ];
+    }
+
+    public function handle_message($message, $context) {
+        return [
+            'status' => 'processed',
+            'protocol' => 'wirebot',
+            'model' => $this->config['model'],
+            'timestamp' => time()
+        ];
+    }
+
+    public function add_protocol_config($config) {
+        $config['wirebot'] = [
+            'enabled' => true,
+            'version' => $this->config['version'],
+            'model' => $this->config['model']
+        ];
+        return $config;
+    }
+}

@@ -106,6 +106,31 @@ class Process_Manager {
         
         return $current;
     }
+
+    public static function get_message_queue_depth() {
+        // Implementation needed
+        return [
+            'current' => (int) get_option('sewn_ws_queue_current', 0),
+            'max_capacity' => 1000, // From config
+            'warning_threshold' => 750
+        ];
+    }
+
+    public static function get_failure_rates() {
+        return [
+            'last_hour' => (float) get_option('sewn_ws_failure_rate_1h', 0.0),
+            'last_24h' => (float) get_option('sewn_ws_failure_rate_24h', 0.0),
+            'threshold' => 0.05 // 5% failure rate threshold
+        ];
+    }
+
+    public static function get_bandwidth_usage() {
+        return [
+            'incoming' => (int) get_option('sewn_ws_bandwidth_in', 0),
+            'outgoing' => (int) get_option('sewn_ws_bandwidth_out', 0),
+            'max_allowed' => 1073741824 // 1GB default
+        ];
+    }
 }
 
 // Add to admin notices
