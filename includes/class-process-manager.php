@@ -1,14 +1,217 @@
 <?php
+/**
+ * Process Manager Class
+ *
+ * @package Startempire_Wire_Network_Websockets
+ * @subpackage Includes
+ */
+
 namespace SEWN\WebSockets;
 
+// Exit if accessed directly.
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Handles Node.js WebSocket server process management
+ */
 class Process_Manager {
-    const NAMESPACE = 'sewn-ws';
-    
-    public static function start_server() {
-        $command = 'cd ' . escapeshellarg(SEWN_WS_NODE_SERVER) . 
-                 ' && npm start -- --port=' . SEWN_WS_PORT;
-        exec('pm2 start ' . escapeshellarg($command) . ' --name ' . self::NAMESPACE);
+    /**
+     * @var string Path to PID file
+     */
+    private $pid_file;
+
+    /**
+     * @var string Path to log file
+     */
+    private $log_file;
+
+    /**
+     * @var string Path to Node server script
+     */
+    private $server_script;
+
+    /**
+     * Constructor
+     */
+    public function __construct() {
+        $this->pid_file = SEWN_WEBSOCKETS_PATH . 'tmp/server.pid';
+        $this->log_file = SEWN_WEBSOCKETS_PATH . 'logs/server.log';
+        $this->server_script = SEWN_WEBSOCKETS_PATH . 'node-server/server.js';
+        
+        // Ensure directories exist
+        wp_mkdir_p(dirname($this->pid_file));
+        wp_mkdir_p(dirname($this->log_file));
     }
+
+    /**
+     * Start the Node.js server
+     *
+     * @return array Status of server start attempt
+     */
+    public function start_server() {
+        if ($this->is_running()) {
+            return [
+                'success' => false,
+                'message' => 'Server is already running'
+            ];
+        }
+
+        $node_path = $this->get_node_path();
+        if (!$node_path) {
+            return [
+                'success' => false,
+                'message' => 'Node.js not found'
+            ];
+        }
+
+        $command = sprintf(
+            '%s %s > %s 2>&1 & echo $! > %s',
+            escapeshellcmd($node_path),
+            escapeshellarg($this->server_script),
+            escapeshellarg($this->log_file),
+            escapeshellarg($this->pid_file)
+        );
+
+        exec($command, $output, $return_var);
+
+        if ($return_var !== 0) {
+            return [
+                'success' => false,
+                'message' => 'Failed to start server'
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Server started successfully',
+            'pid' => file_get_contents($this->pid_file)
+        ];
+    }
+
+    /**
+     * Stop the Node.js server
+     *
+     * @return array Status of server stop attempt
+     */
+    public function stop_server() {
+        if (!$this->is_running()) {
+            return [
+                'success' => false,
+                'message' => 'Server is not running'
+            ];
+        }
+
+        $pid = (int) file_get_contents($this->pid_file);
+        
+        if (posix_kill($pid, SIGTERM)) {
+            unlink($this->pid_file);
+            return [
+                'success' => true,
+                'message' => 'Server stopped successfully'
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Failed to stop server'
+        ];
+    }
+
+    /**
+     * Restart the Node.js server
+     *
+     * @return array Status of server restart attempt
+     */
+    public function restart_server() {
+        $stop_result = $this->stop_server();
+        if (!$stop_result['success']) {
+            return $stop_result;
+        }
+
+        // Wait briefly for port to be freed
+        sleep(2);
+
+        return $this->start_server();
+    }
+
+    /**
+     * Check if server is running
+     *
+     * @return boolean
+     */
+    public function is_running() {
+        if (!file_exists($this->pid_file)) {
+            return false;
+        }
+
+        $pid = (int) file_get_contents($this->pid_file);
+        return posix_kill($pid, 0);
+    }
+
+    /**
+     * Get server status
+     *
+     * @return array Server status information
+     */
+    public function get_status() {
+        $running = $this->is_running();
+        $pid = $running ? (int) file_get_contents($this->pid_file) : null;
+        
+        return [
+            'running' => $running,
+            'pid' => $pid,
+            'uptime' => $running ? $this->get_uptime($pid) : 0,
+            'log_tail' => $this->get_log_tail()
+        ];
+    }
+
+    /**
+     * Get recent log entries
+     *
+     * @param int $lines Number of lines to retrieve
+     * @return string Recent log entries
+     */
+    public function get_log_tail($lines = 50) {
+        if (!file_exists($this->log_file)) {
+            return '';
+        }
+
+        $command = sprintf('tail -%d %s', (int) $lines, escapeshellarg($this->log_file));
+        return shell_exec($command);
+    }
+
+    /**
+     * Get Node.js executable path
+     *
+     * @return string|false Path to Node.js or false if not found
+     */
+    private function get_node_path() {
+        $output = shell_exec('which node');
+        return $output ? trim($output) : false;
+    }
+
+    /**
+     * Get process uptime
+     *
+     * @param int $pid Process ID
+     * @return int Uptime in seconds
+     */
+    private function get_uptime($pid) {
+        $stat = file_get_contents("/proc/$pid/stat");
+        if (!$stat) {
+            return 0;
+        }
+
+        $stats = explode(' ', $stat);
+        $starttime = isset($stats[21]) ? (int) $stats[21] : 0;
+        $uptime = time() - ($starttime / 100);
+        
+        return max(0, (int) $uptime);
+    }
+
+    const NAMESPACE = 'sewn-ws';
     
     public static function get_active_connections() {
         return apply_filters('sewn_ws_active_connections', []);

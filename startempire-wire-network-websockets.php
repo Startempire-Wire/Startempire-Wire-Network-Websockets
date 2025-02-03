@@ -236,14 +236,3 @@ add_action('sewn_ws_after_core_init', function() {
     // Late initialization
     $registry->init_modules();
 });
-
-/**
- * Load admin functionality
- */
-// if (is_admin()) {
-//     require_once __DIR__ . '/admin/class-admin-notices.php';
-//     require_once __DIR__ . '/admin/class-admin-ui.php';
-//     require_once __DIR__ . '/admin/class-settings.php';
-    
-//     new Admin_UI();
-// }
