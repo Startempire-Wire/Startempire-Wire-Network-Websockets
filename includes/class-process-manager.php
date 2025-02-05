@@ -1,18 +1,4 @@
 <?php
-/**
- * Process Manager Class
- *
- * @package Startempire_Wire_Network_Websockets
- * @subpackage Includes
- */
-
-namespace SEWN\WebSockets;
-
-
-// Exit if accessed directly.
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 /**
  * LOCATION: includes/class-process-manager.php
@@ -23,6 +9,14 @@ if (!defined('ABSPATH')) {
  * Manages WebSocket server processes and ensures high availability. Implements fault tolerance mechanisms required
  * for enterprise-grade WebRing content distribution. Coordinates with network authentication services for secure startup.
  */
+
+ namespace SEWN\WebSockets;
+
+ // Exit if accessed directly.
+ if (!defined('ABSPATH')) {
+     exit;
+ } 
+
 class Process_Manager {
     /**
      * @var string Path to PID file

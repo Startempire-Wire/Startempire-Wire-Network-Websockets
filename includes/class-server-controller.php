@@ -1,5 +1,4 @@
 <?php
-namespace SEWN\WebSockets;
 
 /**
  * LOCATION: includes/class-server-controller.php
@@ -10,6 +9,8 @@ namespace SEWN\WebSockets;
  * Orchestrates WebSocket server lifecycle operations and protocol handling. Maintains real-time synchronization
  * with Ring Leader plugin for network-wide message routing. Enforces membership-tier based connection limits.
  */
+
+namespace SEWN\WebSockets;
 
 class Server_Controller {
     private static $instance = null;
