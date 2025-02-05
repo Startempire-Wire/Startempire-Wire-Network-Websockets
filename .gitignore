@@ -1,9 +1,51 @@
-.DS_Store
-phpcs.xml
-phpunit.xml
-Thumbs.db
-wp-cli.local.yml
-node_modules/
-*.sql
-*.tar.gz
+# Dependency directories
+/node_modules/
+/vendor/
+
+# Build artifacts
 *.zip
+*.tar.gz
+/dist/
+
+# Environment files
+.env
+.env.local
+.env*.backup
+
+# Logs and databases
+*.log
+*.sql
+
+# IDE/Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# WordPress specific
+/wp-config-local.php
+/wp-content/uploads/
+
+# Development tools
+.phpcs.xml
+.grunt-contrib/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Plugin generated files
+/assets/css/*.css
+/assets/js/*.js
+!assets/css/admin.css
+!assets/js/admin*.js
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test environments
+.wp-env.json
+.wp-env.override.json
+/phpunit.xml

@@ -1,0 +1,196 @@
+# Startempire Wire Network Websockets Plugin Structure - 2025-02-05
+- This is the structure of the plugin as of 2025-02-05. We will regularly update this as we add new features and refactor the code.
+
+# Local Development URLs
+Local URL: https://gpt-stuff.local/
+Admin URL - Dashboard: https://gpt-stuff.local/wp-admin/admin.php?page=sewn-ws
+Admin URL - Status: https://gpt-stuff.local/wp-admin/admin.php?page=sewn-ws-status
+Admin URL - Modules: https://gpt-stuff.local/wp-admin/admin.php?page=sewn-ws-modules
+Admin URL - Settings: https://gpt-stuff.local/wp-admin/admin.php?page=sewn-ws-settings
+
+# Plugin Constants
+
+## Core Paths & URLs
+SEWN_WS_PATH          # Absolute plugin directory path
+SEWN_WS_URL           # Plugin directory URL 
+SEWN_WS_NS            # PHP namespace root (SEWN\WebSockets)
+SEWN_WS_NODE_SERVER   # Path to Node.js server files
+
+## Text Domains & UI
+SEWN_WS_TEXT_DOMAIN        # Translation domain ('sewn-ws')
+SEWN_WS_ADMIN_MENU_SLUG    # Admin menu slug ('sewn-ws')
+SEWN_WS_SCRIPT_HANDLE_ADMIN # Admin script handle ('sewn-ws-admin')
+
+## Server Configuration
+SEWN_WS_DEFAULT_PORT        # Default WebSocket port (8080)
+SEWN_WS_SETTINGS_GROUP      # Settings option group ('sewn_ws_settings')
+SEWN_WS_STATS_UPDATE_INTERVAL # Stats refresh interval (10000ms)
+SEWN_WS_STATS_MAX_POINTS    # Max data points kept (20)
+
+## Status Constants 
+SEWN_WS_SERVER_STATUS_RUNNING  # Server active
+SEWN_WS_SERVER_STATUS_STOPPED  # Server inactive
+SEWN_WS_SERVER_STATUS_ERROR    # Server error state
+
+## Storage & Options
+SEWN_WS_OPTION_SERVER_STATUS  # Server status option key
+SEWN_WS_OPTION_PORT           # Port setting option key
+SEWN_WS_TRANSIENT_CONNECTIONS # Active connections transient
+
+## Security & API
+SEWN_WS_NONCE_ACTION      # Nonce verification action
+SEWN_WS_REST_NAMESPACE    # REST API namespace ('sewn-ws/v1')
+
+## Module System
+SEWN_WS_MODULE_SETTINGS_PREFIX # Module settings format string
+
+## Versioning
+SEWN_WS_VERSION # Current plugin version ('1.0.0')
+
+
+
+# PHP Namespace Structure
+
+SEWN\WebSockets         # Core functionality (server management, modules, utilities)
+SEWN\WebSockets\admin   # Admin interface components (UI, settings, dashboard)
+
+# Plugin Structure
+
+startempire-wire-network-websockets/
+├── admin/
+│   ├── class-admin-notices.php
+│   ├── class-admin-ui.php
+│   ├── class-module-admin.php
+│   ├── class-settings-page.php
+│   ├── class-websockets-admin.php
+│   └── views/
+│       ├── dashboard.php
+│       ├── module-settings.php
+│       ├── modules-list.php
+│       ├── settings.php
+│       └── stats-dashboard.php
+├── assets/
+│   ├── css/
+│   │   └── admin.css
+│   └── js/
+│       ├── admin.js
+│       ├── components/
+│       │   ├── LogViewer.js
+│       │   ├── ServerControls.js
+│       │   └── StatsDisplay.js
+│       ├── admin-dashboard.js
+│       ├── admin-stats-display.js
+│       ├── admin-validation.js
+│       ├── dashboard-stats.js
+│       └── init.js
+├── includes/
+│   ├── class-module-base.php
+│   ├── class-module-registry.php
+│   ├── class-node-check.php
+│   ├── class-process-manager.php
+│   ├── class-server-controller.php
+│   └── class-server-process.php
+├── languages/
+│   └── sewn-ws.pot
+├── public/
+│   ├── css/
+│   └── js/
+├── tests/
+│   └── phpunit/
+├── vendor/
+├── .distignore
+├── .editorconfig
+├── Gruntfile.js
+├── package.json
+├── readme.txt
+└── startempire-wire-network-websockets.php
+
+Key Notes:
+1. Admin interface handles server controls/modules
+2. Complex JS architecture with component-based organization
+3. Includes directory contains core WebSocket management classes
+4. Excluded from distribution (via .distignore):
+   - tests/, vendor/, node_modules/, *.sql
+5. Follows WordPress coding standards with PHPCS config
+6. Uses modern JavaScript with module system (visible in admin.js)
+
+This structure combines WordPress plugin conventions with WebSocket-specific architecture needs. The admin UI is separated from core functionality, with clear view/component organization.
+
+
+ARCHITECTURE OVERVIEW
+---------------------
+Client connections flow through these components:
+
+1. Chrome Extension --> WebSocket Server (Port 8080)
+2. WebSocket Server --> Ring Leader Plugin (HTTP)
+3. Ring Leader Plugin --> WordPress Database (REST)
+4. WebSocket Server <--> Connect Plugins (WebRTC)
+
+PROTOCOL IMPLEMENTATION
+-----------------------
+WebSocket Message Requirements:
+
+{
+  "v": "1.2",  // Protocol version from .cursorrules
+  "type": "connectionLifecycle|operation|error",
+  "signature": "HMAC-SHA256(contents)"
+}
+
+Validation Example (PHP):
+
+add_filter('sewn_ws_auth_validation', function($message) {
+    if (!hash_equals($message->signature, generate_hmac($message))) {
+        throw new InvalidMessageException();
+    }
+    return $message;
+});
+
+SECURITY ADDITIONS
+------------------
+Admin Setting Implementation:
+
+add_settings_field(
+    'ws_port',
+    __('WebSocket Port'),
+    function() {
+        $value = get_option('ws_port');
+        echo "<input type='number' 
+              name='ws_port' 
+              value='".esc_attr(wp_encrypt($value, SECURE_KEY))."'>";
+    }
+);
+
+CONNECTION LIFECYCLE
+--------------------
+1. Connection Handshake:
+   - Client sends JWT
+   - Server challenges authentication
+   - Client responds with signed token
+   - Server issues session token
+
+2. Data Transfer Phase:
+   - Client sends encrypted message
+   - Server validates with Ring Leader
+   - Approved messages get ACK response
+
+3. Disconnect:
+   - Graceful termination protocol
+   - Session cleanup hooks
+
+INTEGRATION POINTS
+------------------
+Required Hooks Implementation:
+
+// Protocol Registration
+add_filter('sewn_ws_register_protocols', function($protocols) {
+    $protocols['custom'] = [
+        'handler' => Custom_Handler::class,
+        'validation' => 'validate_custom_message'
+    ];
+    return $protocols;
+});
+
+// Connection Handling
+add_action('sewn_ws_client_connected', function($client) {
+    error_log("New connection: " . $client->getId());
+});
