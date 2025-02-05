@@ -214,11 +214,13 @@ class WebSocketAdmin {
 
     updateServerStatus(status) {
         const statusElement = document.querySelector('.sewn-ws-status');
+        const statusConstants = window.sewnWebsockets.constants;
+
         statusElement.className = `sewn-ws-status ${status.toLowerCase()}`;
         statusElement.querySelector('.status-text').textContent = status;
 
-        if (status === 'error') {
-            this.showAlert(__('Server encountered an error', 'sewn-ws'));
+        if (status === statusConstants.STATUS_ERROR) {
+            this.showAlert(window.sewnWebsockets.i18n.serverError);
         }
 
         // Update button states

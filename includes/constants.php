@@ -42,4 +42,13 @@ defined('SEWN_WS_VERSION') || define('SEWN_WS_VERSION', '1.0.0');
 !defined('SEWN_WS_ADMIN_MENU_SLUG') && define('SEWN_WS_ADMIN_MENU_SLUG', 'sewn-ws');
 !defined('SEWN_WS_NONCE_ACTION') && define('SEWN_WS_NONCE_ACTION', 'sewn_ws_nonce');
 !defined('SEWN_WS_SCRIPT_HANDLE_ADMIN') && define('SEWN_WS_SCRIPT_HANDLE_ADMIN', 'sewn-ws-admin');
-!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080); 
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080);
+
+// WebSocket Server Constants
+!defined('SEWN_WS_SERVER_STATUS_RUNNING') && define('SEWN_WS_SERVER_STATUS_RUNNING', 'running');
+!defined('SEWN_WS_SERVER_STATUS_STOPPED') && define('SEWN_WS_SERVER_STATUS_STOPPED', 'stopped');
+!defined('SEWN_WS_SERVER_STATUS_ERROR') && define('SEWN_WS_SERVER_STATUS_ERROR', 'error');
+
+// WebSocket Stats Constants
+!defined('SEWN_WS_STATS_UPDATE_INTERVAL') && define('SEWN_WS_STATS_UPDATE_INTERVAL', 10000);
+!defined('SEWN_WS_STATS_MAX_POINTS') && define('SEWN_WS_STATS_MAX_POINTS', 20); 

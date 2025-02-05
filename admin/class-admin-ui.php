@@ -309,4 +309,14 @@ class Admin_UI {
 
         wp_enqueue_script('sewn-ws-admin-js');
     }
+
+    public function render_server_status() {
+        $status = $this->get_server_status();
+        $status_class = $status === SEWN_WS_SERVER_STATUS_RUNNING ? 'success' : 'error';
+        
+        echo '<div class="sewn-ws-status ' . esc_attr($status_class) . '">';
+        echo '<span class="status-dot"></span>';
+        echo '<span class="status-text">' . esc_html(ucfirst($status)) . '</span>';
+        echo '</div>';
+    }
 }

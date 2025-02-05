@@ -20,6 +20,9 @@ use SEWN\WebSockets\Admin\Websockets_Admin;
 use SEWN\WebSockets\Dashboard;
 use SEWN\WebSockets\Module_Registry;
 use SEWN\WebSockets\Server_Controller;
+use SEWN\WebSockets\Socket_Manager;
+use SEWN\WebSockets\Unified_Roles;
+
 // Define Global Constants
 require_once __DIR__ . '/includes/constants.php';
 

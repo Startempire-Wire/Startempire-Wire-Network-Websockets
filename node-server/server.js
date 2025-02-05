@@ -1,4 +1,9 @@
-const { Server } = require("socket.io");
+const express = require('express');
+const app = express();
+const server = require('http').createServer(app);
+const io = require('socket.io')(server);
+const fs = require('fs');
+const path = require('path');
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const winston = require('winston');
@@ -20,12 +25,12 @@ const logger = winston.createLogger({
     ],
 });
 
-const PORT = process.env.WEBSOCKET_PORT || 8080;
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-    logger.error('JWT_SECRET is not defined in .env file!');
-    process.exit(1);
-}
+// Load configuration
+const config = {
+    port: process.env.PORT || 8080,
+    logPath: path.join(__dirname, 'server.log'),
+    statusPath: path.join(__dirname, 'status.json')
+};
 
 // Initialize Redis client (optional, for future scalability)
 let redisClient;
@@ -34,13 +39,6 @@ if (process.env.REDIS_URL) {
     redisClient.on('error', err => logger.error('Redis Client Error', err));
     redisClient.connect().catch(err => logger.error('Error connecting to Redis', err));
 }
-
-const io = new Server({
-    cors: {
-        origin: "*", // For development, configure for production
-        methods: ["GET", "POST"]
-    }
-});
 
 // Stats tracking
 const stats = {
@@ -181,7 +179,6 @@ statusNamespace.on('connection', socket => {
     });
 });
 
-
 function emitStats() {
     const stats = {
         connections: io.engine.clientsCount,
@@ -198,7 +195,6 @@ function emitStats() {
 function emitChannelStats(channelName) {
     adminNamespace.emit('channelStatsUpdate', { channel: channelName, stats: stats.channels[channelName] });
 }
-
 
 // Stats update interval - send stats to admin dashboard every 2 seconds
 setInterval(emitStats, 2000);
@@ -218,6 +214,60 @@ setInterval(() => {
     metrics.messagesOut = 0;
 }, 1000);
 
-io.listen(PORT, () => {
-    logger.info(`WebSocket server listening on port ${PORT}`);
+// Basic status endpoint for health checks
+app.get('/status', (req, res) => {
+    res.json({
+        status: 'running',
+        uptime: process.uptime(),
+        connections: io.engine.clientsCount,
+        timestamp: Date.now()
+    });
 });
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+    // Log connection
+    logEvent('connection', { id: socket.id });
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
+        logEvent('disconnect', { id: socket.id });
+    });
+
+    // Handle errors
+    socket.on('error', (error) => {
+        logEvent('error', { id: socket.id, error: error.message });
+    });
+});
+
+// Start server
+server.listen(config.port, () => {
+    const status = {
+        pid: process.pid,
+        port: config.port,
+        startTime: Date.now()
+    };
+
+    // Write status file for PHP process
+    fs.writeFileSync(config.statusPath, JSON.stringify(status));
+    logEvent('server_start', status);
+});
+
+// Handle shutdown
+process.on('SIGTERM', () => {
+    logEvent('shutdown', { pid: process.pid });
+    server.close(() => {
+        process.exit(0);
+    });
+});
+
+// Logging helper
+function logEvent(event, data) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        event,
+        data
+    };
+
+    fs.appendFileSync(config.logPath, JSON.stringify(logEntry) + '\n');
+}
