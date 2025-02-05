@@ -1,3 +1,13 @@
+<?php
+/**
+ * Location: includes/class-role-mapper.php
+ * Dependencies: Discord API, MemberPress Integration
+ * Variables/Classes: SEWN_WS_Role_Mapper, MAPPINGS constant
+ * 
+ * Translates external system roles to WordPress membership tiers. Maintains validated mappings for Discord roles and MemberPress memberships with fail-safe defaults.
+ */
+namespace SEWN\WebSockets;
+
 class SEWN_WS_Role_Mapper {
     const MAPPINGS = [
         'discord' => [

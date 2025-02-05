@@ -1,5 +1,4 @@
 <?php
-
 /**
  * LOCATION: includes/class-process-manager.php
  * DEPENDENCIES: Server_Process, WordPress WP-CLI

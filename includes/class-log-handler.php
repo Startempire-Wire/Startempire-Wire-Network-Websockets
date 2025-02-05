@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: includes/class-log-handler.php
+ * Dependencies: WordPress Filesystem API, Admin AJAX Hooks
+ * Variables/Classes: Log_Handler, $log_file, $max_log_size
+ * 
+ * Manages plugin logging system with automatic rotation and admin access controls. Provides AJAX endpoints for log retrieval and implements size-based log rotation to maintain system performance.
+ */
 namespace SEWN\WebSockets;
 
 class Log_Handler {

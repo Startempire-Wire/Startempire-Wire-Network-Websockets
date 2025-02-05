@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: includes/class-server-manager.php
+ * Dependencies: Node.js Server, System Health Monitoring
+ * Variables/Classes: Server_Manager, MAX_RECOVERY_ATTEMPTS
+ * 
+ * Manages WebSocket server lifecycle and automatic recovery processes. Implements health checks with graduated recovery attempts and detailed error logging for server operations.
+ */
 namespace SEWN\WebSockets;
 
 class Server_Manager {

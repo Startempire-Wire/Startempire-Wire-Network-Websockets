@@ -1,5 +1,4 @@
 <?php
-
 /**
  * LOCATION: includes/class-module-registry.php
  * DEPENDENCIES: Module_Base, WordPress Transients API

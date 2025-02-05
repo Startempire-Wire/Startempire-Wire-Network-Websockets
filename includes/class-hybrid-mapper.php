@@ -1,5 +1,11 @@
 <?php
-
+/**
+ * Location: includes/class-hybrid-mapper.php
+ * Dependencies: WordPress HTTP API, Parent Site REST Endpoints
+ * Variables/Classes: SEWN_WS_Hybrid_Role_System, $parent_mappings
+ * 
+ * Handles cross-system role mapping between WordPress and external services. Implements synchronization with parent site role definitions while maintaining local fallback mappings for Discord and MemberPress integrations.
+ */
 namespace SEWN\WebSockets;
 
 class SEWN_WS_Hybrid_Role_System {

@@ -1,3 +1,13 @@
+<?php
+/**
+ * Location: includes/class-role-manager.php
+ * Dependencies: WordPress User Roles, Debug Logging
+ * Variables/Classes: SEWN_WS_Role_Manager, $capabilities matrix
+ * 
+ * Enforces tier-based capabilities according to network membership levels. Maps FreeWire/Wire/ExtraWire tiers to specific permissions with debug logging for capability checks.
+ */
+namespace SEWN\WebSockets;
+
 class SEWN_WS_Role_Manager {
     private $capabilities = [
         'free' => ['view'],

@@ -1,5 +1,11 @@
 <?php
-
+/**
+ * Location: includes/class-message-handler.php
+ * Dependencies: WebSocket Protocol Base Class, Bridge System
+ * Variables/Classes: Message_Handler, Protocol_Base, Default_Protocol
+ * 
+ * Handles WebSocket message routing and protocol management. Implements extensible protocol system for different message types and ensures proper distribution through the network bridge.
+ */
 namespace SEWN\WebSockets;
 
 class Message_Handler {

@@ -1,5 +1,4 @@
 <?php
-
 /**
  * LOCATION: includes/class-server-controller.php
  * DEPENDENCIES: Process_Manager, Node_Check

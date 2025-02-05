@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: includes/class-rest-api.php
+ * Dependencies: WordPress REST API, JWT Authentication
+ * Variables/Classes: REST_API, register_routes(), get_live_stats()
+ * 
+ * Exposes WebSocket configuration and control endpoints through WordPress REST API. Handles server management actions and provides real-time connection statistics for admin monitoring.
+ */
 namespace SEWN\WebSockets;
 
 class REST_API {
