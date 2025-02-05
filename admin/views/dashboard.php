@@ -1,6 +1,4 @@
 <?php
-// Add at top:
-if (!defined('ABSPATH')) exit;
 
 /**
  * LOCATION: admin/views/dashboard.php
@@ -12,6 +10,8 @@ if (!defined('ABSPATH')) exit;
  * health status aligned with Startempire Wire's WebRing architecture requirements. Integrates membership-tier
  * visualization for network operators.
  */
+
+if (!defined('ABSPATH')) exit; 
 
 /** @var array $node_status */
 $node_status = $node_status ?? ['version' => 'N/A', 'running' => false, 'status' => 'stopped'];

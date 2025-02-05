@@ -1,5 +1,4 @@
 <?php
-namespace SEWN\WebSockets;
 
 /**
  * LOCATION: includes/class-module-base.php
@@ -11,6 +10,8 @@ namespace SEWN\WebSockets;
  * of network authentication and membership tier handling across all extensions. Required foundation
  * for WebRing ad network features and content distribution channels.
  */
+
+ namespace SEWN\WebSockets;
 
 abstract class Module_Base {
     abstract public function metadata();

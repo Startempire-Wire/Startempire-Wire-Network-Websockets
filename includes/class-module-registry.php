@@ -1,5 +1,4 @@
 <?php
-namespace SEWN\WebSockets;
 
 /**
  * LOCATION: includes/class-module-registry.php
@@ -10,6 +9,8 @@ namespace SEWN\WebSockets;
  * Central registry for managing WebSocket protocol modules and their lifecycle. Handles activation/deactivation
  * sequencing required for network synchronization. Maintains compatibility with Ring Leader plugin's service discovery.
  */
+
+namespace SEWN\WebSockets;
 
 class Module_Registry {
     private static $instance;

@@ -1,7 +1,5 @@
 <?php
 
-namespace SEWN\WebSockets;
-
 /**
  * LOCATION: includes/class-node-check.php
  * DEPENDENCIES: Process_Manager, Server_Controller
@@ -11,6 +9,8 @@ namespace SEWN\WebSockets;
  * Verifies Node.js runtime compatibility and service availability. Essential for maintaining WebSocket server
  * stability across the distributed Startempire Wire Network. Implements network authentication system health checks.
  */
+
+ namespace SEWN\WebSockets;
 
 class Node_Check {
     const REQUIRED_VERSION = '16.0.0';

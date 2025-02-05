@@ -1,8 +1,5 @@
 <?php
 
-namespace SEWN\WebSockets;
-use SEWN\WebSockets\Node_Check;
-
 /**
  * LOCATION: admin/class-admin-notices.php
  * DEPENDENCIES: Node_Check class, WordPress admin hooks
@@ -13,6 +10,9 @@ use SEWN\WebSockets\Node_Check;
  * and displays persistent warnings until minimum requirements are met. Integrates with the plugin's environment
  * validation system to maintain network stability across Startempire Wire Network components.
  */
+
+namespace SEWN\WebSockets;
+use SEWN\WebSockets\Node_Check;
 
 add_action('admin_notices', function() {
     if (!Node_Check::check_version()) {

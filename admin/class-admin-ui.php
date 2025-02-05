@@ -1,12 +1,4 @@
 <?php
-namespace SEWN\WebSockets\Admin;
-
-use SEWN\WebSockets\Module_Base;
-use SEWN\WebSockets\Module_Registry;
-use SEWN\WebSockets\Node_Check;
-use SEWN\WebSockets\Process_Manager;
-use SEWN\WebSockets\Server_Controller;
-use SEWN\WebSockets\Server_Process;
 
 /**
  * LOCATION: admin/class-admin-ui.php
@@ -18,6 +10,15 @@ use SEWN\WebSockets\Server_Process;
  * real-time status monitoring, and integration with network authentication systems. Designed to support the distributed
  * architecture described in Startempire Wire Network's core documentation.
  */
+
+ namespace SEWN\WebSockets\Admin;
+
+ use SEWN\WebSockets\Module_Base;
+ use SEWN\WebSockets\Module_Registry;
+ use SEWN\WebSockets\Node_Check;
+ use SEWN\WebSockets\Process_Manager;
+ use SEWN\WebSockets\Server_Controller;
+ use SEWN\WebSockets\Server_Process; 
 
 class Admin_UI {
     private static $instance = null;

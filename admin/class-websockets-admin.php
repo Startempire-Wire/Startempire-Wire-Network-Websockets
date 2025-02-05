@@ -1,10 +1,4 @@
 <?php
-namespace SEWN\WebSockets\Admin;
-
-if (!defined('ABSPATH')) exit;
-
-use SEWN\WebSockets\Admin\Admin_UI;
-use SEWN\WebSockets\Module_Registry;
 
 /**
  * LOCATION: admin/class-websockets-admin.php
@@ -16,6 +10,14 @@ use SEWN\WebSockets\Module_Registry;
  * server integrity across network authentication methods. Enforces membership-based access rules for admin
  * features per Startempire Wire Network tier system.
  */
+
+ namespace SEWN\WebSockets\Admin;
+
+if (!defined('ABSPATH')) exit;
+ 
+use SEWN\WebSockets\Admin\Admin_UI;
+use SEWN\WebSockets\Module_Registry;
+ 
 
 class Websockets_Admin {
     private static $instance = null;

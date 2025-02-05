@@ -1,5 +1,4 @@
 <?php
-namespace SEWN\WebSockets\Admin;
 
 /**
  * LOCATION: admin/class-settings-page.php
@@ -11,6 +10,8 @@ namespace SEWN\WebSockets\Admin;
  * Integrates with network authentication providers (WordPress, BuddyBoss, Discord) to enforce membership-tier access
  * controls across distributed network components.
  */
+
+namespace SEWN\WebSockets\Admin;
 
 class Settings_Page {
     private static $instance = null;

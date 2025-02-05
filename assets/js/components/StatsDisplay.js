@@ -8,6 +8,7 @@
  * content distribution monitoring by correlating server load with membership-tier activity patterns. Updates
  * synchronously with network authentication events.
  */
+
 class StatsDisplay {
     constructor(selectors) {
         this.elements = {
