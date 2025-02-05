@@ -4,9 +4,6 @@ namespace SEWN\WebSockets\Admin;
 if (!defined('ABSPATH')) exit;
 
 use SEWN\WebSockets\Admin\Admin_UI;
-use SEWN\WebSockets\Admin\Module_Admin;
-use SEWN\WebSockets\Admin\Settings;
-use SEWN\WebSockets\Admin\Settings_Page;
 use SEWN\WebSockets\Module_Registry;
 
 
@@ -29,7 +26,6 @@ class Websockets_Admin {
     }
 
     private function init_hooks() {
-        add_action('admin_menu', [$this, 'register_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_init', [$this, 'register_settings']);
     }
@@ -37,37 +33,7 @@ class Websockets_Admin {
     private function init_components() {
         $this->ui = Admin_UI::get_instance();
         $this->modules = new \SEWN\WebSockets\Admin\Module_Admin(Module_Registry::get_instance());
-        $this->settings = new \SEWN\WebSockets\Admin\Settings();
-    }
-
-    public function register_admin_menu() {
-        add_menu_page(
-            __('WebSocket Server', 'sewn-ws'),
-            __('WebSockets', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-dashboard',
-            [$this->ui, 'render_dashboard'],
-            'dashicons-networking',
-            80
-        );
-
-        add_submenu_page(
-            'sewn-ws-dashboard',
-            __('Module Settings', 'sewn-ws'),
-            __('Modules', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-modules',
-            [$this->modules, 'render_modules_page']
-        );
-
-        add_submenu_page(
-            'sewn-ws-dashboard',
-            __('Server Settings', 'sewn-ws'),
-            __('Settings', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-settings',
-            [$this->settings, 'render_settings_page']
-        );
+        $this->settings = new \SEWN\WebSockets\Admin\Settings_Page();
     }
 
     public function enqueue_assets($hook) {

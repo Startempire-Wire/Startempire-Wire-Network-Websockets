@@ -10,41 +10,10 @@ class Module_Admin {
 
     public function __construct(Module_Registry $registry) {
         $this->registry = $registry;
-        add_action('admin_menu', [$this, 'add_menu_items']);
         add_action('admin_init', [$this, 'handle_module_actions']);
         add_action('admin_init', [$this, 'register_module_settings']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
-    }
-
-    public function add_menu_items() {
-        add_menu_page(
-            'SEWN WebSockets',
-            'WebSockets',
-            'manage_options',
-            'sewn-ws',
-            [$this, 'render_dashboard'],
-            'dashicons-networking'
-        );
-    
-        add_submenu_page(
-            'sewn-ws',
-            __('Modules', 'sewn-ws'),
-            __('Modules', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-modules',
-            [$this, 'render_modules_page']
-        );
-
-        // Add hidden submenu for module settings
-        add_submenu_page(
-            null, // Don't add to menu
-            __('Module Settings', 'sewn-ws'),
-            __('Module Settings', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-module-settings',
-            [$this, 'render_settings_page']
-        );
     }
 
     public function handle_module_actions() {
@@ -74,98 +43,41 @@ class Module_Admin {
         }
     }
 
-    public function render_modules_page() {
-        ?>
-        <div class="wrap">
-            <h1><?php esc_html_e('WebSockets Modules', 'sewn-ws'); ?></h1>
-            <div class="sewn-modules-grid">
-                <?php foreach ($this->registry->get_modules() as $module) : 
-                    $meta = $module->metadata();
-                    $is_active = $module->is_active();
-                ?>
-                <div class="sewn-module-card card <?php echo $is_active ? 'active' : 'inactive'; ?>">
-                    <div class="module-header">
-                        <h2><?php echo esc_html($meta['name']); ?></h2>
-                        <span class="version">v<?php echo esc_html($meta['version']); ?></span>
-                    </div>
-                    <div class="module-content">
-                        <p class="description"><?php echo esc_html($meta['description']); ?></p>
-                        
-                        <?php if (!empty($meta['dependencies'])) : ?>
-                        <div class="dependencies">
-                            <strong><?php esc_html_e('Requires:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html(implode(', ', $meta['dependencies'])); ?>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="module-actions">
-                        <form method="post">
-                            <?php wp_nonce_field('sewn_module_control'); ?>
-                            <input type="hidden" name="module_slug" value="<?php echo esc_attr($meta['slug']); ?>">
-                            
-                            <?php if ($is_active) : ?>
-                                <button type="submit" name="sewn_module_action" value="deactivate" 
-                                    class="button button-secondary">
-                                    <?php esc_html_e('Deactivate', 'sewn-ws'); ?>
-                                </button>
-                            <?php else : ?>
-                                <button type="submit" name="sewn_module_action" value="activate" 
-                                    class="button button-primary">
-                                    <?php esc_html_e('Activate', 'sewn-ws'); ?>
-                                </button>
-                            <?php endif; ?>
-                        </form>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        <style>
-            .sewn-modules-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                gap: 1rem;
-            }
-            .sewn-module-card {
-                padding: 1rem;
-                border: 1px solid #ccd0d4;
-            }
-            .sewn-module-card.active {
-                border-left: 4px solid #00a32a;
-            }
-            .module-header {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 1rem;
-            }
-            .module-actions {
-                margin-top: 1rem;
-                padding-top: 1rem;
-                border-top: 1px solid #ccd0d4;
-            }
-        </style>
-        <?php
+    public function render_modules() {
+        include_once dirname(__FILE__) . '/views/module-settings.php';
+    }
+
+    public function render_settings() {
+        include_once dirname(__FILE__) . '/views/settings.php';
+    }
+
+    public function render_dashboard() {
+        include_once dirname(__FILE__) . '/views/dashboard.php';
     }
 
     public function register_module_settings() {
         foreach ($this->registry->get_modules() as $module) {
-            if (!$module->is_active()) continue;
-            
             $config = $module->admin_ui();
-            $module_slug = $module->metadata()['slug'];
+            $slug = $module->get_module_slug();
             
             register_setting(
-                "sewn_ws_module_{$module_slug}",
-                "sewn_ws_module_{$module_slug}_settings",
-                ['sanitize_callback' => [$this, 'sanitize_module_settings']]
+                "sewn_ws_module_{$slug}",
+                sprintf(SEWN_WS_MODULE_SETTINGS_PREFIX, $slug),
+                [
+                    'sanitize_callback' => [$this, 'sanitize_module_settings'],
+                    'show_in_rest' => false,
+                    'type' => 'object',
+                    'default' => []
+                ]
             );
 
+            // Register sections
             foreach ($config['sections'] as $section) {
                 add_settings_section(
                     $section['id'],
                     $section['title'],
-                    $section['callback'] ?? null,
-                    "sewn_ws_module_{$module_slug}"
+                    $section['callback'] ?? '__return_empty_string',
+                    "sewn_ws_module_{$slug}"
                 );
             }
 
@@ -174,10 +86,10 @@ class Module_Admin {
                     $setting['name'],
                     $setting['label'],
                     [$this, 'render_setting_field'],
-                    "sewn_ws_module_{$module_slug}",
+                    "sewn_ws_module_{$slug}",
                     $setting['section'] ?? 'default',
                     [
-                        'module' => $module_slug,
+                        'module' => $slug,
                         'name' => $setting['name'],
                         'type' => $setting['type'] ?? 'text',
                         'options' => $setting['options'] ?? []
@@ -222,18 +134,6 @@ class Module_Admin {
         return $sanitized;
     }
 
-    public function render_settings_page() {
-        $module_slug = isset($_GET['module']) ? sanitize_key($_GET['module']) : '';
-        $module = $this->registry->get_module($module_slug);
-        
-        if (!$module instanceof Module_Base) {
-            wp_die(__('Invalid module', 'sewn-ws'));
-        }
-        
-        // Pass variables to the view
-        include plugin_dir_path(__DIR__) . 'admin/views/module-settings.php';
-    }
-
     public function handle_stats_request() {
         check_ajax_referer('sewn_ws_nonce', 'nonce');
         
@@ -243,16 +143,54 @@ class Module_Admin {
         ]);
     }
 
-    public function enqueue_scripts() {
+    public function enqueue_scripts($hook) {
+        // Add explicit check
+        if ($hook !== 'toplevel_page_sewn-ws') {
+            return;
+        }
+        
+        // Initialize all variables with defaults
+        $menu_slug = defined('SEWN_WS_ADMIN_MENU_SLUG') ? SEWN_WS_ADMIN_MENU_SLUG : 'sewn-ws';
+        $current_port = (int) get_option(
+            defined('SEWN_WS_OPTION_PORT') ? SEWN_WS_OPTION_PORT : 'sewn_ws_port',
+            defined('SEWN_WS_DEFAULT_PORT') ? SEWN_WS_DEFAULT_PORT : 8080
+        );
+
+        // Explicit script dependencies array
+        $deps = ['jquery'];
+        
+        // Register script with module type
+        wp_register_script(
+            SEWN_WS_SCRIPT_HANDLE_ADMIN,
+            plugins_url('assets/js/admin.js', dirname(__FILE__)),
+            $deps,
+            SEWN_WS_VERSION,
+            true
+        );
+        
+        // Add module type attribute
+        wp_script_add_data(SEWN_WS_SCRIPT_HANDLE_ADMIN, 'type', 'module');
+
         wp_enqueue_script(SEWN_WS_SCRIPT_HANDLE_ADMIN);
+        
+        // Localize with fallback values
         wp_localize_script(SEWN_WS_SCRIPT_HANDLE_ADMIN, 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
-            'port' => get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT)
+            'nonce' => wp_create_nonce(
+                defined('SEWN_WS_NONCE_ACTION') ? SEWN_WS_NONCE_ACTION : 'sewn_ws_nonce'
+            ),
+            'port' => $current_port
         ]);
     }
 
     public function get_module_settings($module_slug) {
         return get_option(sprintf(SEWN_WS_MODULE_SETTINGS_PREFIX, $module_slug), []);
+    }
+
+    public static function render_modules_page() {
+        $module_registry = \SEWN\WebSockets\Module_Registry::get_instance();
+        $modules = $module_registry->get_modules();
+        
+        include plugin_dir_path(__FILE__) . 'views/modules-list.php';
     }
 }

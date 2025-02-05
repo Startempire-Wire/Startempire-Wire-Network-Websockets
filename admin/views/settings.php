@@ -1,10 +1,19 @@
+<?php
+namespace SEWN\WebSockets\Admin;
+
+
+if (!defined('ABSPATH')) exit;
+?>
 <div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
 
     <div id="sewn-ws-validation-summary"></div>
 
     <form method="post" action="options.php" id="sewn-ws-settings-form">
-        <?php settings_fields('sewn_ws_settings'); ?>
+        <?php 
+        settings_fields('sewn_ws_settings');
+        wp_nonce_field('sewn_ws_settings', 'sewn_ws_nonce');
+        ?>
         
         <table class="form-table">
             <tr>

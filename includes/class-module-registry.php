@@ -23,17 +23,22 @@ class Module_Registry {
             $module_slug = basename($dir);
             $main_file = "$dir/class-{$module_slug}-module.php";
             
-            if (file_exists($main_file)) {
-                require_once $main_file;
-                $class_name = 'SEWN\\WebSockets\\Modules\\' . ucfirst($module_slug) . '\\' . ucfirst($module_slug) . '_Module';
-                
-                if (class_exists($class_name)) {
-                    $this->modules[$module_slug] = new $class_name();
-                    if (method_exists($this->modules[$module_slug], 'set_registry')) {
-                        $this->modules[$module_slug]->set_registry($this);
-                    }
-                }
+            if (!file_exists($main_file)) continue;
+
+            require_once $main_file;
+            $class_name = 'SEWN\\WebSockets\\Modules\\' . ucfirst($module_slug) . '\\' . ucfirst($module_slug) . '_Module';
+            
+            if (!class_exists($class_name)) continue;
+
+            $module = new $class_name();
+            
+            // Validate module interface
+            if (!method_exists($module, 'metadata') || !is_array($module->metadata())) {
+                error_log("Invalid module: $class_name - Missing valid metadata()");
+                continue;
             }
+
+            $this->modules[$module_slug] = $module;
         }
     }
     

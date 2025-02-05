@@ -1,6 +1,9 @@
 <?php
-// Set safe defaults
-$node_status = $node_status ?? ['version' => 'N/A', 'running' => false];
+// Add at top:
+if (!defined('ABSPATH')) exit;
+
+/** @var array $node_status */
+$node_status = $node_status ?? ['version' => 'N/A', 'running' => false, 'status' => 'stopped'];
 $status_class = $node_status['running'] ? 'success' : 'error';
 $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attention';
 ?>

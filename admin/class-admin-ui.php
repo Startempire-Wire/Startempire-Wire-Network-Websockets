@@ -14,6 +14,7 @@ class Admin_UI {
     private $connections = [];
     private $server_process = null;
     private $status_lock = false;
+    private $server_controller;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -22,8 +23,9 @@ class Admin_UI {
         return self::$instance;
     }
 
-    public function __construct() {
+    protected function __construct() {
         $this->registry = Module_Registry::get_instance();
+        $this->server_controller = new Server_Controller();
         $this->registry->discover_modules();
         $this->registry->init_modules();
         
@@ -133,13 +135,12 @@ class Admin_UI {
             check_ajax_referer('sewn_ws_control', 'nonce');
             
             $command = $_POST['command'] ?? '';
-            $controller = new Server_Controller();
             
-            if(!method_exists($controller, $command)) {
+            if(!method_exists($this->server_controller, $command)) {
                 throw new \Exception("Invalid server command: $command");
             }
             
-            $result = $controller->$command();
+            $result = $this->server_controller->$command();
             wp_send_json_success($result);
             
         } catch(\Exception $e) {
@@ -180,7 +181,11 @@ class Admin_UI {
         ];
 
         if ($this->status_lock) {
-            wp_send_json_error('Another operation is in progress', 423);
+            wp_send_json_error([
+                'message' => __('Another operation is in progress', 'sewn-ws'),
+                'code' => 'LOCKED'
+            ], 423);
+            return;
         }
 
         $this->status_lock = true;
@@ -243,18 +248,22 @@ class Admin_UI {
         return file_get_contents('/var/log/websocket.log');
     }
 
-    public function enqueue_assets() {
+    public function enqueue_assets($hook) {
+        if (strpos($hook, SEWN_WS_ADMIN_MENU_SLUG) === false) {
+            return;
+        }
+
         wp_enqueue_style(
             'sewn-ws-admin',
-            plugin_dir_url(dirname(__FILE__)) . 'assets/css/admin.css',
-            [],
+            plugins_url('css/admin.css', dirname(__FILE__)),
+            array(),
             SEWN_WS_VERSION
         );
-
+        
         wp_enqueue_script(
             'sewn-ws-admin',
-            plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js',
-            ['jquery'],
+            plugins_url('js/admin.js', dirname(__FILE__)),
+            array('jquery'),
             SEWN_WS_VERSION,
             true
         );
@@ -283,5 +292,21 @@ class Admin_UI {
             }
         }
         $this->connections = [];
+    }
+
+    public function enqueue_admin_assets() {
+        // Explicit script registration with module type
+        wp_register_script(
+            'sewn-ws-admin-js',
+            plugins_url('assets/js/admin.js', dirname(__FILE__)),
+            ['jquery'],
+            SEWN_WS_VERSION,
+            true
+        );
+        
+        // Add module type attribute
+        wp_script_add_data('sewn-ws-admin-js', 'type', 'module');
+
+        wp_enqueue_script('sewn-ws-admin-js');
     }
 }

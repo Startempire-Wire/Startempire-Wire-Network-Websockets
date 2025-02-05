@@ -17,20 +17,21 @@
 namespace SEWN\WebSockets;
 use SEWN\WebSockets\Admin\Module_Admin;
 use SEWN\WebSockets\Admin\Websockets_Admin;
+use SEWN\WebSockets\Dashboard;
 use SEWN\WebSockets\Module_Registry;
-
+use SEWN\WebSockets\Server_Controller;
 // Define Global Constants
 require_once __DIR__ . '/includes/constants.php';
+
+// Add activation hook immediately after namespace declaration
+register_activation_hook(__FILE__, function() {
+    // Clear any existing menu cache
+    delete_option('menu_cache_key');
+});
 
 // Before any other code
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-
-defined('ABSPATH') || exit;
-
-
-
-
 
 // Add at the very top of the plugin file
 try {
@@ -45,11 +46,6 @@ try {
     return;
 }
 
-// Define constants
-define('SEWN_WS_PATH', plugin_dir_path(__FILE__));
-define('SEWN_WS_NS', __NAMESPACE__);
-define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR);
-
 // Check for Local's unique network interface
 $ifconfig = shell_exec('ifconfig') ?? '';
 if (strpos($ifconfig, 'utun0') !== false) {
@@ -57,17 +53,17 @@ if (strpos($ifconfig, 'utun0') !== false) {
 }
 
 // Load core components
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-process-manager.php';
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-sewn-ws-dashboard.php';
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-rest-api.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-process-manager.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-sewn-ws-dashboard.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-rest-api.php';
 
 // Add at the top of your main plugin file
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-process-manager.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-process-manager.php';
 
 // Add after namespace declarations
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-node-check.php';
-require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-install-handler.php';
-require_once SEWN_WS_PATH . 'admin' . DIRECTORY_SEPARATOR . 'class-admin-notices.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-node-check.php';
+require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-install-handler.php';
+require_once SEWN_WS_PATH . '../admin' . DIRECTORY_SEPARATOR . 'class-admin-notices.php';
 
 // Add debug mode
 if(!defined('SEWN_WS_DEBUG')) {
@@ -81,8 +77,8 @@ if(SEWN_WS_DEBUG) {
 
 // CORRECTED BOOTSTRAP
 add_action('init', function() {
-    require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-socket-manager.php';
-    require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-unified-roles.php';
+    require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-socket-manager.php';
+    require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-unified-roles.php';
     
     Socket_Manager::init();
     Unified_Roles::sync_tiers();
@@ -116,7 +112,7 @@ add_action('plugins_loaded', function() {
         }
         
         // Load admin UI unconditionally
-        require_once SEWN_WS_PATH . 'admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php';
+        require_once SEWN_WS_PATH . '../admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php';
         
         // Defer all other checks to admin_init
         add_action('admin_init', function() {
@@ -124,7 +120,7 @@ add_action('plugins_loaded', function() {
                 throw new Exception('shell_exec() disabled');
             }
             
-            require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-node-check.php';
+            require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-node-check.php';
             
             if (!Node_Check::check_version()) {
                 add_action('admin_notices', function() {
@@ -134,7 +130,7 @@ add_action('plugins_loaded', function() {
             }
             
             // Only load core if requirements met
-            require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-core.php';
+            require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-core.php';
             $core = Core::get_instance();
         });
         
@@ -148,9 +144,9 @@ add_action('plugins_loaded', function() {
 add_action('admin_init', function() {
     try {
         $required_files = [
-            'includes' . DIRECTORY_SEPARATOR . 'class-node-check.php',
-            'includes' . DIRECTORY_SEPARATOR . 'class-core.php',
-            'admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php'
+            DIRECTORY_SEPARATOR . 'class-node-check.php',
+            DIRECTORY_SEPARATOR . 'class-core.php',
+            '../admin' . DIRECTORY_SEPARATOR . 'class-websockets-admin.php'
         ];
         
         foreach ($required_files as $file) {
@@ -185,12 +181,22 @@ spl_autoload_register(function ($class) {
 
     // Explicit handling for Admin namespace classes
     if ($parts[0] === 'Admin') {
+        array_shift($parts); // Remove 'Admin' namespace prefix
         $class_name = str_replace('_', '-', strtolower(implode('-', $parts)));
         $file = plugin_dir_path(__FILE__) . 'admin/class-' . $class_name . '.php';
         if (file_exists($file)) {
             require_once $file;
             return;
         }
+    }
+
+    // Add this section for includes directory classes
+    $class_name = str_replace('_', '-', strtolower(implode('-', $parts)));
+    $file = plugin_dir_path(__FILE__) . 'includes/class-' . $class_name . '.php';
+    
+    if (file_exists($file)) {
+        require_once $file;
+        return;
     }
 
     // ... rest of existing autoloader code ...
@@ -206,7 +212,7 @@ add_action('init', function() {
 add_action('plugins_loaded', function() {
     error_log('[SEWN] Plugin loaded - initializing');
     
-    require_once SEWN_WS_PATH . 'includes' . DIRECTORY_SEPARATOR . 'class-core.php';
+    require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-core.php';
     $core = Core::get_instance();
     $core::get_instance();
     
@@ -220,6 +226,14 @@ add_action('plugins_loaded', function() {
         error_log('[SEWN] Admin system initialized');
     }
 });
+
+// initialize the dashboard
+add_action('plugins_loaded', function() {
+    if (is_admin()) {
+        Dashboard::get_instance();
+    }
+});
+
 
 // Initialize handlers
 add_action('init', function() {

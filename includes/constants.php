@@ -2,6 +2,13 @@
 
 namespace SEWN\WebSockets;
 
+defined('ABSPATH') || exit;
+
+// Define constants
+define('SEWN_WS_PATH', plugin_dir_path(__FILE__));
+define('SEWN_WS_URL', plugin_dir_url(__FILE__));
+define('SEWN_WS_NS', __NAMESPACE__);
+define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR);
 
 // Text domains and internationalization
 defined('SEWN_WS_TEXT_DOMAIN') || define('SEWN_WS_TEXT_DOMAIN', 'sewn-ws');
@@ -26,4 +33,13 @@ defined('SEWN_WS_DEFAULT_PORT') || define('SEWN_WS_DEFAULT_PORT', 8080);
 defined('SEWN_WS_SETTINGS_GROUP') || define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
-defined('SEWN_WS_MODULE_SETTINGS_PREFIX') || define('SEWN_WS_MODULE_SETTINGS_PREFIX', 'sewn_ws_module_%s_settings'); 
+defined('SEWN_WS_MODULE_SETTINGS_PREFIX') || define('SEWN_WS_MODULE_SETTINGS_PREFIX', 'sewn_ws_module_%s_settings');
+
+// Add version constant
+defined('SEWN_WS_VERSION') || define('SEWN_WS_VERSION', '1.0.0');
+
+// Add fallback values using defined() checks
+!defined('SEWN_WS_ADMIN_MENU_SLUG') && define('SEWN_WS_ADMIN_MENU_SLUG', 'sewn-ws');
+!defined('SEWN_WS_NONCE_ACTION') && define('SEWN_WS_NONCE_ACTION', 'sewn_ws_nonce');
+!defined('SEWN_WS_SCRIPT_HANDLE_ADMIN') && define('SEWN_WS_SCRIPT_HANDLE_ADMIN', 'sewn-ws-admin');
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080); 

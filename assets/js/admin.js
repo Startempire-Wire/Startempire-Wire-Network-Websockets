@@ -217,6 +217,10 @@ class WebSocketAdmin {
         statusElement.className = `sewn-ws-status ${status.toLowerCase()}`;
         statusElement.querySelector('.status-text').textContent = status;
 
+        if (status === 'error') {
+            this.showAlert(__('Server encountered an error', 'sewn-ws'));
+        }
+
         // Update button states
         document.querySelector('[data-action="start"]').disabled = status === 'Running';
         document.querySelector('[data-action="stop"]').disabled = status === 'Stopped';

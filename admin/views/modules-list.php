@@ -1,10 +1,14 @@
 <?php
+namespace SEWN\WebSockets\Admin;   
+
+use SEWN\WebSockets\Module_Registry;
+
 if (!defined('ABSPATH')) exit;
 
-$modules = $this->registry->get_modules();
+$modules = Module_Registry::get_instance()->get_modules();
 ?>
 <div class="wrap">
-    <h1>WebSocket Modules</h1>
+    <h1><?php esc_html_e('WebSocket Modules', 'sewn-ws'); ?></h1>
     
     <?php if (empty($modules)) : ?>
         <div class="notice notice-warning">
@@ -39,11 +43,9 @@ $modules = $this->registry->get_modules();
                         <p class="module-description"><?php echo esc_html($safe_meta['description']); ?></p>
                         
                         <div class="module-actions">
-                            <a href="<?php echo esc_url(
-                                admin_url("admin.php?page=sewn-ws-module-settings&module=" . rawurlencode($valid_slug))
-                            ); ?>" 
+                            <a href="<?php echo esc_url(admin_url("admin.php?page=sewn-ws-module-settings&module=$module_slug")); ?>" 
                                class="button button-primary">
-                                <?php _e('Settings', 'sewn-ws'); ?>
+                                <?php esc_html_e('Configure', 'sewn-ws'); ?>
                             </a>
                             
                             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
