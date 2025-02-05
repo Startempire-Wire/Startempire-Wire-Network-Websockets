@@ -1,4 +1,13 @@
 <?php
+
+/**
+ * Location: includes/class-sewn-ws-dashboard.php
+ * Dependencies: WordPress admin UI, Module_Admin, Settings_Page
+ * Classes: Dashboard
+ * 
+ * Creates administrative interface for WebSocket server configuration and monitoring. Centralizes status display, module management, and real-time connection metrics visualization.
+ */
+
 namespace SEWN\WebSockets;
 
 use SEWN\WebSockets\Admin\Module_Admin;

@@ -1,13 +1,16 @@
 <?php
+/**
+ * Location: includes/class-socket-manager.php
+ * Dependencies: WordPress transients, server status checks
+ * Classes: Socket_Manager
+ * 
+ * Orchestrates WebSocket connection validation and failure recovery mechanisms. Implements retry logic and server availability checks to maintain network reliability.
+ */
+
 namespace SEWN\WebSockets;
 
 defined('ABSPATH') || exit;
 
-/**
- * Socket Manager Class
- * 
- * Handles WebSocket server management and status tracking
- */
 class Socket_Manager {
     /**
      * @var Socket_Manager|null Instance of this class.

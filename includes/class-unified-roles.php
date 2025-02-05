@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: includes/class-unified-roles.php
+ * Dependencies: MemberPress roles, Discord integration
+ * Classes: Unified_Roles
+ * 
+ * Maintains cross-system role mapping between WordPress and external services. Synchronizes membership tiers across authentication providers through predefined tier configurations.
+ */
 namespace SEWN\WebSockets;
 
 class Unified_Roles {

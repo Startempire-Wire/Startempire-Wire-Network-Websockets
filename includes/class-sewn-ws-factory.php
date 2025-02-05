@@ -1,0 +1,4 @@
+<?php
+
+namespace SEWN\WebSockets;
+

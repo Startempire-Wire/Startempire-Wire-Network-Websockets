@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/class-statistics.php
+ * Dependencies: WordPress cron, options API
+ * Classes: Statistics
+ * 
+ * Tracks connection metrics and event patterns for network analytics. Maintains historical data through WordPress storage with automated hourly data pruning.
+ */
+
 namespace SEWN\WebSockets;
 
 class Statistics {

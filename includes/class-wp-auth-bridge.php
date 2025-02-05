@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: includes/class-wp-auth-bridge.php
+ * Dependencies: JWT, WordPress user roles
+ * Classes: SEWN_WS_WP_Auth
+ * 
+ * Generates secure WebSocket tokens mapped to WordPress authentication state. Translates WordPress roles to network tiers for granular access control in real-time systems.
+ */
 namespace SEWN\WebSockets;
 
 class SEWN_WS_WP_Auth {

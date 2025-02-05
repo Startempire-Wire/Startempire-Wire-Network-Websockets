@@ -1,4 +1,13 @@
 <?php
+
+/**
+ * Location: includes/class-stats-handler.php
+ * Dependencies: REST API, AJAX handlers
+ * Classes: Stats_Handler
+ * 
+ * Processes statistics requests and formats data for admin dashboard consumption. Implements caching layer to optimize performance of frequent metrics queries.
+ */
+
 namespace SEWN\WebSockets;
 
 class Stats_Handler {

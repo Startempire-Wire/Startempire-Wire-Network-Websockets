@@ -1,9 +1,10 @@
 <?php
 /**
- * Stats Collector Class
- *
- * @package Startempire_Wire_Network_Websockets
- * @subpackage Includes
+ * Location: includes/class-stats-collector.php
+ * Dependencies: Redis, Process_Manager
+ * Classes: Stats_Collector
+ * 
+ * Aggregates real-time performance metrics from WebSocket server and infrastructure. Provides fallback mechanisms when Redis unavailable to ensure continuous monitoring.
  */
 
 namespace SEWN\WebSockets;
@@ -13,9 +14,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Collects and manages WebSocket server statistics
- */
 class Stats_Collector {
     /**
      * @var \Redis Redis connection instance

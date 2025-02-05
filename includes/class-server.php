@@ -1,3 +1,15 @@
+<?php
+
+/**
+ * Location: includes/class-server.php
+ * Dependencies: Node.js server, WordPress process management
+ * Classes: Server_Manager
+ * 
+ * Manages lifecycle operations for WebSocket server including start/stop commands. Bridges WordPress admin controls with Node.js backend through system process management and PID tracking.
+ */
+
+namespace SEWN\WebSockets;
+
 class Server_Manager {
     public function start() {
         // Connect with Node.js server
