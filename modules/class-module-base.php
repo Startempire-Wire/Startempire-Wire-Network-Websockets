@@ -1,4 +1,10 @@
 <?php
+/**
+ * Location: modules/class-module-base.php
+ * Dependencies: WordPress Settings API
+ * Variables/Classes: Module_Base abstract class
+ * Purpose: Provides foundational structure for all WebSocket plugin modules with standardized activation/configuration methods. Ensures consistent module development patterns and admin interface integration.
+ */
 
 namespace SEWN\WebSockets\Modules;
     

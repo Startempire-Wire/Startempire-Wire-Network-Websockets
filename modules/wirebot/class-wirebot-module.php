@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: modules/wirebot/class-wirebot-module.php
+ * Dependencies: Module_Base, Wirebot_Protocol
+ * Variables/Classes: Wirebot_Module, $bot_handler
+ * Purpose: Manages AI-powered WireBot integration with WebSocket communications and message processing. Handles natural language interactions, response filtering, and safety controls for network members.
+ */
+
 namespace SEWN\WebSockets\Modules\Wirebot; // Same as Discord's namespace structure
 
 use SEWN\WebSockets\Module_Base;

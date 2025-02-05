@@ -1,3 +1,9 @@
+/**
+ * Location: node-server/server.js
+ * Dependencies: Socket.io, Redis, WordPress DB
+ * Variables/Classes: io, server, metrics
+ * Purpose: Core WebSocket server handling real-time communications and tier-based connection management. Integrates with WordPress authentication and enforces network membership rules for data distribution.
+ */
 const express = require('express');
 const app = express();
 const server = require('http').createServer(app);

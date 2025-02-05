@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: modules/startempire/class-startempire-module.php
+ * Dependencies: Module_Base, Startempire_Protocol
+ * Variables/Classes: Startempire_Module, $protocol
+ * Purpose: Core module for Startempire Network's custom WebSocket protocol implementation. Handles network authentication, message routing, and integration with Ring Leader's data distribution system.
+ */
+
 namespace SEWN\WebSockets\Modules;
 
 use SEWN\WebSockets\Module_Base;

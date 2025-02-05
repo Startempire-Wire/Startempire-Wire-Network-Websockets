@@ -1,4 +1,10 @@
 <?php
+/**
+ * Location: includes/constants.php
+ * Dependencies: WordPress core, plugin bootstrap
+ * Variables/Classes: SEWN_WS_PATH, SEWN_WS_URL, SEWN_WS_NS
+ * Purpose: Centralizes plugin-wide constant definitions and configuration values. Ensures consistent access to critical paths and settings across all plugin components.
+ */
 
 namespace SEWN\WebSockets;
 

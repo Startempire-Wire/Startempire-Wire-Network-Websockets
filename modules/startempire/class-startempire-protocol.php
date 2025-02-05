@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: modules/startempire/class-startempire-protocol.php
+ * Dependencies: Protocol_Base, WebSocket server
+ * Variables/Classes: Startempire_Protocol, $protocol_handler
+ * Purpose: Defines the Startempire Network's primary WebSocket communication protocol and configuration. Ensures compatibility with network membership tiers and Ring Leader data distribution requirements.
+ */
+
 namespace SEWN\WebSockets\Protocols;
 
 use SEWN\WebSockets\Protocol_Base;

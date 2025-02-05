@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: modules/wirebot/class-wirebot-protocol.php
+ * Dependencies: Protocol_Base, AI services
+ * Variables/Classes: Wirebot_Protocol, $config
+ * Purpose: Implements WireBot-specific communication protocol for AI-enhanced WebSocket interactions. Configures message handling and response generation based on membership tier access levels.
+ */
+
 namespace SEWN\WebSockets\Protocols;
 
 use SEWN\WebSockets\Protocol_Base;

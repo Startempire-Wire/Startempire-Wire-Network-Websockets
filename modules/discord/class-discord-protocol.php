@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location: modules/discord/class-discord-protocol.php
+ * Dependencies: Protocol_Base, Discord API
+ * Variables/Classes: Discord_Protocol, $discord_client
+ * Purpose: Implements Discord-specific WebSocket communication protocols and message handling. Translates Discord gateway events into standardized WebSocket messages for network distribution.
+ */
+
 namespace SEWN\WebSockets\Protocols;
 
 use SEWN\WebSockets\Protocol_Base;

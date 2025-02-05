@@ -1,4 +1,10 @@
 <?php
+/**
+ * Location: modules/discord/class-discord-module.php
+ * Dependencies: Module_Base, Discord_Protocol, Ring Leader plugin
+ * Variables/Classes: Discord_Module, $client
+ * Purpose: Handles Discord integration for WebSocket communications and authentication. Manages protocol registration, token validation, and role synchronization with Discord's API.
+ */
 
 namespace SEWN\WebSockets\Modules\Discord;
 
