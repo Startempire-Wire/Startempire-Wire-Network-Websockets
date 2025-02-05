@@ -1,8 +1,16 @@
 <?php
+/**
+ * Location: Message handling subsystem
+ * Dependencies: Base_Channel class, WebSocket bridge interface
+ * Variables: Message_Channel class, message validation methods
+ * 
+ * Processes real-time message broadcasting through WebSocket connections. Implements message
+ * validation and rate limiting. Tracks delivery metrics for monitoring purposes.
+ */
 
-namespace SEWN\WebSockets\Channels;
+ namespace SEWN\WebSockets\Channels;
 
-class Message_Channel extends Base_Channel {
+ class Message_Channel extends Base_Channel {
     public function process($event) {
         try {
             $this->validate_message($event);

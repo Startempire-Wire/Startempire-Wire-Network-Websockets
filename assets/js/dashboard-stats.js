@@ -1,3 +1,12 @@
+/**
+ * Location: Admin dashboard statistics display
+ * Dependencies: WebSocket API, Chart.js library
+ * Variables: DashboardStats class, DOM elements for metrics display
+ * 
+ * Provides real-time visualization of WebSocket server metrics including active connections, message
+ * throughput, and system resource usage. Updates dashboard widgets via WebSocket data stream.
+ */
+
 class DashboardStats {
     constructor() {
         this.connectionsCount = document.getElementById('live-connections-count');

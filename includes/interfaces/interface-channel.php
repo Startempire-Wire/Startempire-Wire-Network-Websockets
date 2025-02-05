@@ -1,3 +1,5 @@
+<?php
+
 namespace SEWN\WebSockets\Interfaces;
 
 interface Channel {

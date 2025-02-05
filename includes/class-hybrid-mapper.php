@@ -1,3 +1,7 @@
+<?php
+
+namespace SEWN\WebSockets;
+
 class SEWN_WS_Hybrid_Role_System {
     
     // Parent-defined canonical tiers

@@ -1,3 +1,12 @@
+/**
+ * Location: Node.js server installation handler
+ * Dependencies: WordPress AJAX API, sewn_ws_admin localized object
+ * Variables: DOM elements for installation UI
+ * 
+ * Manages the Node.js server installation process through admin UI. Handles different installation
+ * methods (local/remote) and provides real-time progress feedback. Reloads admin on success.
+ */
+
 document.querySelectorAll('[data-install-method]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
         const method = e.target.dataset.installMethod;

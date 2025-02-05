@@ -1,3 +1,12 @@
+/**
+ * Location: Minimum viable product monitoring
+ * Dependencies: ReconnectingWebSocket, TimeSeries library
+ * Variables: MVPMonitor class, metrics collection objects
+ * 
+ * Basic monitoring implementation for initial deployments. Tracks essential metrics and implements
+ * automatic reconnection logic. Serves as fallback for browsers without full WebSocket support.
+ */
+
 class MVPMonitor {
     constructor() {
         this.metrics = {

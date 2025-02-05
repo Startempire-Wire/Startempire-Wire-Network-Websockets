@@ -1,3 +1,13 @@
+/**
+ * Location: Admin interface validation utilities
+ * Dependencies: jQuery, WordPress AJAX API, sewn_ws_admin localized object
+ * Variables: validateConfig object, DOM elements for settings fields
+ * 
+ * Handles client-side validation of WebSocket server configuration in WordPress admin. Provides
+ * real-time feedback and pre-save validation checks for critical server settings like ports, SSL
+ * certificates, and rate limiting rules. Integrates with backend via AJAX for configuration tests.
+ */
+
 jQuery(document).ready(function ($) {
     const validateConfig = {
         init() {

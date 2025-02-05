@@ -1,7 +1,10 @@
 /**
- * WebSocket Event Handlers
+ * Location: Core WebSocket event management
+ * Dependencies: WebSocket API, EventEmitter pattern
+ * Variables: WebSocketHandlers class, connection state tracking
  * 
- * @package Startempire_Wire_Network_Websockets
+ * Implements core WebSocket client logic with automatic reconnection and error handling. Manages
+ * event subscriptions and message routing. Integrates with admin UI for error reporting.
  */
 
 class WebSocketHandlers {
