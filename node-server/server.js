@@ -29,7 +29,8 @@ const logger = winston.createLogger({
 const config = {
     port: process.env.PORT || 8080,
     logPath: path.join(__dirname, 'server.log'),
-    statusPath: path.join(__dirname, 'status.json')
+    statusPath: path.join(__dirname, 'status.json'),
+    statsPath: path.join(__dirname, 'stats.json')
 };
 
 // Initialize Redis client (optional, for future scalability)
@@ -214,30 +215,125 @@ setInterval(() => {
     metrics.messagesOut = 0;
 }, 1000);
 
-// Basic status endpoint for health checks
-app.get('/status', (req, res) => {
-    res.json({
-        status: 'running',
-        uptime: process.uptime(),
-        connections: io.engine.clientsCount,
-        timestamp: Date.now()
-    });
-});
-
-// Socket.io connection handling
+// Add Socket.io event handlers for server management
 io.on('connection', (socket) => {
-    // Log connection
-    logEvent('connection', { id: socket.id });
+    // Existing connection logging
+    logEvent('connection', { socketId: socket.id });
+
+    // Server status events
+    socket.on('get_status', (callback) => {
+        const status = {
+            running: true,
+            connections: io.engine.clientsCount,
+            uptime: process.uptime(),
+            rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
+                roomId,
+                memberCount: members.size
+            }))
+        };
+        callback(status);
+    });
+
+    // Server stats events
+    socket.on('get_stats', (callback) => {
+        const stats = {
+            timestamp: Date.now(),
+            connections: io.engine.clientsCount,
+            rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
+                roomId,
+                memberCount: members.size
+            }))
+        };
+        callback(stats);
+    });
+
+    // Room management events
+    socket.on('join_room', (roomId, callback) => {
+        try {
+            socket.join(roomId);
+            if (!io.sockets.adapter.rooms.has(roomId)) {
+                io.sockets.adapter.rooms.set(roomId, new Set());
+            }
+            io.sockets.adapter.rooms.get(roomId).add(socket.id);
+            logEvent('room_join', { socketId: socket.id, roomId });
+
+            // Notify room members
+            io.to(roomId).emit('room_update', {
+                roomId,
+                memberCount: io.sockets.adapter.rooms.get(roomId).size
+            });
+
+            callback({ success: true });
+        } catch (error) {
+            callback({ success: false, error: error.message });
+        }
+    });
+
+    socket.on('leave_room', (roomId, callback) => {
+        try {
+            socket.leave(roomId);
+            io.sockets.adapter.rooms.get(roomId)?.delete(socket.id);
+            logEvent('room_leave', { socketId: socket.id, roomId });
+
+            // Notify room members
+            io.to(roomId).emit('room_update', {
+                roomId,
+                memberCount: io.sockets.adapter.rooms.get(roomId)?.size || 0
+            });
+
+            callback({ success: true });
+        } catch (error) {
+            callback({ success: false, error: error.message });
+        }
+    });
+
+    // Admin events (requires admin privileges)
+    socket.on('server_control', async (action, callback) => {
+        if (!socket.user?.isAdmin) {
+            callback({ success: false, error: 'Unauthorized' });
+            return;
+        }
+
+        try {
+            switch (action) {
+                case 'restart':
+                    logEvent('server_restart', { user: socket.user.id });
+                    callback({ success: true, message: 'Server restarting' });
+                    process.exit(0); // PM2 will restart
+                    break;
+
+                case 'stop':
+                    logEvent('server_stop', { user: socket.user.id });
+                    callback({ success: true, message: 'Server stopping' });
+                    io.close(() => process.exit(0));
+                    break;
+
+                default:
+                    callback({ success: false, error: 'Invalid action' });
+            }
+        } catch (error) {
+            callback({ success: false, error: error.message });
+        }
+    });
 
     // Handle disconnection
     socket.on('disconnect', () => {
-        logEvent('disconnect', { id: socket.id });
+        // Clean up room memberships
+        io.sockets.adapter.rooms.forEach((members, roomId) => {
+            if (members.delete(socket.id)) {
+                // Notify room members of departure
+                io.to(roomId).emit('room_update', {
+                    roomId,
+                    memberCount: members.size
+                });
+            }
+        });
+        logEvent('disconnect', { socketId: socket.id });
     });
 
-    // Handle errors
-    socket.on('error', (error) => {
-        logEvent('error', { id: socket.id, error: error.message });
-    });
+    // Add status file writing for admin UI
+    updateAdminStatus({ lastConnection: Date.now() });
+    updateAdminStats();
 });
 
 // Start server
@@ -271,3 +367,34 @@ function logEvent(event, data) {
 
     fs.appendFileSync(config.logPath, JSON.stringify(logEntry) + '\n');
 }
+
+// Add status file writing for admin UI
+function updateAdminStatus(status) {
+    fs.writeFileSync(config.statusPath, JSON.stringify({
+        running: true,
+        connections: io.engine.clientsCount,
+        uptime: process.uptime(),
+        rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
+            roomId,
+            memberCount: members.size
+        })),
+        ...status
+    }));
+}
+
+// Add stats file writing for admin UI
+function updateAdminStats() {
+    fs.writeFileSync(config.statsPath, JSON.stringify({
+        timestamp: Date.now(),
+        connections: io.engine.clientsCount,
+        rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
+            roomId,
+            memberCount: members.size
+        }))
+    }));
+}
+
+// Update stats periodically for admin UI
+setInterval(() => {
+    updateAdminStats();
+}, 5000); // Every 5 seconds
