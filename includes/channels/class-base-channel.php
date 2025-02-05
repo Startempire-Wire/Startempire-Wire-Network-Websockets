@@ -1,5 +1,12 @@
 <?php
-
+/**
+ * Location: includes/channels/
+ * Dependencies: Channel interface
+ * Variables: $subscribers, $stats, $bridge
+ * Classes: Base_Channel implements Channel
+ * 
+ * Abstract base class defining common channel functionality for WebSocket communication. Implements core subscription management and statistics tracking for all channel implementations.
+ */
 namespace SEWN\WebSockets\Channels;
 
 use SEWN\WebSockets\Interfaces\Channel;

@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: Auth class, WordPress Filesystem API
+ * Variables: $socket_file, $auth
+ * Classes: Bridge
+ * 
+ * Acts as communication bridge between WordPress and Node.js WebSocket server. Manages Unix socket communication, message broadcasting, and connection logging for real-time data exchange.
+ */
 namespace SEWN\WebSockets;
 
 class Bridge {

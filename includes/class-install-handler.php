@@ -1,5 +1,12 @@
 <?php
-
+/**
+ * Location: includes/
+ * Dependencies: Node.js, system commands
+ * Variables: $node_server_dir, $required_dependencies
+ * Classes: Install_Handler
+ * 
+ * Manages server installation and configuration for WebSocket infrastructure. Automates dependency checks, environment setup, and configuration generation for cross-platform deployment.
+ */
 namespace SEWN\WebSockets;
 
 class Install_Handler {

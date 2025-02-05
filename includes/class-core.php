@@ -1,5 +1,12 @@
 <?php
-
+/**
+ * Location: includes/
+ * Dependencies: WordPress HTTP API, Transients API
+ * Variables: $instance
+ * Classes: Core (Singleton)
+ * 
+ * Central coordination point for WebSocket server management and network integration. Implements singleton pattern to handle authentication, connection routing, and membership verification across the ecosystem.
+ */
 namespace SEWN\WebSockets;
 
 class Core {

@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: WordPress User API, Sodium extension
+ * Variables: None
+ * Classes: Auth
+ * 
+ * Handles authentication workflows and permission checks for WebSocket connections. Implements tier-based access control and payload encryption for secure network communication.
+ */
 namespace SEWN\WebSockets;
 
 class Auth {

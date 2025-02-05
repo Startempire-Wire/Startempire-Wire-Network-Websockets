@@ -1,5 +1,12 @@
 <?php
-
+/**
+ * Location: includes/
+ * Dependencies: Bridge class, Channel implementations
+ * Variables: $bridge, $channels
+ * Classes: Events
+ * 
+ * Orchestrates real-time event distribution through WebSocket channels. Manages channel registration, statistics collection, and admin interface updates for monitoring network activity.
+ */
 namespace SEWN\WebSockets;
 
 use SEWN\WebSockets\Channels\Message_Channel;

@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: Base Exception class
+ * Variables: $context
+ * Classes: Exception extends \Exception
+ * 
+ * Provides enhanced exception handling with contextual debugging information. Formats errors for API responses and maintains structured error data for system diagnostics and logging.
+ */
 namespace SEWN\WebSockets;
 
 class Exception extends \Exception {

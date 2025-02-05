@@ -1,3 +1,14 @@
+<?php
+/**
+ * Location: includes/
+ * Dependencies: MemberPress, Discord API
+ * Variables: None
+ * Classes: SEWN_WS_Ecosystem_Sync
+ * 
+ * Synchronizes user roles and permissions across network components. Maintains consistency between WordPress roles, Discord server roles, and MemberPress membership levels through scheduled sync operations.
+ */
+namespace SEWN\WebSockets;
+
 class SEWN_WS_Ecosystem_Sync {
     public function sync_roles_across_systems() {
         // Sync to Discord

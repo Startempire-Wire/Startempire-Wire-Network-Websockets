@@ -1,5 +1,12 @@
 <?php
-
+/**
+ * Location: includes/channels/
+ * Dependencies: Base_Channel class
+ * Variables: $active_users array
+ * Classes: Presence_Channel extends Base_Channel
+ * 
+ * Handles presence channel operations for tracking active users in real-time. Implements user join/leave functionality and maintains presence state synchronization across network connections.
+ */
 namespace SEWN\WebSockets\Channels;
 
 class Presence_Channel extends Base_Channel {

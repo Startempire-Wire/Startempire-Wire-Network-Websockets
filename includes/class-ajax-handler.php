@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: WordPress AJAX API
+ * Variables: None
+ * Classes: Ajax_Handler
+ * 
+ * Manages AJAX endpoints for WebSocket server status checks and admin interactions. Provides secure status reporting through WordPress nonce verification and capability checks for administrative users.
+ */
 namespace SEWN\WebSockets;
 
 class Ajax_Handler {

@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: WordPress Filesystem API
+ * Variables: LOG_FILE, MAX_ENTRIES
+ * Classes: Error_Handler
+ * 
+ * Manages error logging and diagnostics for WebSocket server operations. Provides structured error storage, retrieval, and context-aware exception handling for system monitoring and debugging.
+ */
 namespace SEWN\WebSockets;
 
 use SEWN\WebSockets\Exception;

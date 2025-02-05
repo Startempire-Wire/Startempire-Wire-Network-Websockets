@@ -1,4 +1,12 @@
 <?php
+/**
+ * Location: includes/
+ * Dependencies: WordPress Options API
+ * Variables: None
+ * Classes: SEWN_WS_API_Keys
+ * 
+ * Generates and validates API keys for tiered access to WebSocket services. Manages key storage, usage tracking, and tier-based authentication through WordPress options system.
+ */
 namespace SEWN\WebSockets;
 
 class SEWN_WS_API_Keys {
