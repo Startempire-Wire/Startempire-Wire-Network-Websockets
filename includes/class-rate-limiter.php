@@ -1,4 +1,11 @@
 <?php
+/**
+ * Location:    wp-content/plugins/startempire-wire-network-websockets/includes/class-rate-limiter.php
+ * Dependencies: WordPress core (get_user_meta)
+ * Variables:    TIER_LIMITS
+ * Classes:      Rate_Limiter
+ * Purpose:      This file defines a class to handle rate limiting for WebSocket messages. It checks if a user has exceeded their message limit based on their membership tier.
+ */
 namespace SEWN\WebSockets;
 
 class Rate_Limiter {

@@ -1,5 +1,4 @@
 <?php
-
 /**
  * LOCATION: admin/class-admin-notices.php
  * DEPENDENCIES: Node_Check class, WordPress admin hooks

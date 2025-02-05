@@ -1,3 +1,15 @@
+/**
+ * LOCATION: assets/js/admin-dashboard.js  
+ * DEPENDENCIES: jQuery, WebSocket connection  
+ * VARIABLES: sewn_ws_dashboard  
+ * CLASSES: DashboardManager  
+ *
+ * Coordinates real-time dashboard updates and user interactions. Maintains WebSocket connection state while enforcing network authentication rules. Handles emergency system shutdown protocols.
+ */
+
+(function ($) {
+    // ... existing initialization code ...
+})(jQuery);
 jQuery(document).ready($ => {
     const $installCards = $('.install-method-card');
     const $statusOutput = $('<div class="install-progress"></div>');

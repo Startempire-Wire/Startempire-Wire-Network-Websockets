@@ -1,3 +1,11 @@
+/**
+ * LOCATION: assets/js/components/ServerControls.js  
+ * DEPENDENCIES: DOM Events, AJAX  
+ * VARIABLES: None (uses data attributes)  
+ * CLASSES: ServerControls  
+ *
+ * Manages server lifecycle controls (start/stop/restart) with status synchronization. Implements safety checks to prevent conflicting operations while maintaining network authentication state consistency. Provides visual feedback aligned with WebRing operational requirements.
+ */
 class ServerControls {
     constructor() {
         // Use existing buttons from dashboard.php

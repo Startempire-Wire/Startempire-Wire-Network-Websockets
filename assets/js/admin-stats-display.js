@@ -1,3 +1,12 @@
+/**
+ * LOCATION: assets/js/admin-stats-display.js  
+ * DEPENDENCIES: Chart.js, Moment.js  
+ * VARIABLES: statsData  
+ * CLASSES: StatsRenderer  
+ *
+ * Visualizes network performance metrics and connection analytics. Correlates server load with membership tier activity patterns. Maintains historical data for capacity planning.
+ */
+
 class AdminStatsDisplay {
     constructor() {
         this.charts = new Map();
