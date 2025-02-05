@@ -1,5 +1,13 @@
 <?php
-// Add to existing dashboard.php
+/**
+ * LOCATION: admin/views/stats-dashboard.php
+ * DEPENDENCIES: Server_Controller stats data
+ * VARIABLES: $stats_data (array)
+ * CLASSES: None (template file)
+ * 
+ * Displays real-time network performance metrics and connection analytics. Visualizes WebRing content distribution
+ * patterns and membership-tier usage statistics. Correlates server load with authentication system activity.
+ */
 ?>
 <div class="sewn-ws-stats-container">
     <div class="stats-card connections">

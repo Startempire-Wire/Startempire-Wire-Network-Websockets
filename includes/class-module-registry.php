@@ -1,6 +1,16 @@
 <?php
 namespace SEWN\WebSockets;
 
+/**
+ * LOCATION: includes/class-module-registry.php
+ * DEPENDENCIES: Module_Base, WordPress Transients API
+ * VARIABLES: $registered_modules (array)
+ * CLASSES: Module_Registry (module manager)
+ * 
+ * Central registry for managing WebSocket protocol modules and their lifecycle. Handles activation/deactivation
+ * sequencing required for network synchronization. Maintains compatibility with Ring Leader plugin's service discovery.
+ */
+
 class Module_Registry {
     private static $instance;
     private $modules = [];

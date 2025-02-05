@@ -1,7 +1,12 @@
 /**
- * Initialize WebSocket functionality
+ * LOCATION: assets/js/init.js
+ * DEPENDENCIES: WebSocket API, DOM Events
+ * VARIABLES: sewnWebsockets.wsUrl
+ * CLASSES: WebSocketHandlers (connection manager)
  * 
- * @package Startempire_Wire_Network_Websockets
+ * Initializes WebSocket connections for real-time browser communication. Supports WebRing content distribution
+ * features and membership-tier synchronized updates. Implements network authentication handshake sequence
+ * during connection establishment.
  */
 
 import WebSocketHandlers from './websocket-handlers';

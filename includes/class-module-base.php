@@ -1,6 +1,17 @@
 <?php
 namespace SEWN\WebSockets;
 
+/**
+ * LOCATION: includes/class-module-base.php
+ * DEPENDENCIES: Module_Registry, WordPress Hooks API
+ * VARIABLES: $module_config (array)
+ * CLASSES: Module_Base (abstract module template)
+ * 
+ * Provides base functionality for WebSocket protocol modules. Ensures consistent implementation
+ * of network authentication and membership tier handling across all extensions. Required foundation
+ * for WebRing ad network features and content distribution channels.
+ */
+
 abstract class Module_Base {
     abstract public function metadata();
     abstract public function init();

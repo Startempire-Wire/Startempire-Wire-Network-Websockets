@@ -8,6 +8,17 @@ use SEWN\WebSockets\Process_Manager;
 use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Server_Process;
 
+/**
+ * LOCATION: admin/class-admin-ui.php
+ * DEPENDENCIES: Module_Registry, Process_Manager, Server_Controller
+ * VARIABLES: SEWN_WS_ADMIN_MENU_SLUG, SEWN_WS_TEXT_DOMAIN
+ * CLASSES: Admin_UI (manages admin interface)
+ * 
+ * Provides the primary administration interface for WebSocket server management. Handles server lifecycle operations,
+ * real-time status monitoring, and integration with network authentication systems. Designed to support the distributed
+ * architecture described in Startempire Wire Network's core documentation.
+ */
+
 class Admin_UI {
     private static $instance = null;
     private $registry;

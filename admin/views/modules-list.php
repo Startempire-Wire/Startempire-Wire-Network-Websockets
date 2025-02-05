@@ -1,4 +1,14 @@
 <?php
+/**
+ * LOCATION: admin/views/modules-list.php
+ * DEPENDENCIES: Module_Registry class
+ * VARIABLES: $modules (registered modules array)
+ * CLASSES: None (template file)
+ * 
+ * Displays all registered WebSocket protocol modules with their activation status. Enables
+ * network operators to manage WebRing feature compatibility and membership-tier restrictions.
+ */ 
+
 namespace SEWN\WebSockets\Admin;   
 
 use SEWN\WebSockets\Module_Registry;
@@ -120,4 +130,5 @@ $modules = Module_Registry::get_instance()->get_modules();
     gap: 0.5rem;
     margin-top: 1rem;
 }
-</style> 
+</style>
+

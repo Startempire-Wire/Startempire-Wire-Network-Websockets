@@ -1,6 +1,16 @@
 <?php
 namespace SEWN\WebSockets;
 
+/**
+ * LOCATION: includes/class-server-controller.php
+ * DEPENDENCIES: Process_Manager, Node_Check
+ * VARIABLES: SEWN_WS_DEFAULT_PORT
+ * CLASSES: Server_Controller (core service handler)
+ * 
+ * Orchestrates WebSocket server lifecycle operations and protocol handling. Maintains real-time synchronization
+ * with Ring Leader plugin for network-wide message routing. Enforces membership-tier based connection limits.
+ */
+
 class Server_Controller {
     private static $instance = null;
     private $node_binary = null;

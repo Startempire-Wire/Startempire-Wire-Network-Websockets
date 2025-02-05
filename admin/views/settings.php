@@ -1,4 +1,14 @@
 <?php
+/**
+ * LOCATION: admin/views/settings.php
+ * DEPENDENCIES: Settings_Page class
+ * VARIABLES: $settings (current settings array)
+ * CLASSES: None (template file)
+ * 
+ * Renders global WebSocket server configuration interface including port settings and TLS
+ * encryption options. Integrates with network authentication providers for secure credential storage.
+ */
+
 namespace SEWN\WebSockets\Admin;
 
 
@@ -77,3 +87,4 @@ if (!defined('ABSPATH')) exit;
         </p>
     </form>
 </div>
+

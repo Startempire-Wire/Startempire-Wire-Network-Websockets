@@ -2,6 +2,17 @@
 // Add at top:
 if (!defined('ABSPATH')) exit;
 
+/**
+ * LOCATION: admin/views/dashboard.php
+ * DEPENDENCIES: Admin_UI class, WordPress admin styles
+ * VARIABLES: $node_status (server state data)
+ * CLASSES: None (template file)
+ * 
+ * Renders primary WebSocket server dashboard with real-time connection metrics and controls. Displays network
+ * health status aligned with Startempire Wire's WebRing architecture requirements. Integrates membership-tier
+ * visualization for network operators.
+ */
+
 /** @var array $node_status */
 $node_status = $node_status ?? ['version' => 'N/A', 'running' => false, 'status' => 'stopped'];
 $status_class = $node_status['running'] ? 'success' : 'error';

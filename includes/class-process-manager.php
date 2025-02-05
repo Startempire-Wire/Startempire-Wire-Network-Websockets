@@ -15,7 +15,13 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Handles Node.js WebSocket server process management
+ * LOCATION: includes/class-process-manager.php
+ * DEPENDENCIES: Server_Process, WordPress WP-CLI
+ * VARIABLES: $child_pids (array)
+ * CLASSES: Process_Manager (service controller)
+ * 
+ * Manages WebSocket server processes and ensures high availability. Implements fault tolerance mechanisms required
+ * for enterprise-grade WebRing content distribution. Coordinates with network authentication services for secure startup.
  */
 class Process_Manager {
     /**

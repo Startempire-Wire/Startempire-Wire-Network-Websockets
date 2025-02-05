@@ -1,3 +1,14 @@
+/**
+ * LOCATION: assets/js/components/LogViewer.js
+ * DEPENDENCIES: WebSocket connection, DOM API
+ * VARIABLES: sewn_ws_admin.logsEndpoint
+ * CLASSES: LogViewer (real-time log manager)
+ * 
+ * Provides real-time monitoring of server logs with level-based filtering. Essential for debugging network
+ * synchronization issues and monitoring WebRing content distribution patterns. Integrates with membership
+ * system to enforce log access permissions.
+ */
+
 class LogViewer {
     constructor(containerSelector, options) {
         this.container = document.querySelector(containerSelector);

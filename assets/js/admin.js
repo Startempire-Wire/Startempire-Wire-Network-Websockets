@@ -1,3 +1,14 @@
+/**
+ * LOCATION: assets/js/admin.js
+ * DEPENDENCIES: WebSocket API, AbortController, fetch API
+ * VARIABLES: sewn_ws_admin (localized object), SEWN_WS_SERVER_STATUS_RUNNING
+ * CLASSES: WebSocketAdmin (manages server controls)
+ * 
+ * Central client-side controller for WebSocket server operations. Handles start/stop/restart commands while maintaining
+ * synchronization with network authentication states. Implements real-time monitoring to support the WebRing content
+ * distribution system's low-latency requirements.
+ */
+
 // Dashboard interactivity
 // Import components
 import { StatsDisplay } from './components/StatsDisplay.js';

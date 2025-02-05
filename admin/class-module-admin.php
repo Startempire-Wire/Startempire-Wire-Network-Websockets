@@ -5,6 +5,16 @@ namespace SEWN\WebSockets\Admin;
 use SEWN\WebSockets\Module_Base;
 use SEWN\WebSockets\Module_Registry;
 
+/**
+ * LOCATION: admin/class-module-admin.php
+ * DEPENDENCIES: Module_Registry, WordPress Settings API
+ * VARIABLES: SEWN_WS_MODULE_SETTINGS_PREFIX
+ * CLASSES: Module_Admin (module configuration handler)
+ * 
+ * Manages plugin module registration and settings interface. Ensures compatibility with network-wide authentication
+ * tiers and membership levels. Serves as configuration layer for WebRing feature toggles and ad network controls.
+ */
+
 class Module_Admin {
     private $registry;
 

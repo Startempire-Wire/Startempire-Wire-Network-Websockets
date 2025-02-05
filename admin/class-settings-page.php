@@ -1,6 +1,17 @@
 <?php
 namespace SEWN\WebSockets\Admin;
 
+/**
+ * LOCATION: admin/class-settings-page.php
+ * DEPENDENCIES: WordPress Settings API
+ * VARIABLES: None (singleton pattern)
+ * CLASSES: Settings_Page (settings UI renderer)
+ * 
+ * Handles core WebSocket server configuration including port settings, TLS certificates, and rate limiting rules.
+ * Integrates with network authentication providers (WordPress, BuddyBoss, Discord) to enforce membership-tier access
+ * controls across distributed network components.
+ */
+
 class Settings_Page {
     private static $instance = null;
 

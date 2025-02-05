@@ -6,6 +6,16 @@ if (!defined('ABSPATH')) exit;
 use SEWN\WebSockets\Admin\Admin_UI;
 use SEWN\WebSockets\Module_Registry;
 
+/**
+ * LOCATION: admin/class-websockets-admin.php
+ * DEPENDENCIES: WordPress Plugin API, Admin_UI
+ * VARIABLES: SEWN_WS_ENCRYPTION_KEY
+ * CLASSES: Websockets_Admin (main admin controller)
+ * 
+ * Core administration controller handling plugin initialization and security sanitization. Maintains WebSocket
+ * server integrity across network authentication methods. Enforces membership-based access rules for admin
+ * features per Startempire Wire Network tier system.
+ */
 
 class Websockets_Admin {
     private static $instance = null;

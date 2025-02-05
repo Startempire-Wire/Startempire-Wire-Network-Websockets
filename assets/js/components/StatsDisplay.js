@@ -1,3 +1,13 @@
+/**
+ * LOCATION: assets/js/components/StatsDisplay.js
+ * DEPENDENCIES: Chart.js, WebSocket connection
+ * VARIABLES: sewn_ws_admin.statsEndpoint
+ * CLASSES: StatsDisplay (metrics visualization)
+ * 
+ * Visualizes real-time network metrics including connections, rooms, and system resources. Supports WebRing
+ * content distribution monitoring by correlating server load with membership-tier activity patterns. Updates
+ * synchronously with network authentication events.
+ */
 class StatsDisplay {
     constructor(selectors) {
         this.elements = {

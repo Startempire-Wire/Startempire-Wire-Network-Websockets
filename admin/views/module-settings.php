@@ -1,6 +1,17 @@
 <?php
-namespace SEWN\WebSockets\Admin;
 
+/**
+ * LOCATION: admin/views/module-settings.php
+ * DEPENDENCIES: Module_Admin class
+ * VARIABLES: $module_data (array)
+ * CLASSES: None (template file)
+ * 
+ * Renders configuration interface for individual WebSocket protocol modules. Provides tier-based access controls
+ * aligned with Startempire Wire Network membership levels. Integrates with network authentication providers for
+ * secure settings storage.
+ */
+
+namespace SEWN\WebSockets\Admin;
 
 // Security check
 if (!defined('ABSPATH')) {
@@ -17,6 +28,8 @@ if (!$module || !$module instanceof \SEWN\WebSockets\Module_Base) {
 }
 
 $meta = $module->metadata();
+
+
 ?>
 <div class="wrap">
     <h1><?php echo esc_html($meta['name']); ?> Settings</h1>

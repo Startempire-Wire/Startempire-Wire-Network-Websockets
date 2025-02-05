@@ -2,6 +2,16 @@
 
 namespace SEWN\WebSockets;
 
+/**
+ * LOCATION: includes/class-node-check.php
+ * DEPENDENCIES: Process_Manager, Server_Controller
+ * VARIABLES: SEWN_WS_NODE_SERVER (path constant)
+ * CLASSES: Node_Check (environment validator)
+ * 
+ * Verifies Node.js runtime compatibility and service availability. Essential for maintaining WebSocket server
+ * stability across the distributed Startempire Wire Network. Implements network authentication system health checks.
+ */
+
 class Node_Check {
     const REQUIRED_VERSION = '16.0.0';
     const NODE_PROCESS_NAME = 'sewn-ws-server.js';
