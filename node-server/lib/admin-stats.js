@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/admin-stats.js
+ * Dependencies: socket.io, ConnectionManager
+ * Classes: AdminStats
+ * Purpose: Handles real-time statistics broadcasting to admin interfaces. Tracks active connections,
+ * room usage, and system events for monitoring purposes. Integrates with connection manager for live updates.
+ */
+
 class AdminStats {
     constructor(io, connectionManager) {
         this.io = io;

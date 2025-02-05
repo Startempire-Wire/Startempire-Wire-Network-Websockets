@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/connection-manager.js
+ * Dependencies: socket.io, Map data structures
+ * Classes: ConnectionManager
+ * Purpose: Manages WebSocket connections lifecycle and room memberships. Tracks user IDs,
+ * connection times, and room associations using efficient Map storage.
+ */
+
 class ConnectionManager {
     constructor(io, stats) {
         this.io = io;

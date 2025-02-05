@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/event-handlers.js
+ * Dependencies: Stats, RateLimiter
+ * Classes: EventHandlers
+ * Purpose: Routes socket events to appropriate handlers while enforcing security limits.
+ * Tracks message rates, presence updates, and error conditions across connections.
+ */
+
 class EventHandlers {
     constructor(io, stats, rateLimiter, connectionManager) {
         this.io = io;

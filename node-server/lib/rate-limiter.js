@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/rate-limiter.js
+ * Dependencies: ioredis, tier configuration
+ * Classes: RateLimiter
+ * Purpose: Enforces tier-based rate limiting using Redis or memory store. Implements
+ * sliding window algorithm for message and event rate control.
+ */
+
 const Redis = require('ioredis');
 
 class RateLimiter {

@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/discord.js
+ * Dependencies: discord.js, WebRTC
+ * Classes: DiscordHandler
+ * Purpose: Integrates Discord features including chat synchronization and live streaming.
+ * Handles role syncing between WordPress membership tiers and Discord server roles.
+ */
+
 // Discord Webhook handler
 const { Client, WebhookClient } = require('discord.js');
 const RateLimit = require('./rate-limiter');

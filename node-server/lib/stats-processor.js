@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/stats-processor.js
+ * Dependencies: socket.io, ConnectionManager
+ * Classes: StatsProcessor
+ * Purpose: Aggregates and processes real-time metrics for admin dashboard. Calculates
+ * bandwidth usage and maintains event history for debugging purposes.
+ */
+
 class StatsProcessor {
     constructor(io, connectionManager) {
         this.io = io;

@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/stats.js
+ * Dependencies: ioredis, connection manager
+ * Classes: Stats
+ * Purpose: Collects and stores connection statistics and system metrics. Provides
+ * both real-time and historical data for monitoring and analytics features.
+ */
+
 const Redis = require('ioredis');
 
 class Stats {

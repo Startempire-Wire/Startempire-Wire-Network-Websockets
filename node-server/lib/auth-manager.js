@@ -1,3 +1,11 @@
+/**
+ * Location: node-server/lib/auth-manager.js
+ * Dependencies: jsonwebtoken, Ring Leader API
+ * Classes: AuthManager
+ * Purpose: Manages multi-source authentication validation including WordPress JWT and Ring Leader tokens.
+ * Handles role resolution and capability mapping for connection authorization.
+ */
+
 class AuthManager {
     constructor(io, connectionManager) {
         this.io = io;
