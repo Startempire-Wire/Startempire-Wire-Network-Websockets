@@ -12,13 +12,13 @@
 namespace SEWN\WebSockets;
 
 class Module_Registry {
-    private static $instance;
+    private static $instance = null;
     private $modules = [];
     
     private function __construct() {}
 
     public static function get_instance() {
-        if (!isset(self::$instance)) {
+        if (null === self::$instance) {
             self::$instance = new self();
         }
         return self::$instance;

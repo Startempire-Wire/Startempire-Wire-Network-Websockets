@@ -18,7 +18,8 @@
  use SEWN\WebSockets\Node_Check;
  use SEWN\WebSockets\Process_Manager;
  use SEWN\WebSockets\Server_Controller;
- use SEWN\WebSockets\Server_Process; 
+ use SEWN\WebSockets\Server_Process;
+ use SEWN\WebSockets\WebSocketServer;
 
 class Admin_UI {
     private static $instance = null;
@@ -27,6 +28,7 @@ class Admin_UI {
     private $server_process = null;
     private $status_lock = false;
     private $server_controller;
+    private $websocket_server;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -38,6 +40,7 @@ class Admin_UI {
     protected function __construct() {
         $this->registry = Module_Registry::get_instance();
         $this->server_controller = new Server_Controller();
+        $this->websocket_server = new WebSocketServer();
         $this->registry->discover_modules();
         $this->registry->init_modules();
         
@@ -331,4 +334,14 @@ class Admin_UI {
         echo '<span class="status-text">' . esc_html(ucfirst($status)) . '</span>';
         echo '</div>';
     }
+
+    add_action('admin_enqueue_scripts', function() {
+        wp_enqueue_style('sewn-ws-admin', plugins_url('css/admin-dashboard.css', __FILE__));
+        wp_enqueue_script('sewn-ws-admin', plugins_url('js/admin-dashboard.js', __FILE__), ['jquery'], false, true);
+        
+        wp_localize_script('sewn-ws-admin', 'wsData', [
+            'connections' => WebSocketService::getActiveConnections(),
+            'throughput' => WebSocketService::getMessageThroughput()
+        ]);
+    });
 }

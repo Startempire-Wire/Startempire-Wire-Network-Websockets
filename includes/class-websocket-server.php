@@ -9,16 +9,20 @@
  */
 
 namespace SEWN\WebSockets;
+use Ratchet\ConnectionInterface;
 use Ratchet\Http\HttpServer;
+use Ratchet\MessageComponentInterface;
 use Ratchet\Server\IoServer;
 use Ratchet\WebSocket\WsServer;
 use SEWN\WebSockets\WebSocket_Handler;
 
-class WebSocket_Server {
+class WebSocket_Server implements MessageComponentInterface {
     private $server;
     private $port;
     private $connections = [];
     private $is_running = false;
+    private $clients;
+    private $connectionCount = 0;
     
     public function __construct($port = 8080) {
         if (!$this->is_port_available($port)) {
@@ -39,6 +43,7 @@ class WebSocket_Server {
             error_log(sprintf('[SEWN WebSocket] Server initialization failed: %s', $e->getMessage()));
             throw $e;
         }
+        $this->clients = new \SplObjectStorage;
     }
 
     public function run() {
@@ -81,5 +86,33 @@ class WebSocket_Server {
             return false;
         }
         return true;
+    }
+
+    public function onOpen(ConnectionInterface $conn) {
+        $this->clients->attach($conn);
+        $this->connectionCount++;
+        $conn->send(json_encode(['type' => 'connection', 'count' => $this->connectionCount]));
+    }
+
+    public function onMessage(ConnectionInterface $from, $msg) {
+        foreach ($this->clients as $client) {
+            if ($client !== $from) {
+                $client->send($msg);
+            }
+        }
+    }
+
+    public function onClose(ConnectionInterface $conn) {
+        $this->clients->detach($conn);
+        $this->connectionCount--;
+    }
+
+    public function onError(ConnectionInterface $conn, \Exception $e) {
+        error_log("WebSocket Error: {$e->getMessage()}");
+        $conn->close();
+    }
+
+    public function getConnectionCount() {
+        return $this->connectionCount;
     }
 } 

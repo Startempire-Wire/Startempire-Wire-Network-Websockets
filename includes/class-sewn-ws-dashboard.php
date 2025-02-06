@@ -8,127 +8,115 @@
  * Creates administrative interface for WebSocket server configuration and monitoring. Centralizes status display, module management, and real-time connection metrics visualization.
  */
 
-namespace SEWN\WebSockets;
+namespace SEWN\WebSockets\Admin;
 
-use SEWN\WebSockets\Admin\Module_Admin;
-use SEWN\WebSockets\Admin\Settings_Page;
+use SEWN\WebSockets\WebSocket_Server;
 
 class Dashboard {
     private static $instance = null;
-
+    private $registry = null;
+    private $server; 
+    
+    const MENU_SLUG = 'sewn-ws-dashboard';
+    
     private function __construct() {
-        // Hook the add_menu method to admin_menu
-        add_action('admin_menu', [$this, 'add_menu']);
-        // Hook assets
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+        $this->server = new WebSocket_Server();
+        
+        // Modified module registry initialization
+        if (class_exists('\SEWN\WebSockets\Module_Registry')) {
+            $this->registry = \SEWN\WebSockets\Module_Registry::get_instance();
+            $this->registry->discover_modules();
+            $this->registry->init_modules();
+        } else {
+            error_log('Module Registry class not found - continuing without module support');
+        }
     }
-
-    public function add_menu() {
-        error_log('[SEWN] Attempting menu registration');
-        // SINGLE top-level menu
+    
+    public static function init() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+            add_action('admin_menu', [self::$instance, 'register_menus']);
+        }
+        return self::$instance;
+    }
+    
+    public function register_menus() {
+        // Main Dashboard
         add_menu_page(
             __('WebSocket Server', 'sewn-ws'),
             __('WebSockets', 'sewn-ws'),
             'manage_options',
-            'sewn-ws',
-            [$this, 'render_dashboard'],
-            'dashicons-networking'
+            self::MENU_SLUG,
+            [$this, 'render_root_dashboard'],
+            'dashicons-networking',
+            80
         );
-
-        // Dashboard submenu (main page)
-        add_submenu_page('sewn-ws',
+        
+        // Dashboard Submenu (default view)
+        add_submenu_page(
+            self::MENU_SLUG,
             __('Dashboard', 'sewn-ws'),
             __('Dashboard', 'sewn-ws'),
             'manage_options',
-            'sewn-ws',
-            [$this, 'render_dashboard']
+            self::MENU_SLUG,
+            [$this, 'render_root_dashboard']
         );
-
-        // Status submenu
-        add_submenu_page('sewn-ws',
-            __('Status', 'sewn-ws'),
+        
+        // Status Submenu
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Status Monitor', 'sewn-ws'),
             __('Status', 'sewn-ws'),
             'manage_options',
             'sewn-ws-status',
-            [$this, 'render_status']
+            [$this, 'render_status_view']
         );
-
-        // Modules submenu
-        add_submenu_page('sewn-ws',
-            __('Modules', 'sewn-ws'),
+        
+        // Modules Submenu
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Installed Modules', 'sewn-ws'),
             __('Modules', 'sewn-ws'),
             'manage_options',
             'sewn-ws-modules',
-            [Module_Admin::class, 'render_modules_page']
+            [$this, 'render_modules_view']
         );
-
-        // Settings submenu
-        add_submenu_page('sewn-ws',
-            __('Settings', 'sewn-ws'),
+        
+        // Settings Submenu
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Server Configuration', 'sewn-ws'),
             __('Settings', 'sewn-ws'),
             'manage_options',
             'sewn-ws-settings',
-            [Settings_Page::get_instance(), 'render_settings_page']
-        );
-
-        error_log('[SEWN] Main menu registered');
-        error_log('[SEWN] Current user capabilities: ' . print_r(wp_get_current_user()->allcaps, true));
-    }
-
-    public function enqueue_assets() {
-        wp_enqueue_style(
-            'sewn-ws-admin',
-            SEWN_WS_URL . 'assets/css/admin.css',
-            [],
-            SEWN_WS_VERSION
+            [$this, 'render_settings_view']
         );
     }
-
-    public function render_dashboard() {
-        ?>
-        <div class="wrap sewn-ws-dashboard-container">
-            <h1>WebSocket Server Management</h1>
-            
-            <div class="card">
-                <h2>Server Controls</h2>
-                <button id="start-server" class="button button-primary">Start</button>
-                <button id="stop-server" class="button button-secondary">Stop</button>
-                <span id="server-status"></span>
-            </div>
-
-            <div class="card">
-                <h2>Real-time Statistics</h2>
-                <div id="network-stats">
-                    <p>Connections: <span class="connection-count">0</span></p>
-                    <p>Bandwidth: <span class="bandwidth">0KB/s</span></p>
-                </div>
-            </div>
-        </div>
-        <?php
+    
+    public function render_root_dashboard() {
+        // Delegate to Admin_UI's render method
+        Admin_UI::get_instance()->render_dashboard();
     }
-
-    public function render_status() {
-        ?>
-        <div class="wrap sewn-ws-status-container">
-            <h1><?php _e('WebSocket Server Status', 'sewn-ws'); ?></h1>
-            
-            <div class="card">
-                <h2><?php _e('Server Status', 'sewn-ws'); ?></h2>
-                <div id="server-status-details">
-                    <p><?php _e('Current Status:', 'sewn-ws'); ?> <span id="current-status">-</span></p>
-                    <p><?php _e('Uptime:', 'sewn-ws'); ?> <span id="server-uptime">-</span></p>
-                    <p><?php _e('Active Connections:', 'sewn-ws'); ?> <span id="active-connections">0</span></p>
-                </div>
-            </div>
-        </div>
-        <?php
+    
+    public function render_status_view() {
+        Admin_UI::get_instance()->render_status();
     }
-
-    public static function get_instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
+    
+    public function render_modules_view() {
+        if ($this->registry) {
+            Admin_UI::get_instance()->render_modules_page();
+        } else {
+            echo '<div class="notice notice-error"><p>';
+            _e('Module system unavailable - required components missing', 'sewn-ws');
+            echo '</p></div>';
         }
-        return self::$instance;
+    }
+    
+    public function render_settings_view() {
+        Admin_UI::get_instance()->render_settings();
     }
 }
+
+// Initialize the dashboard
+Dashboard::init();
 
