@@ -57,4 +57,10 @@ defined('SEWN_WS_VERSION') || define('SEWN_WS_VERSION', '1.0.0');
 
 // WebSocket Stats Constants
 !defined('SEWN_WS_STATS_UPDATE_INTERVAL') && define('SEWN_WS_STATS_UPDATE_INTERVAL', 10000);
-!defined('SEWN_WS_STATS_MAX_POINTS') && define('SEWN_WS_STATS_MAX_POINTS', 20); 
+!defined('SEWN_WS_STATS_MAX_POINTS') && define('SEWN_WS_STATS_MAX_POINTS', 20);
+
+// Development mode detection
+define('SEWN_WS_IS_LOCAL', (
+    strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
+    strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
+)); 

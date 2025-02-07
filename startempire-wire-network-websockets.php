@@ -20,16 +20,40 @@
  
 // Add this at the VERY TOP of the file
 namespace SEWN\WebSockets;
+use SEWN\WebSockets\Admin\Dashboard;
 use SEWN\WebSockets\Admin\Module_Admin;
 use SEWN\WebSockets\Admin\Websockets_Admin;
-use SEWN\WebSockets\Dashboard;
 use SEWN\WebSockets\Module_Registry;
 use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Socket_Manager;
 use SEWN\WebSockets\Unified_Roles;
 
+// Load Composer's autoloader
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+} else {
+    add_action('admin_notices', function() {
+        echo '<div class="notice notice-error"><p>';
+        echo 'WebSocket plugin requires Composer dependencies to be installed. Please run composer install in the plugin directory.';
+        echo '</p></div>';
+    });
+    return;
+}
+
 // Define Global Constants
 require_once __DIR__ . '/includes/constants.php';
+
+// Load core dependencies in correct order
+require_once __DIR__ . '/includes/class-exception.php';
+require_once __DIR__ . '/includes/class-error-handler.php';
+require_once __DIR__ . '/includes/class-log-handler.php';
+require_once __DIR__ . '/includes/class-module-base.php';
+require_once __DIR__ . '/includes/class-module-registry.php';
+require_once __DIR__ . '/includes/class-process-manager.php';
+require_once __DIR__ . '/includes/class-websocket-handler.php';
+require_once __DIR__ . '/includes/class-server-process.php';
+require_once __DIR__ . '/includes/class-server-controller.php';
+require_once __DIR__ . '/includes/class-websocket-server.php';
 
 // Add activation hook immediately after namespace declaration
 register_activation_hook(__FILE__, function() {
@@ -177,11 +201,11 @@ add_action('admin_init', function() {
     }
 });
 
-// Add these requires BEFORE the autoloader
-require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';
-require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';
-require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';
-require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';
+// Add these requires BEFORE the autoloader and in the correct order
+require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';     // Load this first
+require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';      // Then module admin
+require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';         // Then admin UI
+require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';  // Finally websockets admin
 
 // AUTOLOADER FIX
 spl_autoload_register(function ($class) {
@@ -244,7 +268,7 @@ add_action('plugins_loaded', function() {
 // initialize the dashboard
 add_action('plugins_loaded', function() {
     if (is_admin()) {
-        Dashboard::get_instance();
+        Dashboard::init();
     }
 });
 

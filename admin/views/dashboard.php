@@ -20,7 +20,17 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
 ?>
 
 <div class="wrap">
-    <h1>WebSocket Server Dashboard</h1>
+    <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+    
+    <?php if (get_option('sewn_ws_dev_mode', false)): ?>
+    <div class="notice notice-warning">
+        <p>
+            <span class="dashicons dashicons-code-standards"></span>
+            <?php _e('Development Mode Enabled - Using HTTP WebSocket connections', 'sewn-ws'); ?>
+        </p>
+    </div>
+    <?php endif; ?>
+    
     <?php do_action('sewn_ws_before_dashboard'); ?>
     <div class="server-status-container">
         <!-- Server Status Card -->

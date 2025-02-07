@@ -15,6 +15,7 @@ namespace SEWN\WebSockets\Admin;
 
 use Buddyboss\LearndashIntegration\Buddypress\Admin;
 use SEWN\WebSockets\Admin\Admin_UI;
+use SEWN\WebSockets\Admin\Module_Admin;
 use SEWN\WebSockets\Module_Registry;
 
 class Websockets_Admin {

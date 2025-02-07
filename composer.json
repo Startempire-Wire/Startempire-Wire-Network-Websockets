@@ -1,0 +1,21 @@
+{
+    "name": "startempire-wire/network-websockets",
+    "description": "WebSocket support for the Startempire Wire Network",
+    "type": "wordpress-plugin",
+    "require": {
+        "php": ">=7.4",
+        "cboden/ratchet": "^0.4.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "SEWN\\WebSockets\\": "includes/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Startempire Wire",
+            "email": "dev@startempirewire.com"
+        }
+    ],
+    "minimum-stability": "stable"
+} 

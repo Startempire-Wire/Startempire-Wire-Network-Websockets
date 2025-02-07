@@ -20,7 +20,7 @@ use SEWN\WebSockets\Node_Check;
 use SEWN\WebSockets\Process_Manager;
 use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Server_Process;
-use SEWN\WebSockets\WebSocketServer;
+use Exception;
 
 class Admin_UI {
     private static $instance = null;
@@ -30,6 +30,8 @@ class Admin_UI {
     private $status_lock = false;
     private $server_controller;
     private $websocket_server;
+    private $error_count = 0;
+    private $rate_limiter;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -39,11 +41,18 @@ class Admin_UI {
     }
 
     protected function __construct() {
-        $this->registry = Module_Registry::get_instance();
-        $this->server_controller = new Server_Controller();
-        $this->websocket_server = new WebSocketServer();
-        $this->registry->discover_modules();
-        $this->registry->init_modules();
+        // Initialize core dependencies
+        if (class_exists('\SEWN\WebSockets\Module_Registry')) {
+            $this->registry = Module_Registry::get_instance();
+            $this->registry->discover_modules();
+            $this->registry->init_modules();
+        } else {
+            error_log('[SEWN] Module_Registry not available');
+        }
+        
+        if (class_exists('\SEWN\WebSockets\Server_Controller')) {
+            $this->server_controller = new Server_Controller();
+        }
         
         add_action('admin_init', [$this, 'register_settings']);
         
@@ -61,6 +70,13 @@ class Admin_UI {
             'sanitize_callback' => 'absint'
         ]);
 
+        register_setting('sewn_ws_settings', 'sewn_ws_dev_mode', [
+            'type' => 'boolean',
+            'description' => 'Enable development mode',
+            'default' => false,
+            'sanitize_callback' => 'rest_sanitize_boolean'
+        ]);
+
         add_settings_section(
             'server_config',
             __('Server Configuration', 'sewn-ws'),
@@ -74,6 +90,25 @@ class Admin_UI {
             function() {
                 $port = get_option('sewn_ws_port', 8080);
                 echo "<input type='number' name='sewn_ws_port' value='$port' min='1024' max='65535'>";
+            },
+            'sewn-ws-settings',
+            'server_config'
+        );
+
+        add_settings_field(
+            'sewn_ws_dev_mode',
+            __('Development Mode', 'sewn-ws'),
+            function() {
+                $dev_mode = get_option('sewn_ws_dev_mode', false);
+                echo '<label>';
+                echo "<input type='checkbox' name='sewn_ws_dev_mode' value='1' " . checked($dev_mode, true, false) . ">";
+                echo __('Enable development mode (allows HTTP WebSocket connections)', 'sewn-ws');
+                echo '</label>';
+                if ($dev_mode) {
+                    echo '<p class="description" style="color: #d63638;">';
+                    echo __('Warning: Development mode is enabled. This should only be used in local development environments.', 'sewn-ws');
+                    echo '</p>';
+                }
             },
             'sewn-ws-settings',
             'server_config'
@@ -174,28 +209,8 @@ class Admin_UI {
             wp_send_json_error('Unauthorized', 403);
         }
 
-        $action = $_REQUEST['action'] ?? '';
+        $command = sanitize_text_field($_POST['command'] ?? '');
         
-        if ($action === 'sewn_ws_get_status') {
-            $status = $this->get_server_status(); // Implement your status check
-            wp_send_json_success(['status' => $status]);
-        }
-        
-        if ($action === 'sewn_ws_get_stats') {
-            $stats = [
-                'connections' => count($this->connections),
-                'memory' => memory_get_usage(true),
-                'errors' => $this->error_count
-            ];
-            wp_send_json_success($stats);
-        }
-        
-        $command = sanitize_text_field($_POST['command']);
-        $response = [
-            'status' => 'error',
-            'message' => 'Unknown command'
-        ];
-
         if ($this->status_lock) {
             wp_send_json_error([
                 'message' => __('Another operation is in progress', 'sewn-ws'),
@@ -213,12 +228,12 @@ class Admin_UI {
                         throw new Exception('Server already running');
                     }
                     
-                    $this->server_process = new Server_Process();
-                    $started = $this->server_process->start();
+                    // Create WebSocketServer only when starting
+                    $this->websocket_server = new WebSocketServer();
+                    $started = $this->websocket_server->run();
                     
                     if (!$started) {
-                        throw new Exception('Failed to start server: ' 
-                            . $this->server_process->get_last_error());
+                        throw new Exception('Failed to start server');
                     }
                     
                     $response = [
@@ -228,8 +243,9 @@ class Admin_UI {
                     break;
                     
                 case 'stop':
-                    if ($this->server_process && $this->server_process->is_running()) {
-                        $this->server_process->stop();
+                    if ($this->websocket_server) {
+                        $this->websocket_server->stop();
+                        $this->websocket_server = null;
                         $this->cleanup_connections();
                     }
                     $response = [
@@ -271,18 +287,51 @@ class Admin_UI {
 
         wp_enqueue_style(
             'sewn-ws-admin',
-            plugins_url('css/admin.css', dirname(__FILE__)),
+            plugins_url('assets/css/admin.css', dirname(__FILE__)),
             array(),
             SEWN_WS_VERSION
         );
         
-        wp_enqueue_script(
+        // Get correct path to admin.js
+        $js_path = plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js';
+        
+        // Register admin script
+        wp_register_script(
             'sewn-ws-admin',
-            plugins_url('js/admin.js', dirname(__FILE__)),
-            array('jquery'),
+            $js_path,
+            ['jquery'],
             SEWN_WS_VERSION,
             true
         );
+        
+        // Get development mode status
+        $dev_mode = get_option('sewn_ws_dev_mode', false);
+        $is_local = (
+            strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
+            strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
+        );
+        
+        // Localize script data with constants and environment info
+        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sewn_ws_admin_nonce'),
+            'port' => get_option('sewn_ws_port', 8080),
+            'is_local' => $is_local,
+            'dev_mode' => $dev_mode,
+            'site_protocol' => is_ssl() ? 'https' : 'http',
+            'constants' => [
+                'STATUS_RUNNING' => SEWN_WS_SERVER_STATUS_RUNNING,
+                'STATUS_STOPPED' => SEWN_WS_SERVER_STATUS_STOPPED,
+                'STATUS_ERROR' => SEWN_WS_SERVER_STATUS_ERROR
+            ],
+            'i18n' => [
+                'confirm_restart' => __('Are you sure you want to restart the WebSocket server?', 'sewn-ws'),
+                'server_starting' => __('Server starting...', 'sewn-ws')
+            ]
+        ]);
+        
+        // Enqueue the script
+        wp_enqueue_script('sewn-ws-admin');
     }
 
     public function handle_server_action() {
@@ -301,29 +350,11 @@ class Admin_UI {
         // Rest of existing code
     }
     
-    private function cleanup_connections() {
-        foreach ($this->connections as $conn) {
-            if ($conn->isConnected()) {
-                $conn->close();
-            }
+    public function cleanup_connections() {
+        foreach ($this->connections as $connection) {
+            $connection->close();
         }
         $this->connections = [];
-    }
-
-    public function enqueue_admin_assets() {
-        // Explicit script registration with module type
-        wp_register_script(
-            'sewn-ws-admin-js',
-            plugins_url('assets/js/admin.js', dirname(__FILE__)),
-            ['jquery'],
-            SEWN_WS_VERSION,
-            true
-        );
-        
-        // Add module type attribute
-        wp_script_add_data('sewn-ws-admin-js', 'type', 'module');
-
-        wp_enqueue_script('sewn-ws-admin-js');
     }
 
     public function render_server_status() {
@@ -336,13 +367,59 @@ class Admin_UI {
         echo '</div>';
     }
 
-    add_action('admin_enqueue_scripts', function() {
-        wp_enqueue_style('sewn-ws-admin', plugins_url('css/admin-dashboard.css', __FILE__));
-        wp_enqueue_script('sewn-ws-admin', plugins_url('js/admin-dashboard.js', __FILE__), ['jquery'], false, true);
+    public function init_admin_scripts() {
+        add_action('admin_enqueue_scripts', function() {
+            wp_enqueue_script('sewn-ws-admin-ui', 
+                plugins_url('assets/js/admin-ui.js', dirname(__FILE__)),
+                ['jquery'],
+                filemtime(plugin_dir_path(dirname(__FILE__)) . 'assets/js/admin-ui.js'),
+                true
+            );
+        });
+    }
+
+    private function get_debug_info() {
+        return [
+            'server_status' => $this->server_process ? 'running' : 'stopped',
+            'connections' => count($this->connections),
+            'memory_usage' => memory_get_usage(true),
+            'php_version' => PHP_VERSION,
+            'wp_version' => get_bloginfo('version')
+        ];
+    }
+
+    private function get_server_status() {
+        if (!$this->server_process) {
+            return 'stopped';
+        }
         
-        wp_localize_script('sewn-ws-admin', 'wsData', [
-            'connections' => WebSocketService::getActiveConnections(),
-            'throughput' => WebSocketService::getMessageThroughput()
-        ]);
-    });
+        return $this->server_process->is_running() ? 'running' : 'stopped';
+    }
+
+    public function render_status() {
+        // Get server status using server_process property
+        $server_status = 'unknown';
+        if ($this->server_process && method_exists($this->server_process, 'is_running')) {
+            $server_status = $this->server_process->is_running() ? 'running' : 'stopped';
+        }
+        
+        // Get connection metrics using available data
+        $connection_stats = [
+            'active_connections' => count($this->connections),
+            'error_count' => $this->error_count,
+            'memory_usage' => memory_get_usage(true),
+            'uptime' => 0  // Default to 0 if no process
+        ];
+        
+        // Calculate uptime if server is running
+        if ($server_status === 'running') {
+            $pid_file = '/tmp/websocket.pid';
+            if (file_exists($pid_file)) {
+                $connection_stats['uptime'] = time() - filemtime($pid_file);
+            }
+        }
+        
+        // Include the status view template
+        include plugin_dir_path(__DIR__) . 'admin/views/status.php';
+    }
 }
