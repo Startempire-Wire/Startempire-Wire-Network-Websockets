@@ -292,14 +292,23 @@ class Admin_UI {
             SEWN_WS_VERSION
         );
         
+        // Add Socket.IO client library first
+        wp_register_script(
+            'socket-io',
+            'https://cdn.socket.io/4.7.4/socket.io.min.js',
+            [],
+            '4.7.4',
+            true
+        );
+        
         // Get correct path to admin.js
         $js_path = plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js';
         
-        // Register admin script
+        // Register admin script with Socket.IO dependency
         wp_register_script(
             'sewn-ws-admin',
             $js_path,
-            ['jquery'],
+            ['jquery', 'socket-io'], // Add socket-io as dependency
             SEWN_WS_VERSION,
             true
         );
@@ -330,7 +339,8 @@ class Admin_UI {
             ]
         ]);
         
-        // Enqueue the script
+        // Enqueue both scripts
+        wp_enqueue_script('socket-io');
         wp_enqueue_script('sewn-ws-admin');
     }
 

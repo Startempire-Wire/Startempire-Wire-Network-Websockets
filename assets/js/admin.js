@@ -23,10 +23,12 @@ class WebSocketAdmin {
         this.statsErrorCount = 0;
         this.statsMaxErrors = 3;
         this.pollingBaseDelay = 10000; // 10 seconds
-        this.serverStatus = 'stopped'; // Track server state
+        this.serverStatus = 'uninitialized'; // Set initial state to uninitialized
+        this.socket = null; // Initialize socket as null
+
         this.initializeComponents();
         this.bindEvents();
-        this.initializeWebSocket();
+        this.updateServerStatus('uninitialized'); // Show uninitialized state by default
 
         // Initialize components directly
         this.statsDisplay = {
@@ -262,59 +264,117 @@ class WebSocketAdmin {
         const statusElement = document.querySelector('.sewn-ws-status');
         const { constants } = sewn_ws_admin;
 
+        if (!statusElement) {
+            console.warn('Status element not found');
+            return;
+        }
+
         if (!constants) {
             console.error('Server constants not found');
             return;
         }
 
-        statusElement.className = `sewn-ws-status ${status.toLowerCase()}`;
-        statusElement.querySelector('.status-text').textContent = status;
+        // Handle undefined or null status
+        const currentStatus = status?.status || status || 'unknown';
 
-        if (status === constants.STATUS_ERROR) {
-            this.showAlert(sewn_ws_admin.i18n.serverError);
+        try {
+            statusElement.className = `sewn-ws-status ${currentStatus.toLowerCase()}`;
+            statusElement.querySelector('.status-text').textContent = currentStatus;
+
+            if (currentStatus === constants.STATUS_ERROR) {
+                this.showAlert(sewn_ws_admin.i18n.serverError);
+            }
+
+            // Safely update button states
+            const startButton = document.querySelector('[data-action="start"]');
+            const stopButton = document.querySelector('[data-action="stop"]');
+
+            if (startButton) {
+                startButton.disabled = currentStatus === constants.STATUS_RUNNING;
+            }
+            if (stopButton) {
+                stopButton.disabled = currentStatus === constants.STATUS_STOPPED;
+            }
+
+            // Only initialize WebSocket if server is running
+            if (currentStatus === constants.STATUS_RUNNING && !this.socket) {
+                this.initializeWebSocket();
+            }
+        } catch (error) {
+            console.error('Error updating server status:', error);
         }
-
-        // Update button states
-        document.querySelector('[data-action="start"]').disabled = status === constants.STATUS_RUNNING;
-        document.querySelector('[data-action="stop"]').disabled = status === constants.STATUS_STOPPED;
     }
 
     initializeWebSocket() {
-        // Get environment info from localized data
-        const { dev_mode, site_protocol, port } = sewn_ws_admin;
+        // If socket already exists and is connected, don't reinitialize
+        if (this.socket?.connected) {
+            return;
+        }
 
-        // Use HTTP if in dev mode or HTTPS otherwise
-        const wsProtocol = dev_mode ? 'ws' : 'wss';
-        const httpProtocol = dev_mode ? 'http' : 'https';
+        try {
+            // Get environment info from localized data
+            const { dev_mode, site_protocol, port } = sewn_ws_admin;
 
-        // Configure Socket.IO
-        const socket = io(`${httpProtocol}://${window.location.hostname}:${port}/admin`, {
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            reconnectionAttempts: 5,
-            transports: dev_mode ? ['polling', 'websocket'] : ['websocket']
-        });
+            // Use HTTP if in dev mode or HTTPS otherwise
+            const wsProtocol = dev_mode ? 'ws' : 'wss';
+            const httpProtocol = dev_mode ? 'http' : 'https';
 
-        socket.on('stats_update', (data) => {
-            this.updateMetrics(data);
-            this.updateTierStats(data.tiers);
-            this.checkThresholds(data);
-        });
+            // Configure Socket.IO with error handling
+            this.socket = io(`${httpProtocol}://${window.location.hostname}:${port}/admin`, {
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 5,
+                transports: dev_mode ? ['polling', 'websocket'] : ['websocket'],
+                timeout: 20000, // 20 second timeout
+                autoConnect: false // Don't connect automatically
+            });
 
-        socket.on('error_alert', (error) => {
-            this.handleError(error);
-        });
+            this.socket.on('connect_error', (error) => {
+                console.warn('WebSocket connection error:', error);
+                // Don't show alert for connection errors unless explicitly trying to connect
+                if (this.serverStatus === 'running') {
+                    this.showAlert('WebSocket connection failed. Server might not be running.');
+                }
+            });
 
-        // Handle reconnection
-        socket.on('reconnect_attempt', (attempt) => {
-            this.updateStatus('reconnecting');
-        });
+            // Only connect if we're supposed to be running
+            if (this.serverStatus === 'running') {
+                this.socket.connect();
+            }
 
-        socket.on('reconnect_failed', () => {
-            this.updateStatus('disconnected');
-            this.showAlert('Connection lost to WebSocket server');
-        });
+            this.socket.on('stats_update', (data) => {
+                try {
+                    this.updateMetrics(data);
+                    this.updateTierStats(data.tiers);
+                    this.checkThresholds(data);
+                } catch (error) {
+                    console.error('Error processing stats update:', error);
+                }
+            });
+
+            this.socket.on('error_alert', (error) => {
+                this.handleError(error);
+            });
+
+            // Handle reconnection
+            this.socket.on('reconnect_attempt', (attempt) => {
+                this.updateStatus('reconnecting');
+            });
+
+            this.socket.on('reconnect_failed', () => {
+                this.updateStatus('disconnected');
+                if (this.serverStatus === 'running') {
+                    this.showAlert('Connection lost to WebSocket server');
+                }
+            });
+
+        } catch (error) {
+            console.error('Error initializing WebSocket:', error);
+            if (this.serverStatus === 'running') {
+                this.showAlert('Failed to initialize WebSocket connection');
+            }
+        }
     }
 
     updateMetrics(data) {
@@ -395,21 +455,37 @@ class WebSocketAdmin {
         try {
             const response = await fetch(sewn_ws_admin.ajax_url, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-WP-Nonce': this.nonce
+                },
                 body: new URLSearchParams({
                     action: 'sewn_ws_get_status',
-                    nonce: sewn_ws_admin.nonce
+                    nonce: this.nonce
                 })
             });
 
-            const data = await response.json();
-            this.updateServerStatus(data.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
-            // Only start polling if server was already running
-            if (data.status === 'Running') {
-                this.startStatsPolling();
+            const data = await response.json();
+
+            if (data.success) {
+                this.updateServerStatus(data.data);
+
+                // Only start polling and initialize WebSocket if server is running
+                if (data.data.status === 'Running') {
+                    this.startStatsPolling();
+                    this.initializeWebSocket();
+                }
+            } else {
+                console.warn('Status check returned unsuccessful:', data);
             }
         } catch (error) {
             console.error('Initial status check failed:', error);
+            // Don't show alert for initial status check failure
+            // this.showAlert('Failed to check server status. Please refresh the page or contact support.');
         }
     }
 }
@@ -418,6 +494,5 @@ class WebSocketAdmin {
 document.addEventListener('DOMContentLoaded', () => {
     if (!window.wsAdmin) {
         window.wsAdmin = new WebSocketAdmin();
-        window.wsAdmin.checkInitialStatus();
     }
 });

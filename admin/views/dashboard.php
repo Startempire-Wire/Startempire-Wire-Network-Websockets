@@ -42,21 +42,20 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
                     <?php if($node_status['running']): ?>
                         <?php _e('Operational', 'sewn-ws') ?>
                     <?php else: ?>
-                        <?php _e('Offline', 'sewn-ws') ?>
+                        <?php _e('Not Initialized', 'sewn-ws') ?>
                     <?php endif; ?>
                 </span>
                 <span class="loading-spinner" style="display:none"></span>
             </div>
             <div class="server-controls">
-                <button class="button-primary sewn-ws-control" data-action="start" 
-                        <?php echo $node_status['running'] ? 'disabled' : ''; ?>>
-                    <span class="button-text"><?php _e('Start Server', 'sewn-ws') ?></span>
+                <button class="button-primary sewn-ws-control" data-action="start">
+                    <span class="button-text"><?php _e('Initialize Server', 'sewn-ws') ?></span>
                     <span class="loading-dots" style="display:none">...</span>
                 </button>
-                <button class="button-secondary sewn-ws-control" data-action="restart">
+                <button class="button-secondary sewn-ws-control" data-action="restart" disabled>
                     <?php _e('Restart', 'sewn-ws') ?>
                 </button>
-                <button class="button sewn-ws-control" data-action="stop" <?php echo !$node_status['running'] ? 'disabled' : ''; ?>>
+                <button class="button sewn-ws-control" data-action="stop" disabled>
                     <?php _e('Stop', 'sewn-ws') ?>
                 </button>
             </div>
@@ -121,6 +120,7 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
 .status-dot.success { background: #00c853; animation: pulse 2s infinite; }
 .status-dot.error { background: #ff1744; }
 .status-dot.starting { background: #ffc107; animation: pulse 1s infinite; }
+.status-dot.uninitialized { background: #9e9e9e; }
 
 @keyframes pulse {
     0% { opacity: 1; }
