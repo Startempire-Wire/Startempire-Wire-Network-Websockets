@@ -11,13 +11,11 @@
  * features per Startempire Wire Network tier system.
  */
 
- namespace SEWN\WebSockets\Admin;
+namespace SEWN\WebSockets\Admin;
 
-if (!defined('ABSPATH')) exit;
- 
+use Buddyboss\LearndashIntegration\Buddypress\Admin;
 use SEWN\WebSockets\Admin\Admin_UI;
 use SEWN\WebSockets\Module_Registry;
- 
 
 class Websockets_Admin {
     private static $instance = null;
@@ -43,9 +41,15 @@ class Websockets_Admin {
     }
 
     private function init_components() {
+        // Initialize Admin_UI first
         $this->ui = Admin_UI::get_instance();
-        $this->modules = new \SEWN\WebSockets\Admin\Module_Admin(Module_Registry::get_instance());
-        $this->settings = new \SEWN\WebSockets\Admin\Settings_Page();
+        
+        // Then initialize other components
+        if (class_exists('\SEWN\WebSockets\Module_Registry')) {
+            $this->modules = new Module_Admin(Module_Registry::get_instance());
+        }
+        
+        $this->settings = new Settings_Page();
     }
 
     public function enqueue_assets($hook) {

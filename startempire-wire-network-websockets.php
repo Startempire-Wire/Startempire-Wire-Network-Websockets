@@ -11,6 +11,11 @@
  * Namespace:         SEWN\WebSockets
  *
  * @package           Startempire_Wire_Network_Websockets
+ * @since             0.1.0
+ * @author            Startempire Wire
+ * @link              https://startempirewire.com/
+ * @license           GPL-2.0+
+ * @copyright         2024 Startempire Wire
  */
  
 // Add this at the VERY TOP of the file
@@ -171,6 +176,12 @@ add_action('admin_init', function() {
         });
     }
 });
+
+// Add these requires BEFORE the autoloader
+require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';
+require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';
+require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';
+require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';
 
 // AUTOLOADER FIX
 spl_autoload_register(function ($class) {

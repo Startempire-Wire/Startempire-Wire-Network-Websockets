@@ -11,15 +11,16 @@
  * architecture described in Startempire Wire Network's core documentation.
  */
 
- namespace SEWN\WebSockets\Admin;
+namespace SEWN\WebSockets\Admin;
 
- use SEWN\WebSockets\Module_Base;
- use SEWN\WebSockets\Module_Registry;
- use SEWN\WebSockets\Node_Check;
- use SEWN\WebSockets\Process_Manager;
- use SEWN\WebSockets\Server_Controller;
- use SEWN\WebSockets\Server_Process;
- use SEWN\WebSockets\WebSocketServer;
+use SEWN\WebSockets\WebSocketServer;
+use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Module_Registry;
+use SEWN\WebSockets\Node_Check;
+use SEWN\WebSockets\Process_Manager;
+use SEWN\WebSockets\Server_Controller;
+use SEWN\WebSockets\Server_Process;
+use SEWN\WebSockets\WebSocketServer;
 
 class Admin_UI {
     private static $instance = null;

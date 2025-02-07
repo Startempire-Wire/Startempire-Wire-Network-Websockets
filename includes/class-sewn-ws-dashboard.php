@@ -10,18 +10,15 @@
 
 namespace SEWN\WebSockets\Admin;
 
-use SEWN\WebSockets\WebSocket_Server;
+use SEWN\WebSockets\Admin\Admin_UI;
 
 class Dashboard {
     private static $instance = null;
     private $registry = null;
-    private $server; 
     
     const MENU_SLUG = 'sewn-ws-dashboard';
     
     private function __construct() {
-        $this->server = new WebSocket_Server();
-        
         // Modified module registry initialization
         if (class_exists('\SEWN\WebSockets\Module_Registry')) {
             $this->registry = \SEWN\WebSockets\Module_Registry::get_instance();

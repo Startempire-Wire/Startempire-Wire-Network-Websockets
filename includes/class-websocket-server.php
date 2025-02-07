@@ -3,7 +3,7 @@
 /**
  * Location: includes/class-websocket-server.php
  * Dependencies: Ratchet library, WebSocket_Handler
- * Classes: WebSocket_Server
+ * Classes: WebSocketServer
  * 
  * Core implementation of WebSocket server using Ratchet framework. Manages port allocation, connection lifecycle, and integration with custom protocol handlers.
  */
@@ -16,7 +16,7 @@ use Ratchet\Server\IoServer;
 use Ratchet\WebSocket\WsServer;
 use SEWN\WebSockets\WebSocket_Handler;
 
-class WebSocket_Server implements MessageComponentInterface {
+class WebSocketServer implements MessageComponentInterface {
     private $server;
     private $port;
     private $connections = [];
