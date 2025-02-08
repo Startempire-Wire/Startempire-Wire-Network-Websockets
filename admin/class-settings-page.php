@@ -147,9 +147,24 @@ class Settings_Page {
             '1.0.0'
         );
 
+        wp_enqueue_style(
+            'sewn-ws-debug-panel',
+            plugin_dir_url(__FILE__) . 'css/debug-panel.css',
+            array(),
+            '1.0.0'
+        );
+
         wp_enqueue_script(
             'sewn-ws-admin',
             plugin_dir_url(__FILE__) . 'js/admin.js',
+            array('jquery'),
+            '1.0.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'sewn-ws-debug-panel',
+            plugin_dir_url(__FILE__) . 'js/debug-panel.js',
             array('jquery'),
             '1.0.0',
             true
@@ -165,6 +180,7 @@ class Settings_Page {
                     'checking' => __('Checking environment...', 'sewn-ws'),
                     'success' => __('Environment check completed', 'sewn-ws'),
                     'error' => __('Failed to check environment', 'sewn-ws'),
+                    'confirmClearLogs' => __('Are you sure you want to clear all logs?', 'sewn-ws'),
                 ),
             )
         );

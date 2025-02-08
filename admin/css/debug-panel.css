@@ -1,0 +1,119 @@
+/* Debug Panel Styles */
+.sewn-ws-debug-panel {
+    margin: 20px 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    border-radius: 4px;
+}
+
+.sewn-ws-debug-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.debug-filters {
+    display: flex;
+    gap: 15px;
+}
+
+.debug-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.level-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.level-indicator.error { background: #dc3232; color: #fff; }
+.level-indicator.warning { background: #ffb900; color: #fff; }
+.level-indicator.info { background: #00a0d2; color: #fff; }
+
+.sewn-ws-log-viewer {
+    max-height: 500px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+}
+
+.log-content {
+    padding: 15px;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.log-entry {
+    margin-bottom: 10px;
+    padding: 10px;
+    background: #fff;
+    border-left: 4px solid transparent;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+
+.log-entry.error { border-left-color: #dc3232; }
+.log-entry.warning { border-left-color: #ffb900; }
+.log-entry.info { border-left-color: #00a0d2; }
+
+.log-entry .timestamp {
+    color: #666;
+    font-size: 12px;
+}
+
+.log-entry .message {
+    margin: 5px 0;
+    color: #1d2327;
+}
+
+.log-entry .context {
+    margin-top: 5px;
+    padding: 5px;
+    background: #f8f9fa;
+    border-radius: 2px;
+    font-size: 12px;
+    color: #666;
+    white-space: pre-wrap;
+}
+
+.log-loading {
+    padding: 20px;
+    text-align: center;
+    color: #666;
+}
+
+.log-loading .spinner {
+    float: none;
+    margin-right: 10px;
+}
+
+@media screen and (max-width: 782px) {
+    .sewn-ws-debug-toolbar {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .debug-filters {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .debug-actions {
+        width: 100%;
+    }
+
+    .debug-actions .button {
+        flex: 1;
+    }
+} 
