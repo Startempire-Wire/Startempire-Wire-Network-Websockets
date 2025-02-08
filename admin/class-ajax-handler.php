@@ -22,10 +22,76 @@ class Ajax_Handler {
         add_action('wp_ajax_sewn_ws_export_logs', [$this, 'export_logs']);
         add_action('wp_ajax_sewn_ws_check_environment', [$this, 'check_environment']);
         add_action('wp_ajax_sewn_ws_get_ssl_paths', [$this, 'get_ssl_paths']);
+        add_action('wp_ajax_sewn_ws_toggle_debug', [$this, 'toggle_debug']);
+        add_action('wp_ajax_sewn_ws_get_logs', [$this, 'get_logs']);
     }
 
+    /**
+     * Toggle debug mode
+     */
+    public function toggle_debug() {
+        check_ajax_referer('sewn_ws_admin', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $enabled = isset($_POST['enabled']) ? (bool) $_POST['enabled'] : false;
+        update_option('sewn_ws_debug_enabled', $enabled);
+
+        if ($enabled) {
+            $this->logger->log(
+                'Debug mode enabled',
+                array('user' => wp_get_current_user()->user_login),
+                'info'
+            );
+        } else {
+            $this->logger->log(
+                'Debug mode disabled',
+                array('user' => wp_get_current_user()->user_login),
+                'info'
+            );
+        }
+
+        wp_send_json_success();
+    }
+
+    /**
+     * Get error logs with pagination
+     */
+    public function get_logs() {
+        check_ajax_referer('sewn_ws_admin', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $last_id = isset($_POST['last_id']) ? (int) $_POST['last_id'] : 0;
+        $logs = $this->logger->get_recent_errors();
+
+        // Filter logs newer than last_id
+        $new_logs = array_filter($logs, function($log) use ($last_id) {
+            return $log['id'] > $last_id;
+        });
+
+        // Sort logs by timestamp descending
+        usort($new_logs, function($a, $b) {
+            return strtotime($b['time']) - strtotime($a['time']);
+        });
+
+        // Limit to 50 most recent logs
+        $new_logs = array_slice($new_logs, 0, 50);
+
+        wp_send_json_success($new_logs);
+    }
+
+    /**
+     * Clear error logs
+     */
     public function clear_logs() {
-        check_ajax_referer('sewn_ws_clear_logs', 'nonce');
+        check_ajax_referer('sewn_ws_admin', 'nonce');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
@@ -34,41 +100,49 @@ class Ajax_Handler {
 
         try {
             $this->logger->clear_logs();
+            $this->logger->log(
+                'Logs cleared by user',
+                array('user' => wp_get_current_user()->user_login),
+                'info'
+            );
             wp_send_json_success('Logs cleared successfully');
         } catch (\Exception $e) {
-            $this->logger->log(
-                'Failed to clear logs',
-                ['error' => $e->getMessage()],
-                'error'
-            );
             wp_send_json_error('Failed to clear logs: ' . $e->getMessage());
         }
     }
 
+    /**
+     * Export error logs
+     */
     public function export_logs() {
-        check_ajax_referer('sewn_ws_export_logs', 'nonce');
+        check_ajax_referer('sewn_ws_admin', 'nonce');
 
         if (!current_user_can('manage_options')) {
-            wp_send_json_error('Insufficient permissions');
-            return;
+            wp_die('Insufficient permissions');
         }
 
         try {
             $logs = $this->logger->export_logs();
             
+            // Log the export
+            $this->logger->log(
+                'Logs exported by user',
+                array('user' => wp_get_current_user()->user_login),
+                'info'
+            );
+
+            // Set headers for download
             header('Content-Type: text/plain');
-            header('Content-Disposition: attachment; filename="websocket-server-logs.txt"');
+            header('Content-Disposition: attachment; filename="websocket-server-logs-' . date('Y-m-d-H-i-s') . '.txt"');
             header('Content-Length: ' . strlen($logs));
+            header('Cache-Control: no-cache, must-revalidate');
+            header('Pragma: no-cache');
+            header('Expires: 0');
             
             echo $logs;
             exit;
         } catch (\Exception $e) {
-            $this->logger->log(
-                'Failed to export logs',
-                ['error' => $e->getMessage()],
-                'error'
-            );
-            wp_send_json_error('Failed to export logs: ' . $e->getMessage());
+            wp_die('Failed to export logs: ' . $e->getMessage());
         }
     }
 

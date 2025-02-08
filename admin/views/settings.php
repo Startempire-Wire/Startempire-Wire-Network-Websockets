@@ -728,6 +728,303 @@ if (!defined('ABSPATH')) exit;
             </p>
         </div>
     </form>
+
+    <!-- Debug Panel -->
+    <div class="sewn-ws-debug-section" style="display: <?php echo get_option('sewn_ws_debug_enabled', false) ? 'block' : 'none'; ?>">
+        <h2 class="sewn-ws-debug-header">
+            <span class="dashicons dashicons-bug"></span>
+            <?php _e('Debug Information', 'sewn-ws'); ?>
+            <div class="sewn-ws-debug-controls">
+                <label class="sewn-ws-toggle">
+                    <input 
+                        type="checkbox" 
+                        id="sewn_ws_debug_enabled" 
+                        name="sewn_ws_debug_enabled" 
+                        <?php checked(get_option('sewn_ws_debug_enabled', false)); ?>
+                    >
+                    <span class="sewn-ws-toggle-slider"></span>
+                    <?php _e('Enable Debug Mode', 'sewn-ws'); ?>
+                </label>
+                <button type="button" class="button button-secondary clear-logs">
+                    <span class="dashicons dashicons-trash"></span>
+                    <?php _e('Clear Logs', 'sewn-ws'); ?>
+                </button>
+                <button type="button" class="button button-secondary export-logs">
+                    <span class="dashicons dashicons-download"></span>
+                    <?php _e('Export Logs', 'sewn-ws'); ?>
+                </button>
+            </div>
+        </h2>
+
+        <div class="sewn-ws-error-log">
+            <div class="error-log-filters">
+                <label>
+                    <input type="checkbox" class="log-level-filter" value="error" checked> 
+                    <span class="level-indicator error"><?php _e('Errors', 'sewn-ws'); ?></span>
+                </label>
+                <label>
+                    <input type="checkbox" class="log-level-filter" value="warning" checked> 
+                    <span class="level-indicator warning"><?php _e('Warnings', 'sewn-ws'); ?></span>
+                </label>
+                <label>
+                    <input type="checkbox" class="log-level-filter" value="info" checked> 
+                    <span class="level-indicator info"><?php _e('Info', 'sewn-ws'); ?></span>
+                </label>
+            </div>
+
+            <div class="error-log-container">
+                <div class="error-log-content"></div>
+                <div class="error-log-loading">
+                    <span class="spinner is-active"></span>
+                    <?php _e('Loading logs...', 'sewn-ws'); ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    /* Debug Panel Styles */
+    .sewn-ws-debug-section {
+        margin-top: 20px;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #ccd0d4;
+        box-shadow: 0 1px 1px rgba(0,0,0,.04);
+        border-radius: 4px;
+    }
+
+    .sewn-ws-debug-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 0 20px 0;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .sewn-ws-debug-header .dashicons {
+        margin-right: 10px;
+        color: #1d2327;
+    }
+
+    .sewn-ws-debug-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .sewn-ws-toggle {
+        display: flex;
+        align-items: center;
+        margin-right: 15px;
+    }
+
+    .error-log-filters {
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        display: flex;
+        gap: 15px;
+    }
+
+    .level-indicator {
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .level-indicator.error { background: #dc3232; color: #fff; }
+    .level-indicator.warning { background: #ffb900; color: #fff; }
+    .level-indicator.info { background: #00a0d2; color: #fff; }
+
+    .error-log-container {
+        max-height: 500px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        border: 1px solid #e2e4e7;
+        border-radius: 4px;
+    }
+
+    .error-log-content {
+        padding: 15px;
+        font-family: monospace;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .error-log-entry {
+        margin-bottom: 10px;
+        padding: 10px;
+        background: #fff;
+        border-left: 4px solid transparent;
+        box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    }
+
+    .error-log-entry.error { border-left-color: #dc3232; }
+    .error-log-entry.warning { border-left-color: #ffb900; }
+    .error-log-entry.info { border-left-color: #00a0d2; }
+
+    .error-log-entry .timestamp {
+        color: #666;
+        font-size: 12px;
+    }
+
+    .error-log-entry .message {
+        margin: 5px 0;
+        color: #1d2327;
+    }
+
+    .error-log-entry .context {
+        margin-top: 5px;
+        padding: 5px;
+        background: #f8f9fa;
+        border-radius: 2px;
+        font-size: 12px;
+        color: #666;
+    }
+
+    .error-log-loading {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+    }
+
+    .error-log-loading .spinner {
+        float: none;
+        margin-right: 10px;
+    }
+
+    @media screen and (max-width: 782px) {
+        .sewn-ws-debug-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .sewn-ws-debug-controls {
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .error-log-filters {
+            flex-direction: column;
+            gap: 10px;
+        }
+    }
+    </style>
+
+    <script>
+    jQuery(document).ready(function($) {
+        var logRefreshInterval;
+        var lastLogId = 0;
+
+        // Toggle debug mode
+        $('#sewn_ws_debug_enabled').on('change', function() {
+            var isEnabled = $(this).is(':checked');
+            $('.sewn-ws-debug-section').toggle(isEnabled);
+            
+            $.post(ajaxurl, {
+                action: 'sewn_ws_toggle_debug',
+                enabled: isEnabled,
+                nonce: sewnWsAdmin.nonce
+            });
+
+            if (isEnabled) {
+                startLogRefresh();
+            } else {
+                stopLogRefresh();
+            }
+        });
+
+        // Load logs
+        function loadLogs() {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'sewn_ws_get_logs',
+                    last_id: lastLogId,
+                    nonce: sewnWsAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        updateLogDisplay(response.data);
+                    }
+                }
+            });
+        }
+
+        // Update log display
+        function updateLogDisplay(logs) {
+            var $content = $('.error-log-content');
+            var activeFilters = $('.log-level-filter:checked').map(function() {
+                return $(this).val();
+            }).get();
+
+            logs.forEach(function(log) {
+                if (activeFilters.includes(log.level)) {
+                    lastLogId = Math.max(lastLogId, log.id);
+                    var $entry = $('<div class="error-log-entry ' + log.level + '">' +
+                        '<div class="timestamp">' + log.time + '</div>' +
+                        '<div class="message">' + log.message + '</div>' +
+                        '<div class="context">' + JSON.stringify(log.context, null, 2) + '</div>' +
+                    '</div>');
+                    $content.prepend($entry);
+                }
+            });
+
+            $('.error-log-loading').hide();
+        }
+
+        // Start log refresh
+        function startLogRefresh() {
+            loadLogs();
+            logRefreshInterval = setInterval(loadLogs, 5000);
+        }
+
+        // Stop log refresh
+        function stopLogRefresh() {
+            clearInterval(logRefreshInterval);
+        }
+
+        // Clear logs
+        $('.clear-logs').on('click', function() {
+            if (!confirm('<?php _e('Are you sure you want to clear all logs?', 'sewn-ws'); ?>')) {
+                return;
+            }
+
+            $.post(ajaxurl, {
+                action: 'sewn_ws_clear_logs',
+                nonce: sewnWsAdmin.nonce
+            }, function(response) {
+                if (response.success) {
+                    $('.error-log-content').empty();
+                    lastLogId = 0;
+                }
+            });
+        });
+
+        // Export logs
+        $('.export-logs').on('click', function() {
+            window.location.href = ajaxurl + '?' + $.param({
+                action: 'sewn_ws_export_logs',
+                nonce: sewnWsAdmin.nonce
+            });
+        });
+
+        // Filter logs
+        $('.log-level-filter').on('change', function() {
+            var level = $(this).val();
+            $('.error-log-entry.' + level).toggle($(this).is(':checked'));
+        });
+
+        // Initialize if debug mode is enabled
+        if ($('#sewn_ws_debug_enabled').is(':checked')) {
+            startLogRefresh();
+        }
+    });
+    </script>
 </div>
 
 <style>

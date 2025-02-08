@@ -33,16 +33,43 @@ if (!defined('SEWN_WS_FILE')) {
     define('SEWN_WS_FILE', __FILE__);
 }
 
-// Load Composer's autoloader
+// Register autoloader first
+spl_autoload_register(function ($class) {
+    // Base namespace for the plugin
+    $prefix = 'SEWN\\WebSockets\\';
+    $len = strlen($prefix);
+
+    // Check if the class uses our namespace
+    if (strncmp($prefix, $class, $len) !== 0) {
+        return;
+    }
+
+    // Get the relative class name
+    $relative_class = substr($class, $len);
+    $parts = explode('\\', $relative_class);
+
+    // Handle Admin namespace classes
+    if ($parts[0] === 'Admin') {
+        array_shift($parts); // Remove 'Admin' from parts
+        $file = plugin_dir_path(__FILE__) . 'admin/class-' . 
+                strtolower(str_replace('_', '-', implode('-', $parts))) . '.php';
+        if (file_exists($file)) {
+            require_once $file;
+            return;
+        }
+    }
+
+    // Handle regular classes
+    $file = plugin_dir_path(__FILE__) . 'includes/class-' . 
+            strtolower(str_replace('_', '-', implode('-', $parts))) . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
+// Load Composer's autoloader if it exists
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
-} else {
-    add_action('admin_notices', function() {
-        echo '<div class="notice notice-error"><p>';
-        echo 'WebSocket plugin requires Composer dependencies to be installed. Please run composer install in the plugin directory.';
-        echo '</p></div>';
-    });
-    return;
 }
 
 // Define Global Constants
@@ -52,14 +79,38 @@ require_once __DIR__ . '/includes/constants.php';
 require_once __DIR__ . '/includes/class-exception.php';
 require_once __DIR__ . '/includes/class-error-handler.php';
 require_once __DIR__ . '/includes/class-log-handler.php';
+
+// Load critical admin dependencies first
+require_once __DIR__ . '/admin/class-error-logger.php';
+require_once __DIR__ . '/admin/class-environment-monitor.php';
+
+// Then load core classes that depend on admin classes
 require_once __DIR__ . '/includes/class-module-base.php';
-require_once __DIR__ . '/includes/class-protocol-base.php';
 require_once __DIR__ . '/includes/class-module-registry.php';
+
+// Load remaining core classes
+require_once __DIR__ . '/includes/class-protocol-base.php';
 require_once __DIR__ . '/includes/class-process-manager.php';
 require_once __DIR__ . '/includes/class-websocket-handler.php';
 require_once __DIR__ . '/includes/class-server-process.php';
 require_once __DIR__ . '/includes/class-server-controller.php';
 require_once __DIR__ . '/includes/class-websocket-server.php';
+
+// Load remaining admin classes
+require_once __DIR__ . '/admin/class-settings-page.php';
+require_once __DIR__ . '/admin/class-module-admin.php';
+require_once __DIR__ . '/admin/class-admin-ui.php';
+require_once __DIR__ . '/admin/class-websockets-admin.php';
+
+// Load module protocols
+require_once __DIR__ . '/modules/wirebot/class-wirebot-protocol.php';
+require_once __DIR__ . '/modules/discord/class-discord-protocol.php';
+require_once __DIR__ . '/modules/startempire/class-startempire-protocol.php';
+
+// Load module classes
+require_once __DIR__ . '/modules/wirebot/class-wirebot-module.php';
+require_once __DIR__ . '/modules/discord/class-discord-module.php';
+require_once __DIR__ . '/modules/startempire/class-startempire-module.php';
 
 // Add activation hook immediately after namespace declaration
 register_activation_hook(__FILE__, function() {
@@ -205,57 +256,6 @@ add_action('admin_init', function() {
             echo '</p></div>';
         });
     }
-});
-
-// Add these requires BEFORE the autoloader and in the correct order
-require_once plugin_dir_path(__FILE__) . 'admin/class-error-logger.php';      // Load Error Logger first
-require_once plugin_dir_path(__FILE__) . 'admin/class-environment-monitor.php'; // Load Environment Monitor second
-require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';     // Then settings page
-require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';      // Then module admin
-require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';         // Then admin UI
-require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';  // Finally websockets admin
-
-// Load module protocols first
-require_once plugin_dir_path(__FILE__) . 'modules/wirebot/class-wirebot-protocol.php';
-require_once plugin_dir_path(__FILE__) . 'modules/discord/class-discord-protocol.php';
-require_once plugin_dir_path(__FILE__) . 'modules/startempire/class-startempire-protocol.php';
-
-// Then load module classes
-require_once plugin_dir_path(__FILE__) . 'modules/wirebot/class-wirebot-module.php';
-require_once plugin_dir_path(__FILE__) . 'modules/discord/class-discord-module.php';
-require_once plugin_dir_path(__FILE__) . 'modules/startempire/class-startempire-module.php';
-
-// AUTOLOADER FIX
-spl_autoload_register(function ($class) {
-    $prefix = 'SEWN\\WebSockets\\';
-    $len = strlen($prefix);
-    if (strncmp($prefix, $class, $len) !== 0) {
-        return;
-    }
-    $relative_class = substr($class, $len);
-    $parts = explode('\\', $relative_class);
-
-    // Explicit handling for Admin namespace classes
-    if ($parts[0] === 'Admin') {
-        array_shift($parts); // Remove 'Admin' namespace prefix
-        $class_name = str_replace('_', '-', strtolower(implode('-', $parts)));
-        $file = plugin_dir_path(__FILE__) . 'admin/class-' . $class_name . '.php';
-        if (file_exists($file)) {
-            require_once $file;
-            return;
-        }
-    }
-
-    // Add this section for includes directory classes
-    $class_name = str_replace('_', '-', strtolower(implode('-', $parts)));
-    $file = plugin_dir_path(__FILE__) . 'includes/class-' . $class_name . '.php';
-    
-    if (file_exists($file)) {
-        require_once $file;
-        return;
-    }
-
-    // ... rest of existing autoloader code ...
 });
 
 // INIT HOOK

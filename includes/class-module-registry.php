@@ -20,6 +20,13 @@ use SEWN\WebSockets\Admin\Environment_Monitor;
  */
 class Module_Registry {
     /**
+     * Class instance
+     *
+     * @var Module_Registry
+     */
+    private static $instance = null;
+
+    /**
      * Registered modules
      *
      * @var array
@@ -41,12 +48,34 @@ class Module_Registry {
     private $monitor;
 
     /**
+     * Get class instance
+     *
+     * @return Module_Registry
+     */
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
      * Constructor
      */
-    public function __construct() {
+    private function __construct() {
         $this->logger = Error_Logger::get_instance();
         $this->monitor = Environment_Monitor::get_instance();
     }
+
+    /**
+     * Prevent cloning of singleton instance
+     */
+    private function __clone() {}
+
+    /**
+     * Prevent unserializing of singleton instance
+     */
+    private function __wakeup() {}
 
     /**
      * Register a new module
@@ -218,5 +247,93 @@ class Module_Registry {
      */
     public function get_module($module_id) {
         return isset($this->modules[$module_id]) ? $this->modules[$module_id] : null;
+    }
+
+    /**
+     * Discover and register available modules
+     *
+     * @return array Array of discovered modules
+     */
+    public function discover_modules() {
+        try {
+            $this->modules = array();
+            $module_dirs = glob(dirname(__DIR__) . '/modules/*', GLOB_ONLYDIR);
+
+            if ($module_dirs === false) {
+                throw new \Exception('Failed to scan modules directory');
+            }
+
+            foreach ($module_dirs as $dir) {
+                try {
+                    $module_slug = basename($dir);
+                    $main_file = "$dir/class-{$module_slug}-module.php";
+
+                    if (!file_exists($main_file)) {
+                        $this->logger->log(
+                            sprintf('Module main file not found for %s', $module_slug),
+                            array('path' => $main_file),
+                            'warning'
+                        );
+                        continue;
+                    }
+
+                    require_once $main_file;
+                    $class_name = 'SEWN\\WebSockets\\Modules\\' . ucfirst($module_slug) . '\\' . ucfirst($module_slug) . '_Module';
+
+                    if (!class_exists($class_name)) {
+                        $this->logger->log(
+                            sprintf('Module class %s not found', $class_name),
+                            array('module_slug' => $module_slug),
+                            'warning'
+                        );
+                        continue;
+                    }
+
+                    $module = new $class_name();
+
+                    // Validate module interface
+                    if (!$module instanceof Module_Base) {
+                        $this->logger->log(
+                            sprintf('Invalid module type for %s', $module_slug),
+                            array('class' => $class_name),
+                            'error'
+                        );
+                        continue;
+                    }
+
+                    // Register the module
+                    if ($this->register($module)) {
+                        $this->logger->log(
+                            sprintf('Successfully discovered and registered module %s', $module_slug),
+                            array('class' => $class_name),
+                            'info'
+                        );
+                    }
+
+                } catch (\Exception $e) {
+                    $this->logger->log(
+                        sprintf('Failed to load module in %s', $dir),
+                        array(
+                            'error' => $e->getMessage(),
+                            'module_slug' => $module_slug ?? 'unknown'
+                        ),
+                        'error'
+                    );
+                }
+            }
+
+            // Update environment status after discovery
+            $this->update_environment_status();
+
+            return $this->modules;
+
+        } catch (\Exception $e) {
+            $this->logger->log(
+                'Module discovery failed',
+                array('error' => $e->getMessage()),
+                'error'
+            );
+            return array();
+        }
     }
 } 
