@@ -24,7 +24,7 @@ class Discord_Module extends Module_Base {
             'name' => __('Discord Integration', 'sewn-ws'),
             'version' => '1.0.0',
             'description' => __('Real-time Discord chat integration', 'sewn-ws'),
-            'author' => 'StartEmpire Team',
+            'author' => 'Startempire Team',
             'dependencies' => ['ring-leader']
         ];
     }

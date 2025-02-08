@@ -119,41 +119,69 @@ class Module_Admin {
 
             $module_slug = $module->get_module_slug();
             $option_group = 'sewn_ws_module_' . $module_slug;
-            $option_name = 'sewn_ws_module_' . $module_slug . '_settings';
 
-            // Register standard base settings for all modules
-            register_setting($option_group, $option_name, [
-                'type' => 'array',
-                'sanitize_callback' => [$this, 'sanitize_module_settings']
-            ]);
+            // Register base settings
+            $base_settings = [
+                'debug', 'log_level', 'access_level',
+                'cache_enabled', 'cache_ttl',
+                'rate_limit_enabled', 'rate_limit_requests', 'rate_limit_window'
+            ];
 
-            // Add base settings (combines general, performance and security)
+            foreach ($base_settings as $setting) {
+                register_setting(
+                    $option_group,
+                    "sewn_ws_module_{$module_slug}_{$setting}",
+                    [
+                        'type' => 'string',
+                        'sanitize_callback' => [$this, 'sanitize_setting']
+                    ]
+                );
+            }
+
+            // Add base settings sections and fields
             $this->add_standard_base_settings($module_slug, $option_group);
 
-            // Add module-specific settings
-            $settings = $module->admin_ui();
-            if (!empty($settings['sections'])) {
-                foreach ($settings['sections'] as $section) {
-                add_settings_section(
-                    $section['id'],
-                    $section['title'],
+            // Get module-specific settings
+            $ui = $module->admin_ui();
+
+            // Register and add module-specific settings
+            if (!empty($ui['sections'])) {
+                foreach ($ui['sections'] as $section) {
+                    // Register the section
+                    add_settings_section(
+                        $section['id'],
+                        $section['title'],
                         $section['callback'] ?? null,
-                        $option_group
-                );
+                        $option_group . '_module_settings'
+                    );
                 }
             }
 
-            if (!empty($settings['settings'])) {
-                foreach ($settings['settings'] as $setting) {
-                add_settings_field(
-                    $setting['name'],
-                    $setting['label'],
-                    [$this, 'render_setting_field'],
+            if (!empty($ui['settings'])) {
+                foreach ($ui['settings'] as $setting) {
+                    // Register the setting
+                    register_setting(
                         $option_group,
-                        $setting['section'] ?? 'general',
+                        $setting['name'],
                         [
-                            'module' => $module_slug,
-                            'setting' => $setting
+                            'type' => 'string',
+                            'sanitize_callback' => $setting['sanitize'] ?? [$this, 'sanitize_setting']
+                        ]
+                    );
+
+                    // Add the settings field
+                    add_settings_field(
+                        $setting['name'],
+                        $setting['label'],
+                        [$this, 'render_setting_field'],
+                        $option_group . '_module_settings',
+                        $setting['section'],
+                        [
+                            'type' => $setting['type'],
+                            'name' => $setting['name'],
+                            'description' => $setting['description'],
+                            'options' => $setting['options'] ?? [],
+                            'depends_on' => $setting['depends_on'] ?? null
                         ]
                     );
                 }
@@ -161,127 +189,202 @@ class Module_Admin {
         }
     }
 
+    public function sanitize_setting($value) {
+        if (is_bool($value)) {
+            return $value;
+        }
+        
+        if (is_numeric($value)) {
+            return absint($value);
+        }
+        
+        return sanitize_text_field($value);
+    }
+
     private function add_standard_base_settings($module_slug, $option_group) {
-        // Core Settings Tab - Left Column
+        // Core Settings - Left Column
         add_settings_section(
-            'core_left',
+            'module_info',
             __('Module Information', 'sewn-ws'),
             [$this, 'render_module_info_section'],
-            $option_group
+            $option_group . '_core_left'
         );
 
-        // Core Settings Tab - Right Column
         add_settings_section(
-            'core_right',
+            'access_control',
             __('Access Control', 'sewn-ws'),
             [$this, 'render_access_section'],
-            $option_group
+            $option_group . '_core_left'
         );
 
-        // Performance Tab - Left Column
+        // Core Settings - Right Column
         add_settings_section(
-            'performance_left',
-            __('Caching', 'sewn-ws'),
+            'debug_settings',
+            __('Debug Settings', 'sewn-ws'),
+            null,
+            $option_group . '_core_right'
+        );
+
+        // Performance - Left Column
+        add_settings_section(
+            'cache_settings',
+            __('Cache Settings', 'sewn-ws'),
             [$this, 'render_cache_section'],
-            $option_group
+            $option_group . '_performance_left'
         );
 
-        // Performance Tab - Right Column
+        // Performance - Right Column
         add_settings_section(
-            'performance_right',
-            __('Rate Limiting', 'sewn-ws'),
+            'rate_limits',
+            __('Rate Limits', 'sewn-ws'),
             [$this, 'render_rate_section'],
-            $option_group
+            $option_group . '_performance_right'
         );
 
-        // Core Settings
-        $core_settings = [
-            // Left Column
-            'core_left' => [
-                [
-                    'name' => 'debug_mode',
-                    'label' => __('Debug Mode', 'sewn-ws'),
-                    'type' => 'checkbox',
-                    'description' => __('Enable detailed logging for troubleshooting', 'sewn-ws'),
-                    'sanitize' => 'rest_sanitize_boolean'
-                ]
-            ],
-            // Right Column
-            'core_right' => [
-                [
-                    'name' => 'access_level',
-                    'label' => __('Required Capability', 'sewn-ws'),
-                    'type' => 'select',
-                    'description' => __('Minimum capability required to use this module', 'sewn-ws'),
-                    'options' => [
-                        'manage_options' => __('Administrator', 'sewn-ws'),
-                        'edit_pages' => __('Editor', 'sewn-ws'),
-                        'publish_posts' => __('Author', 'sewn-ws')
-                    ],
-                    'sanitize' => 'sanitize_text_field'
-                ]
-            ]
-        ];
+        // Module Information Fields
+        add_settings_field(
+            'module_status_indicator',
+            __('Module Status', 'sewn-ws'),
+            [$this, 'render_status_indicator'],
+            $option_group . '_core_left',
+            'module_info',
+            ['module_slug' => $module_slug]
+        );
 
-        // Performance Settings
-        $performance_settings = [
-            // Left Column
-            'performance_left' => [
-                [
-                    'name' => 'cache_enabled',
-                    'label' => __('Enable Caching', 'sewn-ws'),
-                    'type' => 'checkbox',
-                    'description' => __('Cache responses to improve performance', 'sewn-ws'),
-                    'sanitize' => 'rest_sanitize_boolean'
+        // Access Control Fields
+        add_settings_field(
+            'access_level',
+            __('Access Level', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_core_left',
+            'access_control',
+            [
+                'type' => 'select',
+                'name' => "sewn_ws_module_{$module_slug}_access_level",
+                'options' => [
+                    'public' => __('Public Access', 'sewn-ws'),
+                    'registered' => __('Registered Users', 'sewn-ws'),
+                    'premium' => __('Premium Members', 'sewn-ws')
                 ],
-                [
-                    'name' => 'cache_ttl',
-                    'label' => __('Cache Duration', 'sewn-ws'),
-                    'type' => 'select',
-                    'description' => __('How long to keep cached data', 'sewn-ws'),
-                    'options' => [
-                        '300' => __('5 minutes', 'sewn-ws'),
-                        '3600' => __('1 hour', 'sewn-ws'),
-                        '86400' => __('24 hours', 'sewn-ws')
-                    ],
-                    'sanitize' => 'absint',
-                    'depends_on' => 'cache_enabled'
-                ]
-            ],
-            // Right Column
-            'performance_right' => [
-                [
-                    'name' => 'rate_limit',
-                    'label' => __('Request Limit', 'sewn-ws'),
-                    'type' => 'number',
-                    'description' => __('Maximum requests per minute (0 for unlimited)', 'sewn-ws'),
-                    'sanitize' => 'absint',
-                    'min' => 0,
-                    'max' => 1000
-                ]
+                'description' => __('Select who can access this module', 'sewn-ws')
             ]
-        ];
+        );
 
-        // Register all settings
-        foreach ([$core_settings, $performance_settings] as $tab_settings) {
-            foreach ($tab_settings as $section => $settings) {
-                foreach ($settings as $setting) {
-                    $setting_name = 'sewn_ws_' . $module_slug . '_' . $setting['name'];
-                    register_setting($option_group, $setting_name);
-                    add_settings_field(
-                        $setting_name,
-                        $setting['label'],
-                        [$this, 'render_setting_field'],
-                        $option_group,
-                        $section,
-                        [
-                            'module' => $module_slug,
-                            'setting' => $setting
-                        ]
-                    );
-                }
-            }
-        }
+        // Debug Settings Fields
+        add_settings_field(
+            'debug_mode',
+            __('Debug Mode', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_core_right',
+            'debug_settings',
+            [
+                'type' => 'checkbox',
+                'name' => "sewn_ws_module_{$module_slug}_debug",
+                'description' => __('Enable debug logging for this module', 'sewn-ws')
+            ]
+        );
+
+        add_settings_field(
+            'log_level',
+            __('Log Level', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_core_right',
+            'debug_settings',
+            [
+                'type' => 'select',
+                'name' => "sewn_ws_module_{$module_slug}_log_level",
+                'options' => [
+                    'error' => __('Errors Only', 'sewn-ws'),
+                    'warning' => __('Warnings & Errors', 'sewn-ws'),
+                    'info' => __('Info & Above', 'sewn-ws'),
+                    'debug' => __('Debug & Above', 'sewn-ws')
+                ],
+                'description' => __('Select logging detail level', 'sewn-ws'),
+                'depends_on' => "sewn_ws_module_{$module_slug}_debug"
+            ]
+        );
+
+        // Cache Settings Fields
+        add_settings_field(
+            'cache_enabled',
+            __('Enable Caching', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_performance_left',
+            'cache_settings',
+            [
+                'type' => 'checkbox',
+                'name' => "sewn_ws_module_{$module_slug}_cache_enabled",
+                'description' => __('Enable data caching for better performance', 'sewn-ws')
+            ]
+        );
+
+        add_settings_field(
+            'cache_ttl',
+            __('Cache Duration', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_performance_left',
+            'cache_settings',
+            [
+                'type' => 'select',
+                'name' => "sewn_ws_module_{$module_slug}_cache_ttl",
+                'options' => [
+                    '300' => __('5 minutes', 'sewn-ws'),
+                    '900' => __('15 minutes', 'sewn-ws'),
+                    '3600' => __('1 hour', 'sewn-ws'),
+                    '86400' => __('24 hours', 'sewn-ws')
+                ],
+                'description' => __('How long to keep cached data', 'sewn-ws'),
+                'depends_on' => "sewn_ws_module_{$module_slug}_cache_enabled"
+            ]
+        );
+
+        // Rate Limit Fields
+        add_settings_field(
+            'rate_limit_enabled',
+            __('Enable Rate Limiting', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_performance_right',
+            'rate_limits',
+            [
+                'type' => 'checkbox',
+                'name' => "sewn_ws_module_{$module_slug}_rate_limit_enabled",
+                'description' => __('Enable request rate limiting', 'sewn-ws')
+            ]
+        );
+
+        add_settings_field(
+            'rate_limit_requests',
+            __('Max Requests', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_performance_right',
+            'rate_limits',
+            [
+                'type' => 'number',
+                'name' => "sewn_ws_module_{$module_slug}_rate_limit_requests",
+                'description' => __('Maximum requests per time window', 'sewn-ws'),
+                'depends_on' => "sewn_ws_module_{$module_slug}_rate_limit_enabled"
+            ]
+        );
+
+        add_settings_field(
+            'rate_limit_window',
+            __('Time Window', 'sewn-ws'),
+            [$this, 'render_setting_field'],
+            $option_group . '_performance_right',
+            'rate_limits',
+            [
+                'type' => 'select',
+                'name' => "sewn_ws_module_{$module_slug}_rate_limit_window",
+                'options' => [
+                    '60' => __('1 minute', 'sewn-ws'),
+                    '300' => __('5 minutes', 'sewn-ws'),
+                    '3600' => __('1 hour', 'sewn-ws'),
+                    '86400' => __('24 hours', 'sewn-ws')
+                ],
+                'description' => __('Time window for rate limiting', 'sewn-ws'),
+                'depends_on' => "sewn_ws_module_{$module_slug}_rate_limit_enabled"
+            ]
+        );
     }
 
     public function render_module_info_section($args) {
@@ -318,26 +421,33 @@ class Module_Admin {
     }
 
     public function render_setting_field($args) {
-        $module = $args['module'];
-        $setting = $args['setting'];
-        $name = 'sewn_ws_' . $module . '_' . $setting['name'];
-        $value = get_option($name);
-        $depends_on = isset($setting['depends_on']) ? 'data-depends-on="sewn_ws_' . $module . '_' . $setting['depends_on'] . '"' : '';
+        // Extract all needed values from args
+        $type = $args['type'] ?? 'text';
+        $name = $args['name'] ?? '';
+        $description = $args['description'] ?? '';
+        $options = $args['options'] ?? [];
+        $depends_on = $args['depends_on'] ?? '';
         
-        switch ($setting['type']) {
+        // Get the current value
+        $value = get_option($name);
+        
+        // Add dependency attribute if needed
+        $dependency_attr = $depends_on ? sprintf('data-depends-on="%s"', esc_attr($depends_on)) : '';
+        
+        switch ($type) {
             case 'checkbox':
                 printf(
                     '<label><input type="checkbox" name="%s" value="1" %s %s> %s</label>',
                     esc_attr($name),
                     checked($value, '1', false),
-                    $depends_on,
-                    esc_html($setting['description'])
+                    $dependency_attr,
+                    esc_html($description)
                 );
                 break;
                 
             case 'select':
-                printf('<select name="%s" %s>', esc_attr($name), $depends_on);
-                foreach ($setting['options'] as $option_value => $option_label) {
+                printf('<select name="%s" %s>', esc_attr($name), $dependency_attr);
+                foreach ($options as $option_value => $option_label) {
                     printf(
                         '<option value="%s" %s>%s</option>',
                         esc_attr($option_value),
@@ -346,19 +456,33 @@ class Module_Admin {
                     );
                 }
                 echo '</select>';
-                echo '<p class="description">' . esc_html($setting['description']) . '</p>';
+                if ($description) {
+                    echo '<p class="description">' . esc_html($description) . '</p>';
+                }
                 break;
                 
             case 'number':
                 printf(
-                    '<input type="number" name="%s" value="%s" min="%d" max="%d" %s>',
+                    '<input type="number" name="%s" value="%s" %s>',
                     esc_attr($name),
                     esc_attr($value),
-                    $setting['min'] ?? 0,
-                    $setting['max'] ?? 999999,
-                    $depends_on
+                    $dependency_attr
                 );
-                echo '<p class="description">' . esc_html($setting['description']) . '</p>';
+                if ($description) {
+                    echo '<p class="description">' . esc_html($description) . '</p>';
+                }
+                break;
+                
+            case 'password':
+                printf(
+                    '<input type="password" name="%s" value="%s" class="regular-text" %s>',
+                    esc_attr($name),
+                    esc_attr($value),
+                    $dependency_attr
+                );
+                if ($description) {
+                    echo '<p class="description">' . esc_html($description) . '</p>';
+                }
                 break;
                 
             default:
@@ -366,18 +490,12 @@ class Module_Admin {
                     '<input type="text" name="%s" value="%s" class="regular-text" %s>',
                     esc_attr($name),
                     esc_attr($value),
-                    $depends_on
+                    $dependency_attr
                 );
-                echo '<p class="description">' . esc_html($setting['description']) . '</p>';
+                if ($description) {
+                    echo '<p class="description">' . esc_html($description) . '</p>';
+                }
         }
-    }
-
-    public function sanitize_module_settings($input) {
-        $sanitized = [];
-        foreach ($input as $key => $value) {
-            $sanitized[$key] = sanitize_text_field($value);
-        }
-        return $sanitized;
     }
 
     public function handle_stats_request() {
@@ -468,147 +586,177 @@ class Module_Admin {
     }
 
     public function render_module_settings_page() {
-        // Get module slug and create option group
         $module_slug = $this->get_current_module_slug();
-        $option_group = 'sewn_ws_module_' . $module_slug;
+        $module = $this->registry->get_module($module_slug);
+        
+        if (!$module || !$module instanceof \SEWN\WebSockets\Module_Base) {
+            wp_die(__('Invalid module or module not loaded', 'sewn-ws'));
+        }
 
+        $option_group = 'sewn_ws_module_' . $module_slug;
+        $meta = $module->metadata();
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-            
-            <h2 class="nav-tab-wrapper">
-                <a href="#tab-core" class="nav-tab nav-tab-active" data-tab="core">
-                    <?php _e('Core Settings', 'sewn-ws'); ?>
-                </a>
-                <a href="#tab-performance" class="nav-tab" data-tab="performance">
-                    <?php _e('Performance', 'sewn-ws'); ?>
-                </a>
-            </h2>
+            <h1><?php echo esc_html($meta['name']); ?> <?php _e('Settings', 'sewn-ws'); ?></h1>
 
-            <form method="post" action="options.php">
-                <?php settings_fields($option_group); ?>
-                
-                <div class="sewn-ws-tab-content" id="tab-core">
-                    <div class="sewn-ws-columns">
-                        <div class="sewn-ws-column">
-                            <?php do_settings_sections($option_group . '_core_left'); ?>
-                        </div>
-                        <div class="sewn-ws-column">
-                            <?php do_settings_sections($option_group . '_core_right'); ?>
+            <?php settings_errors(); ?>
+
+            <div class="sewn-ws-tabs">
+                <nav class="nav-tab-wrapper">
+                    <a href="#core-settings" class="nav-tab nav-tab-active"><?php _e('Core Settings', 'sewn-ws'); ?></a>
+                    <a href="#performance" class="nav-tab"><?php _e('Performance', 'sewn-ws'); ?></a>
+                    <a href="#module-settings" class="nav-tab"><?php _e('Module Settings', 'sewn-ws'); ?></a>
+                </nav>
+
+                <form method="post" action="options.php">
+                    <?php settings_fields($option_group); ?>
+                    
+                    <div id="core-settings" class="sewn-ws-tab-content active">
+                        <div class="sewn-ws-settings-grid">
+                            <div class="sewn-ws-settings-column">
+                                <?php do_settings_sections($option_group . '_core_left'); ?>
+                            </div>
+                            <div class="sewn-ws-settings-column">
+                                <?php do_settings_sections($option_group . '_core_right'); ?>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="sewn-ws-tab-content" id="tab-performance" style="display: none;">
-                    <div class="sewn-ws-columns">
-                        <div class="sewn-ws-column">
-                            <?php do_settings_sections($option_group . '_performance_left'); ?>
-                        </div>
-                        <div class="sewn-ws-column">
-                            <?php do_settings_sections($option_group . '_performance_right'); ?>
+                    <div id="performance" class="sewn-ws-tab-content">
+                        <div class="sewn-ws-settings-grid">
+                            <div class="sewn-ws-settings-column">
+                                <?php do_settings_sections($option_group . '_performance_left'); ?>
+                            </div>
+                            <div class="sewn-ws-settings-column">
+                                <?php do_settings_sections($option_group . '_performance_right'); ?>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <hr class="sewn-ws-section-separator" />
-                
-                <h3><?php _e('Module Specific Settings', 'sewn-ws'); ?></h3>
-                <?php
-                // Get module instance
-                $module = $this->registry->get_module($module_slug);
-                
-                // Render custom module settings
-                $custom_settings = $module->admin_ui()['settings'] ?? [];
-                if (!empty($custom_settings)) {
-                    echo '<table class="form-table">';
-                    foreach ($custom_settings as $setting) {
-                        echo '<tr>';
-                        echo '<th scope="row">' . esc_html($setting['label']) . '</th>';
-                        echo '<td>';
-                        $this->render_setting_field([
-                            'module' => $module_slug,
-                            'setting' => $setting
-                        ]);
-                        echo '</td>';
-                        echo '</tr>';
-                    }
-                    echo '</table>';
-                }
-                
-                submit_button();
-                ?>
-            </form>
+                    <div id="module-settings" class="sewn-ws-tab-content">
+                        <?php 
+                        $ui = $module->admin_ui();
+                        if (!empty($ui['sections'])) {
+                            foreach ($ui['sections'] as $section) {
+                                do_settings_sections($option_group . '_' . $section['id']);
+                            }
+                        } else {
+                            echo '<div class="notice notice-info inline"><p>';
+                            _e('This module does not have any custom settings.', 'sewn-ws');
+                            echo '</p></div>';
+                        }
+                        ?>
+                    </div>
+
+                    <?php submit_button(); ?>
+                </form>
+            </div>
         </div>
 
         <style>
-        .sewn-ws-columns {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin: 20px 0;
-        }
-
-        .sewn-ws-section-separator {
-            margin: 40px 0 20px;
-            border-top: 1px solid #ccd0d4;
-            border-bottom: 0;
-        }
-
-        .sewn-ws-tab-content:not(:first-child) {
-            display: none;
-        }
-
-        .form-table th {
-            width: 200px;
-        }
-
-        /* Add proper spacing between sections */
-        .sewn-ws-column .form-table {
-            margin-top: 0;
-        }
-
-        /* Ensure section titles are visible */
-        .sewn-ws-column h2 {
-            margin-top: 0;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #ccd0d4;
-        }
+            .sewn-ws-tabs {
+                margin-top: 20px;
+            }
+            .sewn-ws-tab-content {
+                display: none;
+                padding: 20px;
+                background: #fff;
+                border: 1px solid #ccc;
+                border-top: none;
+            }
+            .sewn-ws-tab-content.active {
+                display: block;
+            }
+            .sewn-ws-settings-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 30px;
+            }
+            .sewn-ws-settings-column {
+                min-width: 0;
+            }
+            .module-status {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 15px;
+                padding: 10px;
+                background: #f8f9fa;
+                border-radius: 4px;
+            }
+            .status-indicator {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+            }
+            .module-status.active .status-indicator {
+                background: #00a32a;
+            }
+            .module-status.inactive .status-indicator {
+                background: #cc1818;
+            }
+            .notice.inline {
+                margin: 0;
+                padding: 10px;
+            }
         </style>
 
         <script>
         jQuery(document).ready(function($) {
-            $('.nav-tab').on('click', function(e) {
+            // Tab switching
+            $('.sewn-ws-tabs .nav-tab').on('click', function(e) {
                 e.preventDefault();
+                var target = $(this).attr('href');
                 
                 // Update tabs
-                $('.nav-tab').removeClass('nav-tab-active');
+                $('.sewn-ws-tabs .nav-tab').removeClass('nav-tab-active');
                 $(this).addClass('nav-tab-active');
                 
-                // Show/hide content
-                $('.sewn-ws-tab-content').hide();
-                $($(this).attr('href')).show();
+                // Update content
+                $('.sewn-ws-tab-content').removeClass('active');
+                $(target).addClass('active');
             });
+
+            // Show/hide dependent fields
+            $('input[type="checkbox"]').on('change', function() {
+                var dependentFields = $('[data-depends-on="' + $(this).attr('name') + '"]');
+                dependentFields.closest('tr').toggle(this.checked);
+            }).trigger('change');
         });
         </script>
         <?php
     }
 
     private function get_current_module_slug() {
-        $current_screen = get_current_screen();
+        $screen = get_current_screen();
+        if (!$screen) return '';
         
-        // Handle both possible screen ID formats
-        $module_slug = '';
-        if (strpos($current_screen->id, 'websockets_page_sewn-ws-module-') !== false) {
-            $module_slug = str_replace('websockets_page_sewn-ws-module-', '', $current_screen->id);
-        } else if (strpos($current_screen->id, 'admin_page_sewn-ws-module-') !== false) {
-            $module_slug = str_replace('admin_page_sewn-ws-module-', '', $current_screen->id);
+        // Handle both possible formats
+        $patterns = [
+            '/^websockets_page_sewn-ws-module-(.+)$/',
+            '/^admin_page_sewn-ws-module-(.+)$/'
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $screen->id, $matches)) {
+                return $matches[1];
+            }
         }
         
-        if (empty($module_slug)) {
-            error_log('[SEWN WebSocket] Invalid screen ID format: ' . $current_screen->id);
-            wp_die(__('Invalid module screen format', 'sewn-ws'));
-        }
+        return '';
+    }
 
-        return $module_slug;
+    public function render_status_indicator($args) {
+        $module_slug = $args['module_slug'];
+        $is_active = $this->is_module_active($module_slug);
+        $status_class = $is_active ? 'active' : 'inactive';
+        ?>
+        <div class="module-status <?php echo esc_attr($status_class); ?>">
+            <span class="status-indicator"></span>
+            <span class="status-text">
+                <?php echo $is_active ? esc_html__('Active', 'sewn-ws') : esc_html__('Inactive', 'sewn-ws'); ?>
+            </span>
+        </div>
+        <?php
     }
 }

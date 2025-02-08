@@ -40,7 +40,7 @@ class Discord_Client {
             ],
             'body' => wp_json_encode([
                 'content' => $message['content'] ?? '',
-                'username' => $message['username'] ?? 'WireBot',
+                'username' => $message['username'] ?? 'Wirebot',
                 'avatar_url' => $message['avatar_url'] ?? ''
             ])
         ]);

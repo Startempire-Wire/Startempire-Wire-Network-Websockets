@@ -59,10 +59,10 @@ class Wirebot_Module extends Module_Base {
     public function metadata(): array {
         return [
             'module_slug' => 'wirebot',
-            'name' => __('WireBot Integration', 'sewn-ws'),
+            'name' => __('Wirebot Integration', 'sewn-ws'),
             'version' => '1.1.0',
             'description' => __('AI-powered network assistant integration', 'sewn-ws'),
-            'author' => 'StartEmpire Team',
+            'author' => 'Startempire Team',
             'dependencies' => ['screenshots']
         ];
     }

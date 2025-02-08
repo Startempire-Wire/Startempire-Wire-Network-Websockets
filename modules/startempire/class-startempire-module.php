@@ -24,7 +24,7 @@ class Startempire_Module extends Module_Base {
             'name' => __('Startempire Protocol', 'sewn-ws'),
             'version' => '1.0.0',
             'description' => __('Core network communication protocol', 'sewn-ws'),
-            'author' => 'StartEmpire Team',
+            'author' => 'Startempire Team',
             'dependencies' => ['ring-leader']
         ];
     }
