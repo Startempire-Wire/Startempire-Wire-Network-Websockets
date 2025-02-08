@@ -26,25 +26,14 @@ class WebSocketAdmin {
         this.serverStatus = 'uninitialized'; // Set initial state to uninitialized
         this.socket = null; // Initialize socket as null
         this.hasRefreshed = false;
+        this.statsInterval = null;
 
         this.initializeComponents();
         this.bindEvents();
         this.updateServerStatus('uninitialized'); // Show uninitialized state by default
 
-        // Initialize components directly
-        this.statsDisplay = {
-            update: function (data) {
-                // Basic stats display implementation
-                const stats = document.getElementById('server-stats');
-                if (stats) {
-                    stats.innerHTML = `
-                        <p>Connections: ${data.connections || 0}</p>
-                        <p>Memory Usage: ${data.memory || 0}</p>
-                        <p>Errors: ${data.errors || 0}</p>
-                    `;
-                }
-            }
-        };
+        // Start initial status check
+        this.checkInitialStatus();
 
         // Add nonce verification
         this.nonce = sewn_ws_admin?.nonce || '';
@@ -232,6 +221,9 @@ class WebSocketAdmin {
             clearInterval(this.statsInterval);
         }
 
+        // Add a small delay before starting polling to allow server to fully start
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         const fetchStats = async () => {
             try {
                 const response = await fetch(sewn_ws_admin.ajax_url, {
@@ -245,82 +237,220 @@ class WebSocketAdmin {
                     })
                 });
 
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
                 const data = await response.json();
-                this.statsErrorCount = 0; // Reset error counter
-                this.updateMetrics(data);
+                console.log('Stats response:', data);
 
+                if (data.success && data.data) {
+                    // Check if status is explicitly set
+                    if (data.data.status) {
+                        this.serverStatus = data.data.status;
+                    } else {
+                        // Determine status from running flag
+                        this.serverStatus = data.data.running ? 'running' : 'stopped';
+                    }
+
+                    // Only update UI status if not in a transitional state
+                    if (this.serverStatus !== 'starting') {
+                        this.updateServerStatus(this.serverStatus);
+                    }
+
+                    // Update stats display
+                    this.updateStats(data.data);
+
+                    // Reset error count on successful update
+                    this.statsErrorCount = 0;
+                } else {
+                    throw new Error(data.data?.message || 'Invalid response format');
+                }
             } catch (error) {
                 console.error('Stats polling error:', error);
-                if (++this.statsErrorCount >= this.statsMaxErrors) {
-                    console.warn('Max stats errors reached - stopping polling');
-                    clearInterval(this.statsInterval);
+                this.statsErrorCount++;
+
+                // If we've hit the max error count, stop polling
+                if (this.statsErrorCount >= this.statsMaxErrors) {
+                    console.error('Max stats errors reached, stopping polling');
+                    this.stopStatsPolling();
+                    this.showNotice('error', 'Stats updates stopped due to errors');
                 }
             }
         };
 
-        // Initial fetch with backoff
-        const initialDelay = Math.min(
-            this.pollingBaseDelay * Math.pow(2, this.statsErrorCount),
-            300000 // Max 5 minutes
-        );
+        // Initial fetch
+        await fetchStats();
 
-        this.statsInterval = setInterval(() => {
-            fetchStats().catch(() => { }); // Prevent unhandled promise rejection
-        }, initialDelay);
+        // Start polling
+        this.statsInterval = setInterval(fetchStats, this.pollingBaseDelay);
     }
 
     stopStatsPolling() {
-        clearInterval(this.statsInterval);
-        this.statsErrorCount = 0;
+        if (this.statsInterval) {
+            clearInterval(this.statsInterval);
+            this.statsInterval = null;
+        }
+    }
+
+    updateStats(data) {
+        console.log('Updating stats with:', data);
+
+        // Update metrics display with animations
+        const elements = {
+            connections: document.getElementById('live-connections-count'),
+            memory: document.getElementById('memory-usage'),
+            messageRate: document.getElementById('message-throughput'),
+            channelMessages: document.getElementById('channel-messages'),
+            channelSubscribers: document.getElementById('channel-subscribers'),
+            channelErrors: document.getElementById('channel-errors')
+        };
+
+        // Animate connections update
+        if (elements.connections && data.connections !== undefined) {
+            this.updateMetricsWithAnimation(elements.connections, data.connections);
+        }
+
+        // Update memory with animation and formatting
+        if (elements.memory && data.memory_formatted) {
+            const memoryMB = data.memory_formatted.heapUsed;
+            this.updateMetricsWithAnimation(elements.memory, memoryMB);
+            elements.memory.textContent = `${memoryMB.toFixed(2)} MB`;
+        }
+
+        // Update message rate with animation
+        if (elements.messageRate && data.message_rate) {
+            const rate = data.message_rate.in + data.message_rate.out;
+            this.updateMetricsWithAnimation(elements.messageRate, rate);
+            elements.messageRate.textContent = `${rate.toLocaleString()} msg/s`;
+        }
+
+        // Update channel metrics with animations
+        if (elements.channelMessages && data.total_messages !== undefined) {
+            this.updateMetricsWithAnimation(elements.channelMessages, data.total_messages);
+        }
+
+        if (elements.channelSubscribers && data.connections !== undefined) {
+            this.updateMetricsWithAnimation(elements.channelSubscribers, data.connections);
+        }
+
+        if (elements.channelErrors && data.errors !== undefined) {
+            this.updateMetricsWithAnimation(elements.channelErrors, data.errors);
+        }
+
+        // Update status classes
+        const metricsContainer = document.querySelector('.metrics-grid');
+        if (metricsContainer) {
+            metricsContainer.classList.toggle('server-running', data.status === 'running');
+        }
+
+        // Add visual feedback for updates
+        const cards = document.querySelectorAll('.metric-card');
+        cards.forEach(card => {
+            card.classList.add('updating');
+            setTimeout(() => card.classList.remove('updating'), 300);
+        });
+    }
+
+    updateMetricsWithAnimation(element, newValue, duration = 500) {
+        const start = parseInt(element.textContent) || 0;
+        const change = newValue - start;
+        const startTime = performance.now();
+
+        function animate(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Easing function for smooth animation
+            const easeOut = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+            const current = Math.round(start + (change * easeOut));
+
+            element.textContent = current.toLocaleString();
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    formatMemory(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    formatUptime(seconds) {
+        if (seconds === 0) return 'Not running';
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+
+        const parts = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        if (remainingSeconds > 0) parts.push(`${remainingSeconds}s`);
+
+        return parts.join(' ');
     }
 
     updateServerStatus(status) {
         console.log('Updating server status to:', status);
 
-        // Normalize status to string
-        let normalizedStatus = String(status || '').toLowerCase();
-
-        // Map boolean values
-        if (status === true) normalizedStatus = 'running';
-        if (status === false) normalizedStatus = 'stopped';
-
-        // Store current status
-        this.serverStatus = normalizedStatus;
-
-        const statusElement = document.querySelector('.sewn-ws-status');
-        const statusText = document.querySelector('.status-text');
-
-        if (!statusElement || !statusText) {
-            console.warn('Status elements not found');
+        // Don't update if we're in a transitional state and getting a stopped status
+        if (this.serverStatus === 'starting' && status === 'stopped') {
+            console.log('Ignoring stopped status while starting');
             return;
         }
 
-        // Remove existing status classes
-        statusElement.classList.remove('running', 'stopped', 'error', 'starting', 'uninitialized');
+        // Update internal state
+        this.serverStatus = status;
 
-        // Add new status class
-        statusElement.classList.add(normalizedStatus);
+        // Update status indicator
+        const statusElement = document.querySelector('.sewn-ws-status');
+        const statusText = document.querySelector('.sewn-ws-status .status-text');
 
-        // Update status text
-        const displayText = {
-            'running': 'Running',
-            'stopped': 'Stopped',
-            'error': 'Error',
-            'uninitialized': 'Uninitialized',
-            'starting': 'Starting...'
-        }[normalizedStatus] || normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+        if (statusElement && statusText) {
+            // Remove all status classes
+            statusElement.classList.remove('running', 'stopped', 'starting', 'error', 'uninitialized');
 
-        statusText.textContent = displayText;
+            // Add new status class
+            statusElement.classList.add(status);
+
+            // Update status text
+            let displayText = 'Unknown';
+            switch (status) {
+                case 'running':
+                    displayText = 'Running';
+                    break;
+                case 'stopped':
+                    displayText = 'Stopped';
+                    break;
+                case 'starting':
+                    displayText = 'Starting...';
+                    break;
+                case 'error':
+                    displayText = 'Error';
+                    break;
+                case 'uninitialized':
+                    displayText = 'Not Initialized';
+                    break;
+            }
+            statusText.textContent = displayText;
+        }
 
         // Update button states
         this.updateButtonStates();
 
-        // Handle metrics polling
-        if (normalizedStatus === 'running') {
+        // Start or stop stats polling based on status
+        if (status === 'running') {
             this.startStatsPolling();
-        } else {
+        } else if (status !== 'starting') {
             this.stopStatsPolling();
         }
     }
@@ -510,11 +640,10 @@ class WebSocketAdmin {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-WP-Nonce': this.nonce
                 },
                 body: new URLSearchParams({
-                    action: 'sewn_ws_get_status',
-                    nonce: this.nonce
+                    action: 'sewn_ws_get_stats',
+                    nonce: sewn_ws_admin.nonce
                 })
             });
 
@@ -524,31 +653,67 @@ class WebSocketAdmin {
 
             const data = await response.json();
 
-            if (data.success) {
-                this.updateServerStatus(data.data);
-
-                // Only start polling and initialize WebSocket if server is running
-                if (data.data.status === 'Running') {
-                    this.startStatsPolling();
-                    this.initializeWebSocket();
-                }
+            if (data.success && data.data) {
+                const status = data.data.status?.running ? 'running' : 'stopped';
+                this.updateServerStatus(status);
+                this.updateStats(data.data);
             } else {
-                console.warn('Status check returned unsuccessful:', data);
+                throw new Error(data.data?.message || 'Invalid response format');
             }
         } catch (error) {
             console.error('Initial status check failed:', error);
-            // Don't show alert for initial status check failure
-            // this.showAlert('Failed to check server status. Please refresh the page or contact support.');
+            this.updateServerStatus('error');
+            this.showNotice('error', 'Failed to get server status');
         }
     }
 
     updateButtonStates() {
-        const isRunning = document.querySelector('.sewn-ws-status').classList.contains('running');
-        const isStarting = document.querySelector('.sewn-ws-status').classList.contains('starting');
+        const startButton = document.querySelector('[data-action="start"]');
+        const stopButton = document.querySelector('[data-action="stop"]');
+        const restartButton = document.querySelector('[data-action="restart"]');
 
-        document.querySelector('[data-action="start"]').disabled = isRunning || isStarting;
-        document.querySelector('[data-action="stop"]').disabled = !isRunning || isStarting;
-        document.querySelector('[data-action="restart"]').disabled = !isRunning || isStarting;
+        if (!startButton || !stopButton || !restartButton) return;
+
+        const isRunning = this.serverStatus === 'running';
+        const isStarting = this.serverStatus === 'starting';
+        const isStopped = this.serverStatus === 'stopped';
+        const isError = this.serverStatus === 'error';
+
+        // Start button
+        startButton.disabled = isRunning || isStarting;
+        startButton.classList.toggle('running', isRunning);
+        startButton.classList.toggle('starting', isStarting);
+
+        // Stop button
+        stopButton.disabled = !isRunning;
+        stopButton.classList.toggle('running', isRunning);
+
+        // Restart button
+        restartButton.disabled = !isRunning || isStarting;
+        restartButton.classList.toggle('running', isRunning);
+        restartButton.classList.toggle('starting', isStarting);
+
+        // Update button text based on state
+        startButton.textContent = isStarting ? 'Starting...' : 'Start Server';
+        stopButton.textContent = isRunning ? 'Stop Server' : 'Stop Server';
+        restartButton.textContent = isStarting ? 'Restarting...' : 'Restart Server';
+    }
+
+    handleError(error) {
+        console.error('Server error:', error);
+
+        const errorContainer = document.createElement('div');
+        errorContainer.className = 'error-notification';
+        errorContainer.innerHTML = `
+            <div class="error-content">
+                <h4>Error Detected</h4>
+                <p>${error.message}</p>
+                <small>${new Date(error.timestamp).toLocaleTimeString()}</small>
+            </div>
+        `;
+
+        document.body.appendChild(errorContainer);
+        setTimeout(() => errorContainer.remove(), 5000);
     }
 }
 

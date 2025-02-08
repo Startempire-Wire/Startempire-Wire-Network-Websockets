@@ -208,7 +208,9 @@ add_action('admin_init', function() {
 });
 
 // Add these requires BEFORE the autoloader and in the correct order
-require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';     // Load this first
+require_once plugin_dir_path(__FILE__) . 'admin/class-error-logger.php';      // Load Error Logger first
+require_once plugin_dir_path(__FILE__) . 'admin/class-environment-monitor.php'; // Load Environment Monitor second
+require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';     // Then settings page
 require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';      // Then module admin
 require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';         // Then admin UI
 require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';  // Finally websockets admin

@@ -1,0 +1,172 @@
+/* Environment Notice */
+.sewn-ws-environment-details {
+    margin: 10px 0;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+}
+
+.sewn-ws-environment-details ul {
+    margin: 10px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sewn-ws-environment-details li {
+    margin: 5px 0;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.sewn-ws-environment-details li:last-child {
+    border-bottom: none;
+}
+
+.sewn-ws-environment-details .dashicons {
+    margin-right: 5px;
+}
+
+.sewn-ws-environment-details .dashicons-yes {
+    color: #46b450;
+}
+
+.sewn-ws-environment-details .dashicons-no {
+    color: #dc3232;
+}
+
+/* Environment Panel */
+.sewn-ws-environment-panel {
+    margin: 20px 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.sewn-ws-environment-panel h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.sewn-ws-environment-info {
+    margin-top: 20px;
+}
+
+.environment-status {
+    margin-top: 20px;
+}
+
+.environment-status h3 {
+    margin: 15px 0 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    color: #23282d;
+    font-size: 14px;
+}
+
+.environment-status ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.environment-status li {
+    margin: 8px 0;
+    padding: 5px 0;
+}
+
+.environment-status strong {
+    display: inline-block;
+    min-width: 150px;
+}
+
+/* Debug Panel */
+.sewn-ws-debug-panel {
+    margin: 20px 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.sewn-ws-debug-panel h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.sewn-ws-log-viewer {
+    margin-top: 20px;
+}
+
+.log-controls {
+    margin-bottom: 15px;
+}
+
+.log-controls .button {
+    margin-right: 10px;
+}
+
+.log-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 15px;
+    background: #f6f7f7;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* Settings Form */
+.form-table td {
+    position: relative;
+}
+
+.ssl-path-select {
+    margin: 5px 0;
+    max-width: 400px;
+}
+
+.description {
+    margin-top: 5px;
+    color: #666;
+}
+
+/* Auto-detected Settings */
+.auto-detected {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.auto-detected input[type="checkbox"],
+.auto-detected input[type="text"],
+.auto-detected input[type="url"] {
+    pointer-events: none;
+}
+
+.auto-detected .description {
+    font-style: italic;
+}
+
+/* Responsive Adjustments */
+@media screen and (max-width: 782px) {
+    .environment-status strong {
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    .sewn-ws-environment-panel,
+    .sewn-ws-debug-panel {
+        margin: 10px 0;
+        padding: 15px;
+    }
+
+    .log-content {
+        max-height: 300px;
+    }
+} 

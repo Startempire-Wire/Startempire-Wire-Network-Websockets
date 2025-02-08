@@ -17,6 +17,48 @@ namespace SEWN\WebSockets;
  * Base class for all WebSocket modules
  */
 abstract class Module_Base {
+    /**
+     * Module ID
+     *
+     * @var string
+     */
+    protected $id;
+
+    /**
+     * Module version
+     *
+     * @var string
+     */
+    protected $version = '1.0.0';
+
+    /**
+     * Module status
+     *
+     * @var string
+     */
+    protected $status = 'inactive';
+
+    /**
+     * Minimum PHP version required
+     *
+     * @var string
+     */
+    protected $min_php_version = '7.4';
+
+    /**
+     * Minimum WordPress version required
+     *
+     * @var string
+     */
+    protected $min_wp_version = '5.8';
+
+    /**
+     * Module dependencies
+     *
+     * @var array
+     */
+    protected $dependencies = array();
+
     public function __construct() {
         // Empty constructor - activation hook moved to separate method
     }
@@ -60,13 +102,6 @@ abstract class Module_Base {
         // Clear any existing caches
         wp_cache_delete('sewn_ws_active_modules', 'sewn_ws');
     }
-
-    /**
-     * Get the module's slug
-     *
-     * @return string
-     */
-    abstract public function get_module_slug();
 
     /**
      * Get the module's name
@@ -149,9 +184,109 @@ abstract class Module_Base {
      */
     abstract public function metadata(): array;
 
+    /**
+     * Get module ID
+     *
+     * @return string
+     */
+    public function get_id() {
+        return $this->id;
+    }
+
+    /**
+     * Get module version
+     *
+     * @return string
+     */
+    public function get_version() {
+        return $this->version;
+    }
+
+    /**
+     * Get module status
+     *
+     * @return string
+     */
+    public function get_status() {
+        return $this->status;
+    }
+
+    /**
+     * Check if module is active
+     *
+     * @return bool
+     */
     public function is_active() {
+        // Check internal status first
+        if ($this->status !== 'active') {
+            return false;
+        }
+
+        // Check persistent activation status
         $meta = $this->metadata();
         $slug = $this->get_module_slug();
-        return (bool) get_option("sewn_module_{$slug}_active", false);
+        $is_active = (bool) get_option("sewn_module_{$slug}_active", false);
+
+        // Update internal status if there's a mismatch
+        if ($is_active && $this->status !== 'active') {
+            $this->set_status('active');
+        } elseif (!$is_active && $this->status === 'active') {
+            $this->set_status('inactive');
+        }
+
+        return $is_active;
+    }
+
+    /**
+     * Get minimum PHP version required
+     *
+     * @return string
+     */
+    public function get_min_php_version() {
+        return $this->min_php_version;
+    }
+
+    /**
+     * Get minimum WordPress version required
+     *
+     * @return string
+     */
+    public function get_min_wp_version() {
+        return $this->min_wp_version;
+    }
+
+    /**
+     * Get module dependencies
+     *
+     * @return array
+     */
+    public function get_dependencies() {
+        return $this->dependencies;
+    }
+
+    /**
+     * Set module status
+     *
+     * @param string $status New status
+     * @return void
+     */
+    protected function set_status($status) {
+        $this->status = $status;
+    }
+
+    /**
+     * Get module slug
+     *
+     * @return string
+     */
+    protected function get_module_slug() {
+        if (empty($this->id)) {
+            // Fallback to class name if id not set
+            $class_name = get_class($this);
+            $parts = explode('\\', $class_name);
+            $base_name = end($parts);
+            return strtolower(str_replace('_Module', '', $base_name));
+        }
+        return $this->id;
     }
 } 
