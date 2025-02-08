@@ -73,7 +73,7 @@ class Websockets_Admin {
 
         wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sewn_ws_admin_nonce'),
+            'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
             'i18n' => [
                 'confirm_restart' => __('Are you sure you want to restart the WebSocket server?', 'sewn-ws'),
                 'server_starting' => __('Server starting...', 'sewn-ws')

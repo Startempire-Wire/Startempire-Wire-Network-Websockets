@@ -2,11 +2,12 @@
 {
   "name": "sewn-ws-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "directories": {
     "lib": "lib"
   },
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,6 +16,12 @@
   "description": "Startempire Wire Network Websockets Server",
   "dependencies": {
     "@sewn-ws/auth": "^1.0.0",
-    "@sewn-ws/protocols": "^1.0.0"
+    "@sewn-ws/protocols": "^1.0.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "dotenv": "^16.4.1",
+    "winston": "^3.11.0",
+    "redis": "^4.6.12",
+    "jsonwebtoken": "^9.0.2"
   }
 }

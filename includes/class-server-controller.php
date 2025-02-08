@@ -35,11 +35,13 @@ class Server_Controller {
     public function handle_server_control() {
         try {
             // Verify nonce first
-            check_ajax_referer('sewn_ws_control', 'nonce');
+            check_ajax_referer(SEWN_WS_NONCE_ACTION, 'nonce');
             
             if (!current_user_can('manage_options')) {
+                error_log('WebSocket Server: Unauthorized access attempt');
                 wp_send_json_error([
                     'message' => 'Insufficient permissions',
+                    'code' => 'FORBIDDEN',
                     'php_version' => PHP_VERSION,
                     'node_path' => $this->node_binary
                 ], 403);
@@ -48,7 +50,7 @@ class Server_Controller {
 
             $command = sanitize_text_field($_POST['command'] ?? '');
             if (!in_array($command, ['start', 'stop', 'restart'])) {
-                throw new \Exception('Invalid command');
+                throw new \Exception('Invalid command: ' . $command);
             }
 
             // Initialize node binary path
@@ -60,21 +62,37 @@ class Server_Controller {
                 throw new \Exception('Node.js binary not found. Please check server requirements.');
             }
 
+            // Log the command attempt
+            error_log("WebSocket Server: Attempting {$command} command");
+
             // Execute command and return response
             $result = $this->execute_server_command($command);
+            
+            // Log success
+            error_log("WebSocket Server: {$command} command executed successfully");
+            
             wp_send_json_success([
                 'status' => $this->get_server_status(),
                 'message' => "Server {$command} executed successfully",
                 'php_version' => PHP_VERSION,
-                'node_path' => $this->node_binary
+                'node_path' => $this->node_binary,
+                'result' => $result
             ]);
 
         } catch (\Exception $e) {
             error_log('WebSocket Server Control Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            
             wp_send_json_error([
                 'message' => $e->getMessage(),
+                'code' => 'ERROR',
                 'php_version' => PHP_VERSION,
-                'node_path' => $this->node_binary ?? 'undefined'
+                'node_path' => $this->node_binary ?? 'undefined',
+                'debug' => [
+                    'error_type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
             ], 500);
         }
     }
@@ -95,18 +113,51 @@ class Server_Controller {
     }
 
     public function start() {
-        // Implementation to start server
-        return ['status' => 'starting'];
+        try {
+            // Get port from settings
+            $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
+            
+            // Create new server process
+            $server = new Server_Process($port);
+            
+            // Attempt to start the server
+            if (!$server->start()) {
+                throw new \Exception('Failed to start server: ' . $server->get_last_error());
+            }
+            
+            return [
+                'status' => 'running',
+                'port' => $port,
+                'pid' => $server->get_pid(),
+                'message' => 'Server started successfully'
+            ];
+            
+        } catch (\Exception $e) {
+            error_log('WebSocket Server Start Error: ' . $e->getMessage());
+            throw $e;
+        }
     }
     
     public function stop() {
-        // Implementation to stop server  
-        return ['status' => 'stopping'];
+        try {
+            $server = new Server_Process();
+            if ($server->stop()) {
+                return [
+                    'status' => 'stopped',
+                    'message' => 'Server stopped successfully'
+                ];
+            }
+            throw new \Exception('Failed to stop server: ' . $server->get_last_error());
+        } catch (\Exception $e) {
+            error_log('WebSocket Server Stop Error: ' . $e->getMessage());
+            throw $e;
+        }
     }
     
     public function restart() {
-        // Implementation to restart server
-        return ['status' => 'restarting'];
+        $this->stop();
+        sleep(2); // Wait for server to fully stop
+        return $this->start();
     }
 
     private function is_server_running() {
@@ -193,6 +244,44 @@ class Server_Controller {
 
         error_log('Node.js binary not found in any standard location');
         return null;
+    }
+
+    public function handle_stats_request() {
+        try {
+            // Verify nonce first
+            check_ajax_referer(SEWN_WS_NONCE_ACTION, 'nonce');
+            
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error([
+                    'message' => 'Insufficient permissions',
+                    'code' => 'FORBIDDEN'
+                ], 403);
+                return;
+            }
+
+            // Get server status
+            $status = $this->get_server_status();
+            
+            // If server is running, try to get additional stats
+            if ($status['running'] && $status['pid']) {
+                $stats = [
+                    'uptime' => $this->get_server_uptime($status['pid']),
+                    'memory' => $this->get_server_memory($status['pid']),
+                    'connections' => 0, // Will be updated by WebSocket server
+                    'errors' => 0       // Will be updated by WebSocket server
+                ];
+                $status = array_merge($status, $stats);
+            }
+
+            wp_send_json_success($status);
+
+        } catch (\Exception $e) {
+            error_log('WebSocket Stats Error: ' . $e->getMessage());
+            wp_send_json_error([
+                'message' => $e->getMessage(),
+                'code' => 'ERROR'
+            ], 500);
+        }
     }
 
     public function handle_channel_stats() {

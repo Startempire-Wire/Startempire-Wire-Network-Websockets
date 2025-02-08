@@ -25,6 +25,7 @@ class WebSocketAdmin {
         this.pollingBaseDelay = 10000; // 10 seconds
         this.serverStatus = 'uninitialized'; // Set initial state to uninitialized
         this.socket = null; // Initialize socket as null
+        this.hasRefreshed = false;
 
         this.initializeComponents();
         this.bindEvents();
@@ -139,9 +140,9 @@ class WebSocketAdmin {
     }
 
     async handleServerAction(action) {
-        // Cancel any existing request for this action
         if (this.pendingRequests.has(action)) {
-            this.pendingRequests.get(action).abort();
+            console.log('Request already in progress...');
+            return;
         }
 
         const controller = new AbortController();
@@ -150,49 +151,64 @@ class WebSocketAdmin {
         const button = document.querySelector(`[data-action="${action}"]`);
         try {
             button.disabled = true;
-            button.innerHTML = `<span class="button-text">${action}ping...</span> 
-                              <span class="loading-dots"></span>`;
+            this.updateServerStatus('starting');
+
+            console.log(`Sending ${action} request to server...`);
 
             const response = await fetch(sewn_ws_admin.ajax_url, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-WP-Nonce': this.nonce
+                    'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
                     action: 'sewn_ws_server_control',
                     command: action,
-                    nonce: this.nonce
-                })
+                    nonce: sewn_ws_admin.nonce
+                }),
+                signal: controller.signal
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Server request failed');
-            }
+            console.log('Server response received:', response.status);
 
             const data = await response.json();
-            this.updateServerStatus(data.status);
+            console.log('Response data:', data);
 
-            // Control stats polling based on new status
-            if (data.status === 'Running') {
-                this.startStatsPolling();
-            } else {
-                this.stopStatsPolling();
+            if (!response.ok) {
+                throw new Error(data.message || `Server request failed with status ${response.status}`);
             }
 
-        } catch (error) {
-            const errorMessage = `Server ${action} failed:\n` +
-                `- ${error.message || 'Unknown error'}\n` +
-                `- PHP: ${error.php_version || 'unknown'}\n` +
-                `- Node Path: ${error.node_path || 'undefined'}`;
+            if (data.error) {
+                throw new Error(data.error);
+            }
 
-            console.error('Server control error:', error);
-            this.showAlert(errorMessage);
+            // Extract status from the nested response structure
+            let serverStatus = 'error';
+
+            if (data.success && data.data) {
+                if (data.data.result?.status) {
+                    serverStatus = data.data.result.status;
+                } else if (data.data.result?.message?.includes('successfully')) {
+                    serverStatus = 'running';
+                } else if (data.data.status?.running !== undefined) {
+                    serverStatus = data.data.status.running ? 'running' : 'stopped';
+                } else if (data.data.message?.includes('success')) {
+                    serverStatus = 'running';
+                }
+            }
+
+            console.log('Extracted server status:', serverStatus);
+            this.updateServerStatus(serverStatus);
+
+            this.showNotice('success', `Server ${action} successful`);
+
+        } catch (error) {
+            console.error('Full error details:', error);
+            this.showNotice('error', `Server ${action} failed: ${error.message}`);
+            this.updateServerStatus('error');
         } finally {
             this.pendingRequests.delete(action);
             button.disabled = false;
-            button.innerHTML = `<span class="button-text">${action.charAt(0).toUpperCase() + action.slice(1)} Server</span>`;
+            this.updateButtonStates();
         }
     }
 
@@ -261,47 +277,51 @@ class WebSocketAdmin {
     }
 
     updateServerStatus(status) {
+        console.log('Updating server status to:', status);
+
+        // Normalize status to string
+        let normalizedStatus = String(status || '').toLowerCase();
+
+        // Map boolean values
+        if (status === true) normalizedStatus = 'running';
+        if (status === false) normalizedStatus = 'stopped';
+
+        // Store current status
+        this.serverStatus = normalizedStatus;
+
         const statusElement = document.querySelector('.sewn-ws-status');
-        const { constants } = sewn_ws_admin;
+        const statusText = document.querySelector('.status-text');
 
-        if (!statusElement) {
-            console.warn('Status element not found');
+        if (!statusElement || !statusText) {
+            console.warn('Status elements not found');
             return;
         }
 
-        if (!constants) {
-            console.error('Server constants not found');
-            return;
-        }
+        // Remove existing status classes
+        statusElement.classList.remove('running', 'stopped', 'error', 'starting', 'uninitialized');
 
-        // Handle undefined or null status
-        const currentStatus = status?.status || status || 'unknown';
+        // Add new status class
+        statusElement.classList.add(normalizedStatus);
 
-        try {
-            statusElement.className = `sewn-ws-status ${currentStatus.toLowerCase()}`;
-            statusElement.querySelector('.status-text').textContent = currentStatus;
+        // Update status text
+        const displayText = {
+            'running': 'Running',
+            'stopped': 'Stopped',
+            'error': 'Error',
+            'uninitialized': 'Uninitialized',
+            'starting': 'Starting...'
+        }[normalizedStatus] || normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
 
-            if (currentStatus === constants.STATUS_ERROR) {
-                this.showAlert(sewn_ws_admin.i18n.serverError);
-            }
+        statusText.textContent = displayText;
 
-            // Safely update button states
-            const startButton = document.querySelector('[data-action="start"]');
-            const stopButton = document.querySelector('[data-action="stop"]');
+        // Update button states
+        this.updateButtonStates();
 
-            if (startButton) {
-                startButton.disabled = currentStatus === constants.STATUS_RUNNING;
-            }
-            if (stopButton) {
-                stopButton.disabled = currentStatus === constants.STATUS_STOPPED;
-            }
-
-            // Only initialize WebSocket if server is running
-            if (currentStatus === constants.STATUS_RUNNING && !this.socket) {
-                this.initializeWebSocket();
-            }
-        } catch (error) {
-            console.error('Error updating server status:', error);
+        // Handle metrics polling
+        if (normalizedStatus === 'running') {
+            this.startStatsPolling();
+        } else {
+            this.stopStatsPolling();
         }
     }
 
@@ -378,12 +398,41 @@ class WebSocketAdmin {
     }
 
     updateMetrics(data) {
-        Object.entries(this.metrics).forEach(([key, metric]) => {
-            metric.addDataPoint(data[key]);
-        });
+        // Update metrics display directly
+        const connections = document.getElementById('live-connections-count');
+        const memory = document.getElementById('memory-usage');
+        const messageRate = document.getElementById('message-throughput');
+        const channelMessages = document.getElementById('channel-messages');
+        const channelSubscribers = document.getElementById('channel-subscribers');
+        const channelErrors = document.getElementById('channel-errors');
 
-        // Update tier-specific stats
-        this.updateTierStats(data.tiers);
+        if (connections) connections.textContent = data.connections || 0;
+        if (memory) memory.textContent = this.formatBytes(data.memory || 0);
+        if (messageRate) messageRate.textContent = `${data.message_rate || 0} msg/s`;
+        if (channelMessages) channelMessages.textContent = data.total_messages || 0;
+        if (channelSubscribers) channelSubscribers.textContent = data.subscribers || 0;
+        if (channelErrors) channelErrors.textContent = data.errors || 0;
+
+        // Store metrics history if needed
+        Object.entries(this.metrics).forEach(([key, metric]) => {
+            if (!metric.history) metric.history = [];
+            metric.history.push({
+                timestamp: Date.now(),
+                value: data[key] || 0
+            });
+
+            // Keep only last hour of data (3600 seconds)
+            const oneHourAgo = Date.now() - (metric.retention * 1000);
+            metric.history = metric.history.filter(item => item.timestamp > oneHourAgo);
+        });
+    }
+
+    formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     checkThresholds(data) {
@@ -445,10 +494,14 @@ class WebSocketAdmin {
         this.stopStatsPolling();
         this.cancelPendingRequests();
         window.removeEventListener('beforeunload', this._boundBeforeUnload);
-        WebSocketAdmin.instance = null;
 
-        // Cleanup metrics
-        Object.values(this.metrics).forEach(metric => metric.destroy());
+        // Close WebSocket connection if it exists
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
+
+        WebSocketAdmin.instance = null;
     }
 
     async checkInitialStatus() {
@@ -487,6 +540,15 @@ class WebSocketAdmin {
             // Don't show alert for initial status check failure
             // this.showAlert('Failed to check server status. Please refresh the page or contact support.');
         }
+    }
+
+    updateButtonStates() {
+        const isRunning = document.querySelector('.sewn-ws-status').classList.contains('running');
+        const isStarting = document.querySelector('.sewn-ws-status').classList.contains('starting');
+
+        document.querySelector('[data-action="start"]').disabled = isRunning || isStarting;
+        document.querySelector('[data-action="stop"]').disabled = !isRunning || isStarting;
+        document.querySelector('[data-action="restart"]').disabled = !isRunning || isStarting;
     }
 }
 

@@ -50,14 +50,24 @@ class Admin_UI {
             error_log('[SEWN] Module_Registry not available');
         }
         
+        // Initialize Server Controller
         if (class_exists('\SEWN\WebSockets\Server_Controller')) {
-            $this->server_controller = new Server_Controller();
+            try {
+                $this->server_controller = Server_Controller::get_instance();
+                if (!$this->server_controller) {
+                    throw new \Exception('Failed to initialize Server Controller');
+                }
+            } catch (\Exception $e) {
+                error_log('[SEWN] Server Controller initialization failed: ' . $e->getMessage());
+            }
+        } else {
+            error_log('[SEWN] Server_Controller class not found');
         }
         
         add_action('admin_init', [$this, 'register_settings']);
         
         // Add AJAX handlers
-        add_action('wp_ajax_sewn_ws_control', [$this, 'handle_server_control']);
+        add_action('wp_ajax_sewn_ws_server_control', [$this, 'handle_server_control']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_ajax']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
     }
@@ -155,8 +165,21 @@ class Admin_UI {
     }
 
     public function render_controls() {
-        echo '<button class="button-primary" id="start-server">Start</button>';
-        echo '<button class="button-secondary" id="stop-server">Stop</button>';
+        $status = $this->server_controller ? $this->server_controller->get_server_status() : ['running' => false];
+        $status_text = $status['running'] ? 'running' : 'stopped';
+        
+        echo '<div class="sewn-ws-controls-wrapper">';
+        echo '<div class="sewn-ws-status ' . esc_attr($status_text) . '">';
+        echo '<span class="status-dot"></span>';
+        echo '<span class="status-text">' . esc_html(ucfirst($status_text)) . '</span>';
+        echo '</div>';
+        
+        echo '<div class="sewn-ws-buttons">';
+        echo '<button class="button-primary" data-action="start">Start Server</button>';
+        echo '<button class="button-secondary" data-action="stop">Stop Server</button>';
+        echo '<button class="button-secondary" data-action="restart">Restart Server</button>';
+        echo '</div>';
+        echo '</div>';
     }
 
     public function render_settings() {
@@ -182,23 +205,78 @@ class Admin_UI {
     }
 
     public function handle_server_control() {
+        static $is_processing = false;
+        
         try {
-            check_ajax_referer('sewn_ws_control', 'nonce');
+            error_log('WebSocket Server Control: Request received');
+            error_log('POST data: ' . print_r($_POST, true));
+            
+            if ($is_processing) {
+                error_log('WebSocket Server Control: Request already in progress');
+                wp_send_json_error([
+                    'message' => __('Another request is in progress', 'sewn-ws'),
+                    'code' => 'LOCKED'
+                ], 423);
+                return;
+            }
+            
+            $is_processing = true;
+            
+            check_ajax_referer(SEWN_WS_NONCE_ACTION, 'nonce');
+            
+            if (!current_user_can('manage_options')) {
+                error_log('WebSocket Server Control: Insufficient permissions');
+                wp_send_json_error([
+                    'message' => __('Insufficient permissions to manage WebSocket server', 'sewn-ws'),
+                    'code' => 'FORBIDDEN'
+                ], 403);
+                return;
+            }
+            
+            if (!$this->server_controller) {
+                error_log('WebSocket Server Control: Server controller not initialized');
+                wp_send_json_error([
+                    'message' => __('Server controller not initialized', 'sewn-ws'),
+                    'code' => 'SERVER_ERROR'
+                ], 500);
+                return;
+            }
             
             $command = $_POST['command'] ?? '';
             
             if(!method_exists($this->server_controller, $command)) {
+                error_log('WebSocket Server Control: Invalid command - ' . $command);
                 throw new \Exception("Invalid server command: $command");
             }
             
+            error_log('WebSocket Server Control: Executing command - ' . $command);
             $result = $this->server_controller->$command();
-            wp_send_json_success($result);
+            error_log('WebSocket Server Control: Command result - ' . print_r($result, true));
+            
+            // Get fresh server status
+            $status = $this->server_controller->get_server_status();
+            
+            wp_send_json_success([
+                'status' => $status['running'] ? 'running' : 'stopped',
+                'result' => $result,
+                'message' => sprintf(__('Server %s command executed successfully', 'sewn-ws'), $command)
+            ]);
             
         } catch(\Exception $e) {
+            error_log('WebSocket Server Control Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            
             wp_send_json_error([
                 'message' => $e->getMessage(),
-                'debug' => $this->get_debug_info()
+                'code' => 'ERROR',
+                'debug' => [
+                    'error_type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
             ]);
+        } finally {
+            $is_processing = false;
         }
     }
 
@@ -323,7 +401,7 @@ class Admin_UI {
         // Localize script data with constants and environment info
         wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sewn_ws_admin_nonce'),
+            'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
             'port' => get_option('sewn_ws_port', 8080),
             'is_local' => $is_local,
             'dev_mode' => $dev_mode,
