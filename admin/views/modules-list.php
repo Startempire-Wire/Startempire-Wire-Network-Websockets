@@ -96,7 +96,7 @@ if (!defined('ABSPATH')) exit;
                                 <?php _e('Deactivate', 'sewn-ws'); ?>
                             </button>
                             <?php if (method_exists($module, 'admin_ui')): ?>
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=sewn-ws-module-settings&module=' . $module_slug)); ?>" 
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=sewn-ws-module-' . $module_slug)); ?>" 
                                class="button button-secondary">
                                 <?php _e('Settings', 'sewn-ws'); ?>
                             </a>

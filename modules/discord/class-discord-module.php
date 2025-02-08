@@ -18,7 +18,7 @@ class Discord_Module extends Module_Base {
         return 'discord';
     }
 
-    public function metadata() {
+    public function metadata(): array {
         return [
             'module_slug' => 'discord',
             'name' => __('Discord Integration', 'sewn-ws'),
@@ -41,41 +41,73 @@ class Discord_Module extends Module_Base {
 
     public function admin_ui(): array {
         return [
-            'menu_title' => 'Discord Settings',
+            'menu_title' => __('Discord Integration Settings', 'sewn-ws'),
             'capability' => 'manage_options',
             'settings' => [
                 [
                     'name' => 'sewn_ws_discord_bot_token',
-                    'label' => 'Bot Token',
+                    'label' => __('Bot Token', 'sewn-ws'),
                     'type' => 'password',
+                    'description' => __('Discord bot token from the Developer Portal', 'sewn-ws'),
                     'sanitize' => 'sanitize_text_field',
                     'section' => 'discord_credentials'
                 ],
                 [
                     'name' => 'sewn_ws_discord_guild_id',
-                    'label' => 'Server ID',
+                    'label' => __('Server ID', 'sewn-ws'),
                     'type' => 'text',
+                    'description' => __('Discord server/guild ID to connect to', 'sewn-ws'),
                     'sanitize' => 'absint',
                     'section' => 'discord_credentials'
                 ],
                 [
                     'name' => 'sewn_ws_discord_webhook',
-                    'label' => 'Webhook URL',
+                    'label' => __('Webhook URL', 'sewn-ws'),
                     'type' => 'url',
+                    'description' => __('Discord webhook URL for message delivery', 'sewn-ws'),
                     'sanitize' => 'esc_url_raw',
+                    'section' => 'discord_webhooks'
+                ],
+                [
+                    'name' => 'sewn_ws_discord_streaming',
+                    'label' => __('Enable Streaming', 'sewn-ws'),
+                    'type' => 'checkbox',
+                    'description' => __('Enable Discord streaming integration', 'sewn-ws'),
+                    'sanitize' => 'rest_sanitize_boolean',
+                    'section' => 'discord_features'
+                ],
+                [
+                    'name' => 'sewn_ws_discord_role_sync',
+                    'label' => __('Role Synchronization', 'sewn-ws'),
+                    'type' => 'checkbox',
+                    'description' => __('Sync Discord roles with WordPress user roles', 'sewn-ws'),
+                    'sanitize' => 'rest_sanitize_boolean',
+                    'section' => 'discord_features'
+                ],
+                [
+                    'name' => 'sewn_ws_discord_notification_channel',
+                    'label' => __('Notification Channel', 'sewn-ws'),
+                    'type' => 'text',
+                    'description' => __('Channel ID for system notifications', 'sewn-ws'),
+                    'sanitize' => 'absint',
                     'section' => 'discord_webhooks'
                 ]
             ],
             'sections' => [
                 [
                     'id' => 'discord_credentials',
-                    'title' => 'API Credentials',
+                    'title' => __('API Credentials', 'sewn-ws'),
                     'callback' => [$this, 'render_credentials_section']
                 ],
                 [
                     'id' => 'discord_webhooks',
-                    'title' => 'Webhook Configuration',
+                    'title' => __('Webhook Configuration', 'sewn-ws'),
                     'callback' => [$this, 'render_webhook_section']
+                ],
+                [
+                    'id' => 'discord_features',
+                    'title' => __('Feature Settings', 'sewn-ws'),
+                    'callback' => [$this, 'render_features_section']
                 ]
             ]
         ];
@@ -128,11 +160,17 @@ class Discord_Module extends Module_Base {
     }
 
     public function render_credentials_section() {
-        echo '<p>Configure Discord API credentials from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></p>';
+        echo '<p>' . esc_html__('Configure Discord API credentials from the', 'sewn-ws') . 
+             ' <a href="https://discord.com/developers/applications" target="_blank">' . 
+             esc_html__('Discord Developer Portal', 'sewn-ws') . '</a></p>';
     }
 
     public function render_webhook_section() {
-        echo '<p>Configure incoming webhooks for Discord channel integration</p>';
+        echo '<p>' . esc_html__('Configure incoming webhooks and notification channels for Discord integration.', 'sewn-ws') . '</p>';
+    }
+
+    public function render_features_section() {
+        echo '<p>' . esc_html__('Enable and configure Discord integration features like streaming and role synchronization.', 'sewn-ws') . '</p>';
     }
 
     public function validate_discord_tokens($token) {

@@ -79,44 +79,72 @@ class Wirebot_Module extends Module_Base {
 
     public function admin_ui(): array {
         return [
-            'menu_title' => 'WireBot Settings',
+            'menu_title' => __('WireBot Settings', 'sewn-ws'),
             'capability' => 'manage_options',
             'settings' => [
                 [
                     'name' => 'sewn_ws_wirebot_model',
-                    'label' => 'AI Model',
+                    'label' => __('AI Model', 'sewn-ws'),
                     'type' => 'select',
+                    'description' => __('Select the AI model to use for responses', 'sewn-ws'),
+                    'section' => 'model_config',
                     'options' => [
                         'gpt-4' => 'GPT-4',
                         'claude-3' => 'Claude 3',
                         'local' => 'Local Model'
                     ],
-                    'sanitize' => 'sanitize_text_field',
-                    'section' => 'model_config'
+                    'sanitize' => 'sanitize_text_field'
                 ],
                 [
                     'name' => 'sewn_ws_wirebot_safety',
-                    'label' => 'Safety Level',
+                    'label' => __('Safety Level', 'sewn-ws'),
                     'type' => 'select',
+                    'description' => __('Set content filtering level for AI responses', 'sewn-ws'),
+                    'section' => 'safety_config',
                     'options' => [
                         'high' => 'High (Strict filtering)',
                         'medium' => 'Medium (Balanced)',
                         'low' => 'Low (Minimal filtering)'
                     ],
-                    'sanitize' => 'sanitize_text_field',
-                    'section' => 'safety_config'
+                    'sanitize' => 'sanitize_text_field'
+                ],
+                [
+                    'name' => 'sewn_ws_wirebot_cache',
+                    'label' => __('Response Caching', 'sewn-ws'),
+                    'type' => 'checkbox',
+                    'description' => __('Enable caching of AI responses', 'sewn-ws'),
+                    'section' => 'performance',
+                    'sanitize' => 'rest_sanitize_boolean'
+                ],
+                [
+                    'name' => 'sewn_ws_wirebot_cache_ttl',
+                    'label' => __('Cache Duration', 'sewn-ws'),
+                    'type' => 'select',
+                    'description' => __('How long to cache responses', 'sewn-ws'),
+                    'section' => 'performance',
+                    'options' => [
+                        '3600' => '1 hour',
+                        '86400' => '24 hours',
+                        '604800' => '1 week'
+                    ],
+                    'sanitize' => 'absint'
                 ]
             ],
             'sections' => [
                 [
                     'id' => 'model_config',
-                    'title' => 'Model Configuration',
+                    'title' => __('Model Configuration', 'sewn-ws'),
                     'callback' => [$this, 'render_model_section']
                 ],
                 [
                     'id' => 'safety_config',
-                    'title' => 'Safety Settings',
+                    'title' => __('Safety Settings', 'sewn-ws'),
                     'callback' => [$this, 'render_safety_section']
+                ],
+                [
+                    'id' => 'performance',
+                    'title' => __('Performance Settings', 'sewn-ws'),
+                    'callback' => [$this, 'render_performance_section']
                 ]
             ]
         ];
@@ -141,11 +169,15 @@ class Wirebot_Module extends Module_Base {
     }
 
     public function render_model_section() {
-        echo '<p>Select and configure the AI model for WireBot responses</p>';
+        echo '<p>' . esc_html__('Select and configure the AI model for WireBot responses.', 'sewn-ws') . '</p>';
     }
 
     public function render_safety_section() {
-        echo '<p>Adjust content safety and filtering levels for AI responses</p>';
+        echo '<p>' . esc_html__('Configure content safety and filtering settings for AI responses.', 'sewn-ws') . '</p>';
+    }
+
+    public function render_performance_section() {
+        echo '<p>' . esc_html__('Adjust performance and caching settings for optimal response times.', 'sewn-ws') . '</p>';
     }
 
     public function activate() {
