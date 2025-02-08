@@ -297,31 +297,156 @@ Each module in the WebSocket system follows a standardized structure with these 
 
 2. Settings System:
    Each module can define its settings using admin_ui():
+   === 9.3 Module Settings API ===
+
+   Each module can define its settings interface by implementing the `admin_ui()` method. This method should return an array with the following structure:
+
    ```php
    public function admin_ui(): array {
        return [
-           'menu_title' => 'Module Settings',
-           'capability' => 'manage_options',
-           'settings' => [
+           'menu_title' => 'Module Settings',  // Optional: Custom menu title
+           'capability' => 'manage_options',    // Optional: Required capability
+           'settings' => [                      // Array of setting fields
                [
-                   'name' => 'setting_name',
-                   'label' => 'Setting Label',
-                   'type' => 'text|password|select|textarea|checkbox',
-                   'description' => 'Setting description',
-                   'section' => 'section_id',
-                   'options' => [] // For select type
+                   'name' => 'setting_name',    // Setting name (without module prefix)
+                   'label' => 'Setting Label',  // Display label
+                   'type' => 'text',           // Field type (text, checkbox, select, number, password)
+                   'description' => 'Help text', // Field description
+                   'section' => 'section_id',   // Section ID where field appears
+                   'options' => [],            // Required for select fields
+                   'sanitize' => 'callback',   // Optional sanitization callback
+                   'depends_on' => 'field_name' // Optional dependency on another field
                ]
            ],
-           'sections' => [
+           'sections' => [                     // Array of setting sections
                [
-                   'id' => 'section_id',
-                   'title' => 'Section Title',
-                   'callback' => [$this, 'render_section']
+                   'id' => 'section_id',       // Unique section identifier
+                   'title' => 'Section Title', // Display title
+                   'callback' => null          // Optional render callback
                ]
            ]
        ];
    }
    ```
+
+   Each module automatically receives the following base settings:
+
+   1. Core Settings Tab:
+      - Module Information (status indicator, version, author)
+      - Access Control (access level selection)
+      - Debug Settings (debug mode toggle, log level selection)
+
+   2. Performance Tab:
+      - Cache Settings (enable/disable, cache duration)
+      - Rate Limits (enable/disable, max requests, time window)
+
+   3. Module Settings Tab:
+      - Custom module-specific settings defined in admin_ui()
+
+   Field Types Supported:
+   - text: Standard text input
+   - password: Password field with masked input
+   - checkbox: Boolean toggle
+   - select: Dropdown with options
+   - number: Numeric input
+
+   Dependencies:
+   - Use 'depends_on' to show/hide fields based on another field's value
+   - Typically used with checkbox fields to toggle related settings
+
+   Example Implementation:
+   ```php
+   public function admin_ui(): array {
+       return [
+           'menu_title' => __('Discord Integration Settings', 'sewn-ws'),
+           'capability' => 'manage_options',
+           'settings' => [
+               [
+                   'name' => 'bot_token',
+                   'label' => __('Bot Token', 'sewn-ws'),
+                   'type' => 'password',
+                   'description' => __('Discord bot token from Developer Portal', 'sewn-ws'),
+                   'section' => 'credentials'
+               ],
+               [
+                   'name' => 'enable_streaming',
+                   'label' => __('Enable Streaming', 'sewn-ws'),
+                   'type' => 'checkbox',
+                   'description' => __('Enable Discord streaming integration', 'sewn-ws'),
+                   'section' => 'features'
+               ]
+           ],
+           'sections' => [
+               [
+                   'id' => 'credentials',
+                   'title' => __('API Credentials', 'sewn-ws')
+               ],
+               [
+                   'id' => 'features',
+                   'title' => __('Feature Settings', 'sewn-ws')
+               ]
+           ]
+       ];
+   }
+   ```
+
+Technical Implementation Details:
+
+1. Settings Storage:
+   - All settings are automatically prefixed with 'sewn_ws_module_{module_slug}_'
+   - Settings are grouped by section in the database
+   - Example: 'bot_token' becomes 'sewn_ws_module_discord_bot_token'
+
+2. Visual Organization:
+   - Settings can be organized into two columns using section positioning
+   - Base settings are visually separated from custom module settings
+   - Sections can include custom rendering callbacks for advanced layouts
+   ```php
+   'sections' => [
+       [
+           'id' => 'left_column',
+           'title' => __('Primary Settings', 'sewn-ws'),
+           'position' => 'left'
+       ],
+       [
+           'id' => 'right_column',
+           'title' => __('Secondary Settings', 'sewn-ws'),
+           'position' => 'right'
+       ]
+   ]
+   ```
+
+3. Validation & Error Handling:
+   - Each setting can define a sanitization callback
+   - Built-in validation for common field types
+   - Errors are displayed inline with fields
+   - Example validation:
+   ```php
+   'settings' => [
+       [
+           'name' => 'port_number',
+           'type' => 'number',
+           'sanitize' => function($value) {
+               $port = absint($value);
+               if ($port < 1024 || $port > 65535) {
+                   add_settings_error(
+                       'port_number',
+                       'invalid_port',
+                       __('Port must be between 1024 and 65535', 'sewn-ws')
+                   );
+                   return 8080; // Default fallback
+               }
+               return $port;
+           }
+       ]
+   ]
+   ```
+
+4. Integration with Module_Settings_Base:
+   - Extends core WordPress Settings API
+   - Handles automatic section registration
+   - Manages settings page rendering
+   - Provides consistent styling and layout
 
 3. Standard Configuration Pattern:
    ```php

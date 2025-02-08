@@ -17,6 +17,50 @@ namespace SEWN\WebSockets;
  * Base class for all WebSocket modules
  */
 abstract class Module_Base {
+    public function __construct() {
+        // Empty constructor - activation hook moved to separate method
+    }
+
+    /**
+     * Register module activation hook
+     * 
+     * @param string $plugin_file Main plugin file path
+     * @return void
+     */
+    public function register_activation($plugin_file) {
+        if (!empty($plugin_file)) {
+            register_activation_hook($plugin_file, [$this, 'activate_plugin']);
+        }
+    }
+
+    /**
+     * Plugin activation handler
+     */
+    public function activate_plugin() {
+        global $wpdb;
+        
+        // Add index for module options if it doesn't exist
+        $index_name = 'sewn_module_options';
+        $table_name = $wpdb->options;
+        
+        // Check if index exists
+        $index_exists = $wpdb->get_results("SHOW INDEX FROM {$table_name} WHERE Key_name = '{$index_name}'");
+        
+        if (empty($index_exists)) {
+            // Add index for module options
+            $wpdb->query("ALTER TABLE {$table_name} ADD INDEX {$index_name} (option_name(64))
+                         WHERE option_name LIKE 'sewn_module_%'");
+        }
+        
+        // Set autoload=no for existing module options
+        $wpdb->query("UPDATE {$table_name} 
+                     SET autoload = 'no' 
+                     WHERE option_name LIKE 'sewn_module_%'");
+                     
+        // Clear any existing caches
+        wp_cache_delete('sewn_ws_active_modules', 'sewn_ws');
+    }
+
     /**
      * Get the module's slug
      *

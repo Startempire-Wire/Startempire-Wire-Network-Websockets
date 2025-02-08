@@ -58,21 +58,84 @@ class Module_Admin {
             return;
         }
 
+        $option_name = "sewn_module_{$module_slug}_active";
+        
         switch ($_POST['sewn_module_action']) {
             case 'activate':
-                update_option("sewn_module_{$module_slug}_active", true);
+                // Use autoload=no for better performance
+                $this->update_module_status($module_slug, true);
                 if (method_exists($module, 'init')) {
-                $module->init();
+                    $module->init();
                 }
                 break;
                 
             case 'deactivate':
-                update_option("sewn_module_{$module_slug}_active", false);
-                if (method_exists($module, 'deactivate')) {
-                    $module->deactivate();
-                }
+                $this->update_module_status($module_slug, false);
                 break;
         }
+
+        // Clear module status cache
+        wp_cache_delete('sewn_ws_active_modules', 'sewn_ws');
+    }
+
+    /**
+     * Optimized module status update
+     *
+     * @param string $module_slug
+     * @param bool $status
+     */
+    private function update_module_status($module_slug, $status) {
+        global $wpdb;
+        
+        $option_name = "sewn_module_{$module_slug}_active";
+        
+        // First try to update existing option
+        $result = $wpdb->update(
+            $wpdb->options,
+            [
+                'option_value' => $status ? '1' : '',
+                'autoload' => 'no'  // Set autoload=no for better performance
+            ],
+            ['option_name' => $option_name],
+            ['%s', '%s'],
+            ['%s']
+        );
+        
+        // If option doesn't exist, insert it
+        if ($result === false) {
+            $wpdb->insert(
+                $wpdb->options,
+                [
+                    'option_name' => $option_name,
+                    'option_value' => $status ? '1' : '',
+                    'autoload' => 'no'
+                ],
+                ['%s', '%s', '%s']
+            );
+        }
+        
+        // Update cache
+        wp_cache_set($option_name, $status, 'sewn_ws', HOUR_IN_SECONDS);
+    }
+
+    /**
+     * Check if module is active with caching
+     *
+     * @param string $module_slug
+     * @return bool
+     */
+    private function is_module_active($module_slug) {
+        $cache_key = "sewn_module_{$module_slug}_active";
+        $cached = wp_cache_get($cache_key, 'sewn_ws');
+        
+        if ($cached !== false) {
+            return (bool)$cached;
+        }
+        
+        $status = (bool)get_option($cache_key, false);
+        wp_cache_set($cache_key, $status, 'sewn_ws', HOUR_IN_SECONDS);
+        
+        return $status;
     }
 
     public function render_modules() {
@@ -568,10 +631,6 @@ class Module_Admin {
         
         // Pass errors to template
         include plugin_dir_path(__FILE__) . 'views/modules-list.php';
-    }
-
-    private function is_module_active($module_slug) {
-        return (bool) get_option("sewn_module_{$module_slug}_active", false);
     }
 
     private function check_module_dependencies($module) {

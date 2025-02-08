@@ -28,6 +28,11 @@ use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Socket_Manager;
 use SEWN\WebSockets\Unified_Roles;
 
+// Define plugin file constant in global namespace
+if (!defined('SEWN_WS_FILE')) {
+    define('SEWN_WS_FILE', __FILE__);
+}
+
 // Load Composer's autoloader
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';

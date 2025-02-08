@@ -48,8 +48,15 @@ class Module_Registry {
                 continue;
             }
 
+            // Register activation hook for the module
+            if ($module instanceof Module_Base) {
+                $module->register_activation(SEWN_WS_FILE);
+            }
+
             $this->modules[$module_slug] = $module;
         }
+
+        return $this->modules;
     }
     
     public function get_module($module_slug) {
