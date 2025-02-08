@@ -9,10 +9,14 @@
 namespace SEWN\WebSockets\Modules\Discord;
 
 use SEWN\WebSockets\Module_Base;
-use SEWN\WebSockets\Protocols\Discord_Protocol;
 
 class Discord_Module extends Module_Base {
     private $client;
+    private $protocol;
+
+    public function get_module_slug(): string {
+        return 'discord';
+    }
 
     public function metadata() {
         return [
@@ -79,12 +83,9 @@ class Discord_Module extends Module_Base {
 
     public function check_dependencies() {
         if (!class_exists('SEWN\RingLeader\Core\Auth_Handler')) {
-            add_action('admin_notices', function() {
-                echo '<div class="notice notice-error"><p>';
-                _e('Discord Module requires Ring Leader Plugin v1.4.0+', 'sewn-ws');
-                echo '</p></div>';
-            });
-            return false;
+            return [
+                'error' => __('Discord Module requires Ring Leader Plugin v1.4.0+', 'sewn-ws')
+            ];
         }
         return true;
     }
@@ -93,7 +94,13 @@ class Discord_Module extends Module_Base {
         if (!$this->check_dependencies()) {
             return;
         }
+
+        // Load required files
+        require_once dirname(__FILE__) . '/class-discord-client.php';
+        require_once dirname(__FILE__) . '/class-discord-protocol.php';
+        
         $this->initialize_client();
+        $this->initialize_protocol();
         $this->register_hooks();
     }
 
@@ -105,6 +112,11 @@ class Discord_Module extends Module_Base {
         );
     }
 
+    private function initialize_protocol() {
+        $this->protocol = new Discord_Protocol($this->client);
+        $this->protocol->register();
+    }
+
     private function register_hooks() {
         add_action('sewn_ws_register_protocols', [$this, 'register_protocols']);
         add_action('sewn_ws_client_connected', [$this, 'handle_client_connect']);
@@ -112,7 +124,7 @@ class Discord_Module extends Module_Base {
     }
 
     public function register_protocols($handler) {
-        $handler->register_protocol('discord', new Discord_Protocol($this->client));
+        $handler->register_protocol('discord', $this->protocol);
     }
 
     public function render_credentials_section() {

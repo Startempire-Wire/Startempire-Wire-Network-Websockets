@@ -14,6 +14,10 @@ use SEWN\WebSockets\Protocols\Startempire_Protocol;
 class Startempire_Module extends Module_Base {
     private $protocol;
     
+    public function get_module_slug(): string {
+        return 'startempire';
+    }
+    
     public function metadata(): array {
         return [
             'module_slug' => 'startempire',

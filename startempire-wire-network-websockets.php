@@ -48,6 +48,7 @@ require_once __DIR__ . '/includes/class-exception.php';
 require_once __DIR__ . '/includes/class-error-handler.php';
 require_once __DIR__ . '/includes/class-log-handler.php';
 require_once __DIR__ . '/includes/class-module-base.php';
+require_once __DIR__ . '/includes/class-protocol-base.php';
 require_once __DIR__ . '/includes/class-module-registry.php';
 require_once __DIR__ . '/includes/class-process-manager.php';
 require_once __DIR__ . '/includes/class-websocket-handler.php';
@@ -206,6 +207,16 @@ require_once plugin_dir_path(__FILE__) . 'admin/class-settings-page.php';     //
 require_once plugin_dir_path(__FILE__) . 'admin/class-module-admin.php';      // Then module admin
 require_once plugin_dir_path(__FILE__) . 'admin/class-admin-ui.php';         // Then admin UI
 require_once plugin_dir_path(__FILE__) . 'admin/class-websockets-admin.php';  // Finally websockets admin
+
+// Load module protocols first
+require_once plugin_dir_path(__FILE__) . 'modules/wirebot/class-wirebot-protocol.php';
+require_once plugin_dir_path(__FILE__) . 'modules/discord/class-discord-protocol.php';
+require_once plugin_dir_path(__FILE__) . 'modules/startempire/class-startempire-protocol.php';
+
+// Then load module classes
+require_once plugin_dir_path(__FILE__) . 'modules/wirebot/class-wirebot-module.php';
+require_once plugin_dir_path(__FILE__) . 'modules/discord/class-discord-module.php';
+require_once plugin_dir_path(__FILE__) . 'modules/startempire/class-startempire-module.php';
 
 // AUTOLOADER FIX
 spl_autoload_register(function ($class) {

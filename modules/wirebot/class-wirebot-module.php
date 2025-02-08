@@ -6,16 +6,30 @@
  * Purpose: Manages AI-powered WireBot integration with WebSocket communications and message processing. Handles natural language interactions, response filtering, and safety controls for network members.
  */
 
-namespace SEWN\WebSockets\Modules\Wirebot; // Same as Discord's namespace structure
+namespace SEWN\WebSockets\Modules\Wirebot;
 
 use SEWN\WebSockets\Module_Base;
-use SEWN\WebSockets\Protocols\Wirebot_Protocol; // Same pattern as Discord
+use SEWN\WebSockets\Protocol_Base;
 
 class Wirebot_Module extends Module_Base {
+    private $protocol;
+    private $bot_handler;
+
+    public function get_module_slug(): string {
+        return 'wirebot';
+    }
+
     public function init() {
         if (!$this->check_dependencies()) {
             return;
         }
+        
+        // Load protocol class from the same namespace
+        require_once dirname(__FILE__) . '/class-wirebot-protocol.php';
+        
+        // Load handler class
+        require_once dirname(__FILE__) . '/class-wirebot-handler.php';
+        
         $this->protocol = new Wirebot_Protocol();
         $this->protocol->register();
         
@@ -24,14 +38,21 @@ class Wirebot_Module extends Module_Base {
     }
 
     public function check_dependencies() {
-        if (!class_exists('SEWN\WebSockets\Protocols\Wirebot_Protocol')) {
-            add_action('admin_notices', function() {
-                echo '<div class="notice notice-error"><p>';
-                _e('Wirebot Module requires WebSockets Protocol handler', 'sewn-ws');
-                echo '</p></div>';
-            });
-            return false;
+        $protocol_file = dirname(__FILE__) . '/class-wirebot-protocol.php';
+        $handler_file = dirname(__FILE__) . '/class-wirebot-handler.php';
+        
+        if (!file_exists($protocol_file)) {
+            return [
+                'error' => __('Wirebot Protocol file not found', 'sewn-ws')
+            ];
         }
+        
+        if (!file_exists($handler_file)) {
+            return [
+                'error' => __('Wirebot Handler file not found', 'sewn-ws')
+            ];
+        }
+        
         return true;
     }
 

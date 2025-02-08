@@ -37,35 +37,68 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
         <div class="sewn-ws-card status-card">
             <h2><?php _e('Server Status', 'sewn-ws') ?></h2>
             <div class="status-indicator">
-                <span class="status-dot <?php echo esc_attr($status_class); ?>"></span>
+                <span class="status-dot <?php echo esc_attr($node_status['status'] ?? 'uninitialized'); ?>"></span>
                 <span class="status-text">
-                    <?php if($node_status['running']): ?>
-                        <?php _e('Operational', 'sewn-ws') ?>
-                    <?php else: ?>
-                        <?php _e('Not Initialized', 'sewn-ws') ?>
-                    <?php endif; ?>
+                    <?php 
+                    $status = $node_status['status'] ?? 'uninitialized';
+                    switch($status) {
+                        case 'running':
+                            _e('Operational', 'sewn-ws');
+                            break;
+                        case 'stopped':
+                            _e('Stopped', 'sewn-ws');
+                            break;
+                        case 'error':
+                            _e('Error', 'sewn-ws');
+                            break;
+                        case 'uninitialized':
+                        default:
+                            _e('Not Initialized', 'sewn-ws');
+                            break;
+                    }
+                    ?>
                 </span>
                 <span class="loading-spinner" style="display:none"></span>
             </div>
             <div class="server-controls">
-                <button class="button-primary sewn-ws-control" data-action="start">
-                    <span class="button-text"><?php _e('Initialize Server', 'sewn-ws') ?></span>
+                <button class="button-primary sewn-ws-control" data-action="start" 
+                        <?php echo ($status === 'running') ? 'disabled' : ''; ?>>
+                    <span class="button-text">
+                        <?php echo ($status === 'uninitialized') ? __('Initialize Server', 'sewn-ws') : __('Start Server', 'sewn-ws'); ?>
+                    </span>
                     <span class="loading-dots" style="display:none">...</span>
                 </button>
-                <button class="button-secondary sewn-ws-control" data-action="restart" disabled>
+                <button class="button-secondary sewn-ws-control" data-action="restart"
+                        <?php echo ($status !== 'running') ? 'disabled' : ''; ?>>
                     <?php _e('Restart', 'sewn-ws') ?>
                 </button>
-                <button class="button sewn-ws-control" data-action="stop" disabled>
+                <button class="button sewn-ws-control" data-action="stop"
+                        <?php echo ($status !== 'running') ? 'disabled' : ''; ?>>
                     <?php _e('Stop', 'sewn-ws') ?>
                 </button>
             </div>
+
+            <?php if ($status === 'running'): ?>
+            <div class="server-metrics">
+                <div class="metric">
+                    <span class="metric-label"><?php _e('Uptime', 'sewn-ws'); ?></span>
+                    <span class="metric-value" id="server-uptime">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><?php _e('Memory', 'sewn-ws'); ?></span>
+                    <span class="metric-value" id="server-memory">-</span>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <div class="emergency-controls">
                 <button type="button" 
                         id="emergency-stop"
                         class="button button-danger"
-                        title="Cancel all pending requests">
+                        <?php echo ($status !== 'running') ? 'disabled' : ''; ?>
+                        title="<?php esc_attr_e('Emergency stop - cancels all pending operations', 'sewn-ws'); ?>">
                     <span class="dashicons dashicons-dismiss"></span>
-                    Emergency Stop
+                    <?php _e('Emergency Stop', 'sewn-ws'); ?>
                 </button>
             </div>
         </div>
@@ -74,27 +107,32 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
         <div class="sewn-ws-stats-container">
             <div class="stats-card connections">
                 <h3><?php _e('Active Connections', 'sewn-ws'); ?></h3>
-                <div id="live-connections-count">-</div>
-                <div id="connections-graph"></div>
+                <div class="stat-value" id="live-connections-count">-</div>
+                <div class="stat-graph" id="connections-graph"></div>
             </div>
             
             <div class="stats-card messages">
                 <h3><?php _e('Message Throughput', 'sewn-ws'); ?></h3>
-                <div id="message-throughput">- msg/s</div>
-                <div id="throughput-graph"></div>
+                <div class="stat-value" id="message-throughput">- msg/s</div>
+                <div class="stat-graph" id="throughput-graph"></div>
             </div>
         </div>
 
         <!-- Server Logs -->
         <div class="sewn-ws-card logs-card">
-            <h2><?php _e('Server Logs', 'sewn-ws') ?></h2>
+            <h2>
+                <?php _e('Server Logs', 'sewn-ws') ?>
+                <span class="log-count" id="log-count">0</span>
+            </h2>
             <div class="log-controls">
                 <select id="log-level">
-                    <option value="all">All Logs</option>
-                    <option value="error">Errors Only</option>
-                    <option value="info">Info</option>
+                    <option value="all"><?php _e('All Logs', 'sewn-ws'); ?></option>
+                    <option value="error"><?php _e('Errors Only', 'sewn-ws'); ?></option>
+                    <option value="info"><?php _e('Info', 'sewn-ws'); ?></option>
                 </select>
-                <button class="button" id="clear-logs"><?php _e('Clear Logs', 'sewn-ws') ?></button>
+                <button class="button" id="clear-logs">
+                    <?php _e('Clear Logs', 'sewn-ws') ?>
+                </button>
             </div>
             <div class="log-container" id="server-logs"></div>
         </div>
@@ -102,6 +140,14 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
 </div>
 
 <style>
+.sewn-ws-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
 .status-indicator {
     display: flex;
     align-items: center;
@@ -117,10 +163,97 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
     transition: all 0.3s ease;
 }
 
-.status-dot.success { background: #00c853; animation: pulse 2s infinite; }
+.status-dot.running { background: #00c853; animation: pulse 2s infinite; }
 .status-dot.error { background: #ff1744; }
+.status-dot.stopped { background: #ff9800; }
 .status-dot.starting { background: #ffc107; animation: pulse 1s infinite; }
 .status-dot.uninitialized { background: #9e9e9e; }
+
+.server-controls {
+    margin: 20px 0;
+    display: flex;
+    gap: 10px;
+}
+
+.server-metrics {
+    display: flex;
+    gap: 20px;
+    margin: 15px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.metric-value {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.sewn-ws-stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.stats-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 500;
+    margin: 10px 0;
+}
+
+.stat-graph {
+    height: 100px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.logs-card {
+    margin-top: 20px;
+}
+
+.log-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.log-container {
+    height: 300px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.log-count {
+    font-size: 12px;
+    background: #e5e5e5;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
 
 @keyframes pulse {
     0% { opacity: 1; }
@@ -138,10 +271,6 @@ $status_text = $node_status['running'] ? '✓ Operational' : '✗ Needs Attentio
     display: none;
 }
 
-button[disabled] .loading-dots {
-    display: inline-block;
-}
-
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -152,8 +281,17 @@ button[disabled] .loading-dots {
     border-color: #dc3232;
     color: white;
 }
+
 .button-danger:hover {
     background: #a82828;
+    border-color: #a82828;
+    color: white;
+}
+
+.button-danger:disabled {
+    background: #e5e5e5 !important;
+    border-color: #ddd !important;
+    color: #999 !important;
 }
 </style>
 

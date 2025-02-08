@@ -6,7 +6,7 @@
  * Purpose: Implements WireBot-specific communication protocol for AI-enhanced WebSocket interactions. Configures message handling and response generation based on membership tier access levels.
  */
 
-namespace SEWN\WebSockets\Protocols;
+namespace SEWN\WebSockets\Modules\Wirebot;
 
 use SEWN\WebSockets\Protocol_Base;
 
@@ -32,12 +32,15 @@ class Wirebot_Protocol extends Protocol_Base {
     }
 
     public function handle_message($message, $context) {
-        return [
-            'status' => 'processed',
+        if (!$this->validate_message($message)) {
+            return $this->handle_error('Invalid message format');
+        }
+
+        return $this->format_response('processed', [
             'protocol' => 'wirebot',
             'model' => $this->config['model'],
-            'timestamp' => time()
-        ];
+            'message' => $message
+        ]);
     }
 
     public function add_protocol_config($config) {

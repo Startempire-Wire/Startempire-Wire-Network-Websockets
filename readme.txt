@@ -259,47 +259,170 @@ add_filter('sewn_ws_protocols', function($protocols) {
   - Connection saturation
 
 9.3 Module Development Patterns
--------------------------------
-Critical Requirements:
-- Must implement activate()/deactivate() for lifecycle management
-- Sanitization callbacks required for all admin settings
-- Protocol clients must be dependency-injected
-- Class verification in requires() must use FQCN:
-  ['class' => 'Full\Namespace\Class_Name']
 
-Protocol Requirements:
-- Must implement message validation layer
-- Required to handle 3 core message types:
-  1. Connection lifecycle events
-  2. Protocol-specific operations
-  3. Error handling responses
+Each module in the WebSocket system follows a standardized structure with these key components:
 
-Security Mandates:
-- All admin settings must include:
-  - type-specific sanitization
-  - capability checks
-  - nonce verification
-- Protocol handlers must validate message origins
+1. Required Files:
+   - class-{module}-module.php (Core Module Class)
+     * Extends Module_Base
+     * Handles module lifecycle and integration
+     * Required methods:
+       - get_module_slug(): string
+       - metadata(): array
+       - init(): void
+       - check_dependencies(): array|bool
+     * Optional methods:
+       - requires(): array
+       - admin_ui(): array
+       - activate(): void
+       - deactivate(): void
 
-Example Structure (Revised):
-modules/{module}/
-├── class-{module}-module.php
-├── class-{module}-protocol.php
-├── class-{module}-handler.php # Message handlers
-└── config/
-    └── default-settings.json # Configuration presets
+   - class-{module}-protocol.php (Protocol Handler)
+     * Extends Protocol_Base
+     * Implements WebSocket protocol handling
+     * Required methods:
+       - register(): void
+       - handle_message($message, $context): array
+       - register_protocol($handler): void
+       - init_config(): void
+       - add_protocol_config($config): array
 
-Required Hooks:
-- sewn_ws_register_protocols → Protocol registration
-- sewn_ws_client_connected → Connection handling
-- sewn_ws_auth_validation → Authentication flows
+   - class-{module}-handler.php (Business Logic)
+     * Optional but recommended for complex modules
+     * Handles message processing and business logic
+     * Recommended methods:
+       - process_message(): array
+       - validate_message(): bool
+       - handle_error(): array
 
-Best Practices (Added):
-1. Implement message validation interface
-2. Use separate handler classes for complex logic
-3. Include protocol version in all messages
-4. Add admin debug tools for connection inspection
-5. Implement circuit breakers for external services
+2. Settings System:
+   Each module can define its settings using admin_ui():
+   ```php
+   public function admin_ui(): array {
+       return [
+           'menu_title' => 'Module Settings',
+           'capability' => 'manage_options',
+           'settings' => [
+               [
+                   'name' => 'setting_name',
+                   'label' => 'Setting Label',
+                   'type' => 'text|password|select|textarea|checkbox',
+                   'description' => 'Setting description',
+                   'section' => 'section_id',
+                   'options' => [] // For select type
+               ]
+           ],
+           'sections' => [
+               [
+                   'id' => 'section_id',
+                   'title' => 'Section Title',
+                   'callback' => [$this, 'render_section']
+               ]
+           ]
+       ];
+   }
+   ```
+
+3. Standard Configuration Pattern:
+   ```php
+   public function init_config(): void {
+       $this->config = [
+           'version' => '1.0',
+           'min_php' => '7.4',
+           'settings' => get_option('sewn_ws_' . $this->get_module_slug() . '_settings', [])
+       ];
+   }
+   ```
+
+4. Message Handling Pattern:
+   ```php
+   public function handle_message($message, $context): array {
+       if (!$this->validate_message($message)) {
+           return $this->handle_error('Invalid message format');
+       }
+       
+       $message_type = $message['type'] ?? 'unknown';
+       $user_data = $context['user_data'] ?? [];
+       
+       switch ($message_type) {
+           case 'your_message_type':
+               return $this->handle_specific_message($message, $user_data);
+           default:
+               return $this->handle_error('Unsupported message type');
+       }
+   }
+   ```
+
+5. Critical Requirements:
+   - Must implement activate()/deactivate() for lifecycle management
+   - Sanitization callbacks required for all admin settings
+   - Protocol clients must be dependency-injected
+   - Class verification in requires() must use FQCN:
+     ['class' => 'Full\Namespace\Class_Name']
+
+6. Protocol Requirements:
+   - Must implement message validation layer
+   - Required to handle 3 core message types:
+     1. Connection lifecycle events
+     2. Protocol-specific operations
+     3. Error handling responses
+   - Standard message format:
+     ```php
+     [
+         'type' => string,      // Message type identifier
+         'data' => array,       // Message payload
+         'user_data' => array,  // User context data
+         'timestamp' => int     // Message timestamp
+     ]
+     ```
+   - Standard response format:
+     ```php
+     [
+         'status' => string,    // 'success' or 'error'
+         'data' => array,       // Response payload
+         'timestamp' => int     // Response timestamp
+     ]
+     ```
+
+7. Security Mandates:
+   - All admin settings must include:
+     * type-specific sanitization
+     * capability checks
+     * nonce verification
+   - Protocol handlers must:
+     * Validate message origins
+     * Verify network access
+     * Sanitize all input data
+     * Use WordPress security functions
+     * Implement rate limiting
+
+8. Example Structure:
+   ```
+   modules/{module}/
+   ├── class-{module}-module.php      # Core module implementation
+   ├── class-{module}-protocol.php    # WebSocket protocol handler
+   ├── class-{module}-handler.php     # Optional business logic handler
+   └── config/
+       └── default-settings.json      # Configuration presets
+   ```
+
+9. Required Hooks:
+   - sewn_ws_register_protocols → Protocol registration
+   - sewn_ws_client_connected → Connection handling
+   - sewn_ws_auth_validation → Authentication flows
+   - sewn_ws_init → Protocol initialization
+   - sewn_ws_client_config → Client configuration
+
+10. Best Practices:
+    1. Implement message validation interface
+    2. Use separate handler classes for complex logic
+    3. Include protocol version in all messages
+    4. Add admin debug tools for connection inspection
+    5. Implement circuit breakers for external services
+    6. Use base class helper methods for consistency:
+       - handle_error() for error responses
+       - format_response() for success responses
+       - validate_message() for input validation
 
 Documentation Validation:
 ✓ Matches Discord implementation patterns

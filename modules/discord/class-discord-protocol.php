@@ -1,124 +1,100 @@
 <?php
 /**
  * Location: modules/discord/class-discord-protocol.php
- * Dependencies: Protocol_Base, Discord API
- * Variables/Classes: Discord_Protocol, $discord_client
- * Purpose: Implements Discord-specific WebSocket communication protocols and message handling. Translates Discord gateway events into standardized WebSocket messages for network distribution.
+ * Dependencies: Protocol_Base, Discord_Client
+ * Variables/Classes: Discord_Protocol
+ * Purpose: Implements Discord-specific WebSocket protocol for real-time chat and presence updates
  */
 
-namespace SEWN\WebSockets\Protocols;
+namespace SEWN\WebSockets\Modules\Discord;
 
 use SEWN\WebSockets\Protocol_Base;
 
-
+/**
+ * @property Discord_Client $client
+ */
 class Discord_Protocol extends Protocol_Base {
-    private $discord_client;
+    private $client;
+    private $config;
 
-    // Implements Discord-specific message handling
-    // Contains business logic for Discord integration
-    // Handles actual communication with Discord APIs
+    public function __construct(Discord_Client $client) {
+        $this->client = $client;
+    }
 
     public function register() {
         add_action('sewn_ws_register_protocols', [$this, 'register_protocol']);
-        add_action('sewn_ws_init', [$this, 'init_discord_client']);
-        add_filter('sewn_ws_client_config', [$this, 'add_discord_config']);
+        add_action('sewn_ws_init', [$this, 'init_config']);
+        add_filter('sewn_ws_client_config', [$this, 'add_protocol_config']);
     }
 
     public function register_protocol($handler) {
         $handler->register_protocol('discord', $this);
     }
 
-    public function init_discord_client() {
-        // Initialize Discord client configuration
-        $this->discord_client = [
-            'client_id' => defined('SEWN_DISCORD_CLIENT_ID') ? SEWN_DISCORD_CLIENT_ID : '',
-            'webhook_url' => defined('SEWN_DISCORD_WEBHOOK_URL') ? SEWN_DISCORD_WEBHOOK_URL : '',
-            'bot_token' => defined('SEWN_DISCORD_BOT_TOKEN') ? SEWN_DISCORD_BOT_TOKEN : ''
+    public function init_config() {
+        $this->config = [
+            'version' => '1.0',
+            'min_php' => '7.4',
+            'bot_status' => $this->client->get_status()
         ];
     }
 
     public function handle_message($message, $context) {
-        $user_data = $context['user_data'] ?? [];
-        $event_type = $message['type'] ?? 'message';
+        if (!$this->validate_message($message)) {
+            return $this->handle_error('Invalid message format', $message);
+        }
 
-        switch ($event_type) {
-            case 'stream_start':
-                return $this->handle_stream_start($message, $user_data);
-            case 'chat_message':
+        $message_type = $message['type'] ?? 'unknown';
+        $user_data = $context['user_data'] ?? [];
+
+        switch ($message_type) {
+            case 'chat':
                 return $this->handle_chat_message($message, $user_data);
-            case 'presence_update':
+            case 'presence':
                 return $this->handle_presence_update($message, $user_data);
             default:
-                return $this->handle_default_message($message, $user_data);
+                return $this->handle_error('Unsupported message type', $message);
         }
     }
 
-    public function add_discord_config($config) {
+    public function add_protocol_config($config) {
         $config['discord'] = [
-            'enabled' => !empty($this->discord_client['client_id']),
-            'features' => $this->get_available_features()
+            'enabled' => true,
+            'version' => $this->config['version'],
+            'features' => [
+                'chat' => true,
+                'presence' => true,
+                'streaming' => true
+            ],
+            'bot_status' => $this->config['bot_status']
         ];
         return $config;
     }
 
-    private function get_available_features() {
-        return apply_filters('sewn_discord_features', [
-            'streaming' => true,
-            'chat' => true,
-            'presence' => true
+    private function handle_chat_message($message, $user_data) {
+        if (!isset($message['content'])) {
+            return $this->handle_error('Missing message content', $message);
+        }
+
+        $result = $this->client->send_message([
+            'content' => $message['content'],
+            'username' => $user_data['display_name'] ?? 'Unknown User'
+        ]);
+
+        if (!$result['success']) {
+            return $this->handle_error($result['error'], $message);
+        }
+
+        return $this->format_response('chat', [
+            'message' => $message,
+            'result' => $result['response']
         ]);
     }
 
-    private function handle_stream_start($message, $user_data) {
-        // Implement stream handling based on user capabilities
-        $capabilities = $user_data['capabilities'] ?? ['connect'];
-        
-        if (!in_array('stream', $capabilities)) {
-            return [
-                'error' => 'Streaming not available for your membership level'
-            ];
-        }
-
-        return $this->distribute_message(
-            $context['bridge'],
-            $message,
-            [
-                'type' => 'stream_start',
-                'user' => $user_data,
-                'stream_data' => $message['stream_data'] ?? []
-            ]
-        );
-    }
-
-    private function handle_chat_message($message, $user_data) {
-        // Implement chat message handling
-        return $this->distribute_message(
-            $context['bridge'],
-            $message,
-            [
-                'type' => 'chat_message',
-                'user' => $user_data,
-                'message_data' => $message['message_data'] ?? []
-            ]
-        );
-    }
-
     private function handle_presence_update($message, $user_data) {
-        // Handle user presence updates
-        return $this->distribute_message(
-            $context['bridge'],
-            $message,
-            [
-                'type' => 'presence_update',
-                'user' => $user_data,
-                'presence_data' => $message['presence_data'] ?? []
-            ]
-        );
+        // Implement presence update logic here
+        return $this->format_response('presence', [
+            'status' => $message['status'] ?? 'unknown'
+        ]);
     }
 }
-
-// Initialize module
-add_action('sewn_ws_init', function() {
-    $protocol = new Discord_Protocol();
-    $protocol->register();
-});

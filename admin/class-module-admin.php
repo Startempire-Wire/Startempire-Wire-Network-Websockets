@@ -17,6 +17,7 @@ use SEWN\WebSockets\Module_Registry;
 
 class Module_Admin {
     private $registry;
+    private $current_screen;
 
     public function __construct(Module_Registry $registry) {
         $this->registry = $registry;
@@ -24,6 +25,24 @@ class Module_Admin {
         add_action('admin_init', [$this, 'register_module_settings']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
+        add_action('current_screen', [$this, 'set_current_screen']);
+    }
+
+    public function set_current_screen($screen) {
+        $this->current_screen = $screen;
+    }
+
+    public function should_show_module_errors() {
+        if (!$this->current_screen) {
+            return false;
+        }
+        
+        $valid_screens = [
+            'websockets_page_sewn-ws-modules',
+            'websockets_page_sewn-ws-module-settings'
+        ];
+        
+        return in_array($this->current_screen->id, $valid_screens);
     }
 
     public function handle_module_actions() {
@@ -41,7 +60,9 @@ class Module_Admin {
         switch ($_POST['sewn_module_action']) {
             case 'activate':
                 update_option("sewn_module_{$module_slug}_active", true);
-                $module->init();
+                if (method_exists($module, 'init')) {
+                    $module->init();
+                }
                 break;
                 
             case 'deactivate':
@@ -197,10 +218,63 @@ class Module_Admin {
         return get_option(sprintf(SEWN_WS_MODULE_SETTINGS_PREFIX, $module_slug), []);
     }
 
-    public static function render_modules_page() {
+    public function render_modules_page() {
         $module_registry = \SEWN\WebSockets\Module_Registry::get_instance();
         $modules = $module_registry->get_modules();
+        $module_errors = [];
         
+        // Only process dependency checks for active modules and only on modules page
+        if ($this->should_show_module_errors()) {
+            foreach ($modules as $module) {
+                $module_slug = $module->get_module_slug();
+                if ($this->is_module_active($module_slug)) {
+                    $module_errors[$module_slug] = $this->check_module_dependencies($module);
+                }
+            }
+        }
+        
+        // Pass errors to template
         include plugin_dir_path(__FILE__) . 'views/modules-list.php';
+    }
+
+    private function is_module_active($module_slug) {
+        return (bool) get_option("sewn_module_{$module_slug}_active", false);
+    }
+
+    private function check_module_dependencies($module) {
+        if (!method_exists($module, 'check_dependencies')) {
+            return [];
+        }
+
+        $dependency_errors = $module->check_dependencies();
+        
+        // Don't add admin notices, just return the errors
+        return is_array($dependency_errors) ? $dependency_errors : [];
+    }
+
+    public function render_module_settings_page() {
+        $module_slug = isset($_GET['module']) ? sanitize_key($_GET['module']) : '';
+        $module = $this->registry->get_module($module_slug);
+        
+        if (!$module || !$module instanceof Module_Base) {
+            wp_die(__('Invalid module or module not loaded', 'sewn-ws'));
+        }
+        
+        // Check for dependency errors
+        if ($this->should_show_module_errors()) {
+            $module_errors = $this->check_module_dependencies($module);
+            if (!empty($module_errors)) {
+                echo '<div class="notice notice-error">';
+                foreach ($module_errors as $error) {
+                    echo '<p>' . esc_html($error) . '</p>';
+                }
+                echo '</div>';
+            }
+        }
+        
+        // Load and use the settings base class
+        require_once dirname(__FILE__) . '/class-module-settings-base.php';
+        $settings = new Module_Settings_Base($module);
+        $settings->render();
     }
 }
