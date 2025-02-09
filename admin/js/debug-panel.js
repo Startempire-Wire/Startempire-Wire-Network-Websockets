@@ -1,23 +1,60 @@
 jQuery(document).ready(function ($) {
+    console.log('Debug Panel JS Initialized');
     var logRefreshInterval;
     var lastLogId = 0;
+
+    // Log initial state
+    var initialDebugEnabled = $('#sewn_ws_debug_enabled').is(':checked');
+    console.log('Initial Debug Mode State:', initialDebugEnabled);
+    console.log('Initial Debug Panel Display:', $('.sewn-ws-debug-panel').is(':visible'));
 
     // Toggle debug panel
     $('#sewn_ws_debug_enabled').on('change', function () {
         var isEnabled = $(this).is(':checked');
+        console.log('Debug Toggle Changed:', isEnabled);
+
+        // Log the panel state before toggle
+        console.log('Debug Panel Before Toggle:', $('.sewn-ws-debug-panel').is(':visible'));
+
         $('.sewn-ws-debug-panel').toggle(isEnabled);
 
-        $.post(ajaxurl, {
-            action: 'sewn_ws_toggle_debug',
-            enabled: isEnabled,
-            nonce: sewnWsAdmin.nonce
-        });
+        // Log the panel state after toggle
+        console.log('Debug Panel After Toggle:', $('.sewn-ws-debug-panel').is(':visible'));
 
-        if (isEnabled) {
-            startLogRefresh();
-        } else {
-            stopLogRefresh();
-        }
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'sewn_ws_toggle_debug',
+                enabled: isEnabled,
+                nonce: sewnWsAdmin.nonce
+            },
+            beforeSend: function () {
+                console.log('Sending AJAX request to toggle debug mode');
+            },
+            success: function (response) {
+                console.log('AJAX Response:', response);
+                if (response.success) {
+                    console.log('Debug mode updated successfully');
+                    if (isEnabled) {
+                        console.log('Starting log refresh');
+                        startLogRefresh();
+                    } else {
+                        console.log('Stopping log refresh');
+                        stopLogRefresh();
+                    }
+                } else {
+                    console.error('Failed to update debug mode:', response.data);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error('AJAX Error:', {
+                    status: status,
+                    error: error,
+                    xhr: xhr
+                });
+            }
+        });
     });
 
     // Load logs
@@ -62,12 +99,14 @@ jQuery(document).ready(function ($) {
 
     // Start log refresh
     function startLogRefresh() {
+        console.log('Starting log refresh interval');
         loadLogs();
         logRefreshInterval = setInterval(loadLogs, 5000);
     }
 
     // Stop log refresh
     function stopLogRefresh() {
+        console.log('Stopping log refresh interval');
         clearInterval(logRefreshInterval);
     }
 
@@ -104,6 +143,9 @@ jQuery(document).ready(function ($) {
 
     // Initialize if debug mode is enabled
     if ($('#sewn_ws_debug_enabled').is(':checked')) {
+        console.log('Debug mode is enabled on load, starting refresh');
         startLogRefresh();
+    } else {
+        console.log('Debug mode is disabled on load');
     }
 }); 

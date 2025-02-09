@@ -374,7 +374,6 @@ if (!defined('ABSPATH')) exit;
                             <input 
                                 type="checkbox" 
                                 id="sewn_ws_debug_enabled" 
-                                name="sewn_ws_debug_enabled" 
                                 value="1" 
                                 <?php checked(get_option('sewn_ws_debug_enabled', false)); ?>
                             >
@@ -765,6 +764,12 @@ if (!defined('ABSPATH')) exit;
 
     <!-- Debug Panel -->
     <div class="sewn-ws-debug-panel" style="display: <?php echo get_option('sewn_ws_debug_enabled', false) ? 'block' : 'none'; ?>">
+        <!-- Add debug info div -->
+        <div id="sewn-ws-debug-info" style="background: #f8f9fa; padding: 10px; margin-bottom: 10px; display: none;">
+            <h4 style="margin: 0 0 10px 0;">Debug Panel State:</h4>
+            <pre style="margin: 0; white-space: pre-wrap;"></pre>
+        </div>
+        
         <div class="sewn-ws-debug-toolbar">
             <div class="debug-filters">
                 <label>

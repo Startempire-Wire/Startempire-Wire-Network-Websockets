@@ -610,6 +610,42 @@ class Settings_Page {
     public function render_settings_page() {
         include plugin_dir_path(__FILE__) . 'views/settings.php';
     }
+
+    /**
+     * AJAX callback to toggle debug mode
+     */
+    public static function ajax_toggle_debug() {
+        error_log('AJAX toggle_debug called');
+        
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'sewn_ws_admin')) {
+            error_log('Debug toggle failed: Invalid nonce');
+            wp_send_json_error('Invalid nonce');
+            return;
+        }
+
+        if (!isset($_POST['enabled'])) {
+            error_log('Debug toggle failed: Missing enabled parameter');
+            wp_send_json_error('Missing enabled parameter');
+            return;
+        }
+
+        $enabled = filter_var($_POST['enabled'], FILTER_VALIDATE_BOOLEAN);
+        error_log('Setting debug mode to: ' . ($enabled ? 'enabled' : 'disabled'));
+        
+        $result = update_option('sewn_ws_debug_enabled', $enabled);
+        error_log('Update option result: ' . ($result ? 'success' : 'failed'));
+        
+        if ($result) {
+            wp_send_json_success(array('enabled' => $enabled));
+        } else {
+            wp_send_json_error('Failed to update option');
+        }
+    }
+}
+
+// After the class definition, register the AJAX action
+if (is_admin()) {
+    add_action('wp_ajax_sewn_ws_toggle_debug', array('SEWN\WebSockets\Admin\Settings_Page', 'ajax_toggle_debug'));
 }
 
 // Initialize the settings page

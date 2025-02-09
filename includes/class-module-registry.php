@@ -238,7 +238,7 @@ class Module_Registry {
     public function get_modules() {
         return $this->modules;
     }
-
+    
     /**
      * Get a specific module by ID
      *
