@@ -30,14 +30,16 @@ $status_class = $node_status['running'] ? 'running' :
 
 $status_text = $node_status['running'] ? '✓ Operational' : 
     (isset($node_status['status']) && $node_status['status'] === 'uninitialized' ? 'Uninitialized' : '✗ Stopped');
+
 ?>
 
 <div class="wrap sewn-ws-dashboard">
     <h1 class="wp-heading-inline"><?php _e('WebSocket Server Dashboard', 'sewn-ws'); ?></h1>
     
     <?php 
-    $environment = get_option('sewn_ws_environment', []);
+    $environment = (array) get_option('sewn_ws_environment', []);
     $env_type = $environment['type'] ?? 'production';
+
     $env_classes = [
         'local_by_flywheel' => 'notice-info',
         'xampp' => 'notice-warning',

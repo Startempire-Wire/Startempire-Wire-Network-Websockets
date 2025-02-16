@@ -14,6 +14,14 @@ namespace SEWN\WebSockets\Admin;
 if (!defined('ABSPATH')) exit;
 ?>
 <div class="wrap">
+    <?php if (get_option('sewn_ws_dev_mode', false)): ?>
+        <div class="notice notice-warning inline">
+            <p>
+                <span class="dashicons dashicons-warning"></span>
+                <?php _e('Development mode is currently enabled. WebSocket connections will use HTTP instead of HTTPS.', 'sewn-ws'); ?>
+            </p>
+        </div>
+    <?php endif; ?>
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
 
     <div id="sewn-ws-validation-summary"></div>
@@ -610,6 +618,48 @@ if (!defined('ABSPATH')) exit;
 
         <script>
         jQuery(document).ready(function($) {
+            const track = (element, eventType) => {
+                const now = Date.now();
+                const lastTrigger = $(element).data('lastTrigger') || 0;
+                
+                // Debounce with 150ms threshold
+                if (now - lastTrigger < 150) return;
+                
+                $(element).data('lastTrigger', now);
+
+                const logData = {
+                    element: {
+                        id: element.id,
+                        tag: element.tagName,
+                        type: element.type,
+                        name: element.name,
+                        value: element.value || $(element).is(':checked')
+                    },
+                    event: eventType,
+                    timestamp: new Date().toISOString()
+                };
+
+                console.log('UI Interaction:', logData);
+            };
+
+            // Modified event handling with input event support
+            $('#sewn-ws-settings-form').on({
+                'input': function(e) {
+                    // Track input events with debouncing
+                    track(this, 'input');
+                },
+                'change': function(e) {
+                    // Handle final value changes
+                    track(this, 'change');
+                },
+                'click': function(e) {
+                    // Handle button clicks
+                    if (['BUTTON', 'INPUT[type="button"]'].includes(this.tagName)) {
+                        track(this, 'click');
+                    }
+                }
+            }, 'input:not([type="hidden"]), select, textarea, button');
+
             // Handle local mode toggle
             $('#sewn_ws_local_mode').on('change', function() {
                 var isEnabled = $(this).is(':checked');
@@ -744,14 +794,7 @@ if (!defined('ABSPATH')) exit;
         </script>
 
         <div class="sewn-ws-settings-footer">
-            <?php if (get_option('sewn_ws_dev_mode', false)): ?>
-                <div class="notice notice-warning inline">
-                    <p>
-                        <span class="dashicons dashicons-warning"></span>
-                        <?php _e('Development mode is currently enabled. WebSocket connections will use HTTP instead of HTTPS.', 'sewn-ws'); ?>
-                    </p>
-                </div>
-            <?php endif; ?>
+            
 
             <p class="submit">
                 <button type="button" id="sewn-ws-test-config" class="button-secondary">
