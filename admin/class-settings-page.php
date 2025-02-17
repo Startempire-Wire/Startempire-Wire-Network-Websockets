@@ -240,7 +240,8 @@ class Settings_Page {
     }
 
     public function render_port_field() {
-        $port = get_option('sewn_ws_port', 8080);
+        $port = get_option('sewn_ws_port', 
+            defined('SEWN_WS_ENV_PORT') ? SEWN_WS_ENV_PORT : SEWN_WS_DEFAULT_PORT);
         echo "<input name='sewn_ws_port' value='$port'>";
     }
 

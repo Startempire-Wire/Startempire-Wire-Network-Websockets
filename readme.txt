@@ -133,6 +133,8 @@ STARTEMPIRE WIRE NETWORK WEBSOCKETS DOCUMENTATION
 3.1 wp-config.php Settings
 define('SEWN_WS_ENCRYPTION_KEY', 'your-encryption-key');
 define('SEWN_WS_MAX_CONNECTIONS', 1000);
+define('SEWN_WS_ENV_PORT', 8081); // Override default port
+define('SEWN_WS_ENV_LOCAL_MODE', true); // Force local mode
 
 3.2 Admin Settings (WP Admin → WebSocket → Settings)
 - Port Configuration

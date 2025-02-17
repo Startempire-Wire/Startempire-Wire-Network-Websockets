@@ -35,7 +35,8 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_REST_NAMESPACE') && define('SEWN_WS_REST_NAMESPACE', 'sewn-ws/v1');
 
 // Server defaults
-!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080);
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 
+    defined('SEWN_WS_ENV_PORT') ? SEWN_WS_ENV_PORT : 8080);
 !defined('SEWN_WS_SETTINGS_GROUP') && define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
@@ -58,4 +59,14 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 define('SEWN_WS_IS_LOCAL', (
     strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
     strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
-)); 
+));
+
+// Add under "WebSocket Server Constants"
+!defined('SEWN_WS_ENV_OVERRIDABLE') && define('SEWN_WS_ENV_OVERRIDABLE', [
+    'SEWN_WS_DEFAULT_PORT' => 8080,
+    'SEWN_WS_LOCAL_MODE' => false,
+    'SEWN_WS_CONTAINER_MODE' => false,
+    'SEWN_WS_DEBUG_ENABLED' => false,
+    'SEWN_WS_SSL_CERT_PATH' => '',
+    'SEWN_WS_SSL_KEY_PATH' => ''
+]); 
