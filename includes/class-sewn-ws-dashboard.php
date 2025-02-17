@@ -38,7 +38,7 @@ class Dashboard {
     }
     
     public function register_menus() {
-        // Main Dashboard
+        // Main Menu
         add_menu_page(
             __('WebSocket Server', 'sewn-ws'),
             __('WebSockets', 'sewn-ws'),
@@ -48,46 +48,49 @@ class Dashboard {
             'dashicons-networking',
             80
         );
-        
-        // Dashboard Submenu (default view)
-        add_submenu_page(
-            self::MENU_SLUG,
-            __('Dashboard', 'sewn-ws'),
-            __('Dashboard', 'sewn-ws'),
-            'manage_options',
-            self::MENU_SLUG,
-            [$this, 'render_root_dashboard']
-        );
-        
-        // Status Submenu
-        add_submenu_page(
-            self::MENU_SLUG,
-            __('Status Monitor', 'sewn-ws'),
-            __('Status', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-status',
-            [$this, 'render_status_view']
-        );
-        
-        // Modules Submenu
-        add_submenu_page(
-            self::MENU_SLUG,
-            __('Installed Modules', 'sewn-ws'),
-            __('Modules', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-modules',
-            [$this, 'render_modules_view']
-        );
-        
-        // Settings Submenu
-        add_submenu_page(
-            self::MENU_SLUG,
-            __('Server Configuration', 'sewn-ws'),
-            __('Settings', 'sewn-ws'),
-            'manage_options',
-            'sewn-ws-settings',
-            [$this, 'render_settings_view']
-        );
+
+        // Submenu Items
+        $submenus = [
+            [
+                'parent' => self::MENU_SLUG,
+                'title'  => __('Dashboard', 'sewn-ws'),
+                'cap'    => 'manage_options',
+                'slug'   => self::MENU_SLUG,
+                'render' => 'render_root_dashboard'
+            ],
+            [
+                'parent' => self::MENU_SLUG,
+                'title'  => __('Status Monitor', 'sewn-ws'),
+                'cap'    => 'manage_options',
+                'slug'   => 'sewn-ws-status',
+                'render' => 'render_status_view'
+            ],
+            [
+                'parent' => self::MENU_SLUG,
+                'title'  => __('Modules', 'sewn-ws'), 
+                'cap'    => 'manage_options',
+                'slug'   => 'sewn-ws-modules',
+                'render' => 'render_modules_view'
+            ],
+            [
+                'parent' => self::MENU_SLUG,
+                'title'  => __('Settings', 'sewn-ws'),
+                'cap'    => 'manage_options',
+                'slug'   => 'sewn-ws-settings',
+                'render' => 'render_settings_view' // Now handles ALL settings
+            ]
+        ];
+
+        foreach ($submenus as $submenu) {
+            add_submenu_page(
+                $submenu['parent'],
+                $submenu['title'],
+                $submenu['title'],
+                $submenu['cap'],
+                $submenu['slug'],
+                [$this, $submenu['render']]
+            );
+        }
     }
     
     public function render_root_dashboard() {

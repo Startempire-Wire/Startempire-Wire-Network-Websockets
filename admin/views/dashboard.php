@@ -37,7 +37,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
     <h1 class="wp-heading-inline"><?php _e('WebSocket Server Dashboard', 'sewn-ws'); ?></h1>
     
     <?php 
-    $environment = (array) get_option('sewn_ws_environment', []);
+    $environment = (array) get_option('sewn_ws_environment_info', []);
     $env_type = $environment['type'] ?? 'production';
 
     $env_classes = [
@@ -76,7 +76,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                     <ul>
                         <li>
                             <strong><?php _e('Server Software:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['server_software'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['server_info'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Operating System:', 'sewn-ws'); ?></strong>
@@ -84,7 +84,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                         </li>
                         <li>
                             <strong><?php _e('PHP Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_version'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('MySQL Version:', 'sewn-ws'); ?></strong>
@@ -102,7 +102,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                         </li>
                         <li>
                             <strong><?php _e('SSL Enabled:', 'sewn-ws'); ?></strong>
-                            <?php echo $environment['is_ssl'] ? '✓' : '✗'; ?>
+                            <?php echo $environment['ssl_valid'] ? '✓' : '✗'; ?>
                         </li>
                         <li>
                             <strong><?php _e('Memory Limit:', 'sewn-ws'); ?></strong>

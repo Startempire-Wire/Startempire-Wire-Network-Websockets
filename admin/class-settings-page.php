@@ -59,81 +59,13 @@ class Settings_Page {
         $this->monitor = Environment_Monitor::get_instance();
         $this->options = get_option(SEWN_WS_SETTINGS_GROUP, []);
 
-        add_action('admin_menu', [$this, 'add_plugin_page']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
-        add_action('admin_notices', [$this, 'display_environment_notice']);
     }
 
-    /**
-     * Add options page
-     */
-    public function add_plugin_page() {
-        add_options_page(
-            __('WebSocket Server Settings', SEWN_WS_TEXT_DOMAIN),
-            __('WebSocket Server', SEWN_WS_TEXT_DOMAIN),
-            'manage_options',
-            'websocket-server-settings',
-            [$this, 'create_admin_page']
-        );
-    }
+    
 
-    /**
-     * Display environment notice
-     */
-    public function display_environment_notice() {
-        $screen = get_current_screen();
-        if ($screen->id !== 'settings_page_websocket-server-settings') {
-            return;
-        }
-
-        $status = $this->monitor->get_environment_status();
-        $class = $status['is_local'] ? 'notice-info' : 'notice-warning';
-        $env_type = $status['is_local'] ? __('Local', SEWN_WS_TEXT_DOMAIN) : __('Production', SEWN_WS_TEXT_DOMAIN);
-        
-        ?>
-        <div class="notice <?php echo esc_attr($class); ?> is-dismissible">
-            <p>
-                <strong><?php echo esc_html(sprintf(__('Current Environment: %s', SEWN_WS_TEXT_DOMAIN), $env_type)); ?></strong>
-            </p>
-            <div class="sewn-ws-environment-details">
-                <p>
-                    <?php if ($status['is_local']) : ?>
-                        <?php esc_html_e('Local development mode is active. Some features may be modified for development purposes.', SEWN_WS_TEXT_DOMAIN); ?>
-                    <?php else : ?>
-                        <?php esc_html_e('Production environment detected. All security measures are active.', SEWN_WS_TEXT_DOMAIN); ?>
-                    <?php endif; ?>
-                </p>
-                <ul>
-                    <li>
-                        <span class="dashicons <?php echo $status['container_mode'] ? 'dashicons-yes' : 'dashicons-no'; ?>"></span>
-                        <?php esc_html_e('Container Mode:', SEWN_WS_TEXT_DOMAIN); ?>
-                        <?php echo $status['container_mode'] ? esc_html__('Active', SEWN_WS_TEXT_DOMAIN) : esc_html__('Inactive', SEWN_WS_TEXT_DOMAIN); ?>
-                    </li>
-                    <li>
-                        <span class="dashicons <?php echo $status['ssl_valid'] ? 'dashicons-yes' : 'dashicons-no'; ?>"></span>
-                        <?php esc_html_e('SSL Certificate:', SEWN_WS_TEXT_DOMAIN); ?>
-                        <?php echo $status['ssl_valid'] ? esc_html__('Valid', SEWN_WS_TEXT_DOMAIN) : esc_html__('Not Found/Invalid', SEWN_WS_TEXT_DOMAIN); ?>
-                    </li>
-                    <li>
-                        <span class="dashicons <?php echo $status['system_ready'] ? 'dashicons-yes' : 'dashicons-no'; ?>"></span>
-                        <?php esc_html_e('System Requirements:', SEWN_WS_TEXT_DOMAIN); ?>
-                        <?php echo $status['system_ready'] ? esc_html__('Met', SEWN_WS_TEXT_DOMAIN) : esc_html__('Not Met', SEWN_WS_TEXT_DOMAIN); ?>
-                    </li>
-                </ul>
-                <p class="description">
-                    <?php
-                    printf(
-                        /* translators: %s: time difference */
-                        esc_html__('Last checked: %s ago', SEWN_WS_TEXT_DOMAIN),
-                        human_time_diff($status['last_check'], time())
-                    );
-                    ?>
-                </p>
-            </div>
-        </div>
-        <?php
-    }
+    
 
     /**
      * Enqueue admin scripts and styles
@@ -189,98 +121,7 @@ class Settings_Page {
         );
     }
 
-    /**
-     * Options page callback
-     */
-    public function create_admin_page() {
-        $this->options = get_option(SEWN_WS_SETTINGS_GROUP);
-        $environment = $this->monitor->check_environment();
-        ?>
-        <div class="wrap">
-            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-            
-            <div class="sewn-ws-environment-panel">
-                <h2><?php esc_html_e('Environment Information', SEWN_WS_TEXT_DOMAIN); ?></h2>
-                <div class="sewn-ws-environment-info">
-                    <button type="button" class="button button-secondary" id="check-environment">
-                        <?php esc_html_e('Check Environment', SEWN_WS_TEXT_DOMAIN); ?>
-                    </button>
-                    <div class="environment-status">
-                        <h3><?php esc_html_e('Server Information', SEWN_WS_TEXT_DOMAIN); ?></h3>
-                        <ul>
-                            <li>
-                                <strong><?php esc_html_e('Software:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['server_info']['software']); ?>
-                            </li>
-                            <li>
-                                <strong><?php esc_html_e('Operating System:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['server_info']['os']); ?>
-                                (<?php echo esc_html($environment['server_info']['architecture']); ?>)
-                            </li>
-                        </ul>
-
-                        <h3><?php esc_html_e('PHP Information', SEWN_WS_TEXT_DOMAIN); ?></h3>
-                        <ul>
-                            <li>
-                                <strong><?php esc_html_e('Version:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['php_info']['version']); ?>
-                            </li>
-                            <li>
-                                <strong><?php esc_html_e('Memory Limit:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['php_info']['memory_limit']); ?>
-                            </li>
-                            <li>
-                                <strong><?php esc_html_e('Max Execution Time:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['php_info']['max_execution_time']); ?>s
-                            </li>
-                        </ul>
-
-                        <h3><?php esc_html_e('WordPress Information', SEWN_WS_TEXT_DOMAIN); ?></h3>
-                        <ul>
-                            <li>
-                                <strong><?php esc_html_e('Version:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo esc_html($environment['wordpress_info']['version']); ?>
-                            </li>
-                            <li>
-                                <strong><?php esc_html_e('Debug Mode:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo $environment['wordpress_info']['debug_mode'] ? esc_html__('Enabled', SEWN_WS_TEXT_DOMAIN) : esc_html__('Disabled', SEWN_WS_TEXT_DOMAIN); ?>
-                            </li>
-                            <li>
-                                <strong><?php esc_html_e('Multisite:', SEWN_WS_TEXT_DOMAIN); ?></strong>
-                                <?php echo $environment['wordpress_info']['is_multisite'] ? esc_html__('Yes', SEWN_WS_TEXT_DOMAIN) : esc_html__('No', SEWN_WS_TEXT_DOMAIN); ?>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <form method="post" action="options.php">
-                <?php
-                settings_fields(SEWN_WS_SETTINGS_GROUP);
-                do_settings_sections('websocket-server-settings');
-                submit_button();
-                ?>
-            </form>
-
-            <div class="sewn-ws-debug-panel">
-                <h2><?php esc_html_e('Debug Information', SEWN_WS_TEXT_DOMAIN); ?></h2>
-                <div class="sewn-ws-log-viewer">
-                    <div class="log-controls">
-                        <button type="button" class="button button-secondary" id="clear-logs">
-                            <?php esc_html_e('Clear Logs', SEWN_WS_TEXT_DOMAIN); ?>
-                        </button>
-                        <button type="button" class="button button-secondary" id="export-logs">
-                            <?php esc_html_e('Export Logs', SEWN_WS_TEXT_DOMAIN); ?>
-                        </button>
-                    </div>
-                    <div class="log-content">
-                        <!-- Log entries will be loaded here via AJAX -->
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
+    
 
     /**
      * Register and add settings
@@ -342,6 +183,44 @@ class Settings_Page {
         if ($env_status['is_local'] || get_option('sewn_ws_local_mode', false)) {
             $this->add_ssl_fields();
         }
+    }
+
+    private static function add_ssl_fields() {
+        add_settings_field(
+            'ssl_cert_path',
+            __('SSL Certificate Path', 'sewn-ws'),
+            [self::class, 'render_text_field'],
+            'sewn_ws_settings',
+            'sewn_ws_environment_section',
+            [
+                'label_for' => 'ssl_cert_path',
+                'description' => __('Path to SSL certificate file (PEM format)', 'sewn-ws')
+            ]
+        );
+
+        add_settings_field(
+            'ssl_key_path',
+            __('SSL Private Key Path', 'sewn-ws'),
+            [self::class, 'render_text_field'],
+            'sewn_ws_settings',
+            'sewn_ws_environment_section',
+            [
+                'label_for' => 'ssl_key_path', 
+                'description' => __('Path to SSL private key file', 'sewn-ws')
+            ]
+        );
+
+        add_settings_field(
+            'ssl_ca_bundle',
+            __('CA Bundle Path', 'sewn-ws'),
+            [self::class, 'render_text_field'],
+            'sewn_ws_settings',
+            'sewn_ws_environment_section',
+            [
+                'label_for' => 'ssl_ca_bundle',
+                'description' => __('Path to CA bundle file (if required)', 'sewn-ws')
+            ]
+        );
     }
 
     public function sanitize_settings($input) {
