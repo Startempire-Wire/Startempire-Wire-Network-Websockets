@@ -58,7 +58,7 @@ class Environment_Monitor {
      */
     public function __construct() {
         $this->logger = Error_Logger::get_instance();
-        $this->environment_info = get_option( 'sewn_ws_environment_info', array() );
+        $this->environment_info = get_option(SEWN_WS_ENV_INFO_OPTION, []);
         $this->last_check = get_option( 'sewn_ws_last_environment_check', 0 );
     }
 
@@ -71,8 +71,8 @@ class Environment_Monitor {
     public function check_environment() {
         try {
             $this->environment_info = array(
-                'is_local'           => get_option('sewn_ws_local_mode', 
-                    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : SEWN_WS_LOCAL_MODE),
+                'is_local'           => get_option('sewn_ws_env_local_mode', 
+                    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : SEWN_WS_ENV_LOCAL_MODE),
                 'server_info'        => $this->get_server_info(),
                 'php_info'           => $this->get_php_info(),
                 'ssl_info'           => $this->get_ssl_info(),
@@ -82,7 +82,7 @@ class Environment_Monitor {
                 'last_check'         => time(),
             );
 
-            update_option( 'sewn_ws_environment_info', $this->environment_info );
+            update_option(SEWN_WS_ENV_INFO_OPTION, $this->environment_info);
             update_option( 'sewn_ws_last_environment_check', time() );
 
             $this->logger->log(
@@ -108,6 +108,7 @@ class Environment_Monitor {
      * @return array Status information
      */
     public function get_environment_status() {
+        $this->environment_info = get_option(SEWN_WS_ENV_INFO_OPTION, []);
         if ( empty( $this->environment_info ) ) {
             // If no environment info exists, try to check it
             try {
@@ -336,5 +337,9 @@ class Environment_Monitor {
         }
 
         return $requirements;
+    }
+
+    public function update_environment_info() {
+        update_option(SEWN_WS_ENV_INFO_OPTION, $this->environment_info);
     }
 } 

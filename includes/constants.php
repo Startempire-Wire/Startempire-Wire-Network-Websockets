@@ -61,12 +61,15 @@ define('SEWN_WS_IS_LOCAL', (
     strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
 ));
 
-// Add under "WebSocket Server Constants"
+// Update ENV_OVERRIDABLE constants
 !defined('SEWN_WS_ENV_OVERRIDABLE') && define('SEWN_WS_ENV_OVERRIDABLE', [
-    'SEWN_WS_DEFAULT_PORT' => 8080,
-    'SEWN_WS_LOCAL_MODE' => false,
-    'SEWN_WS_CONTAINER_MODE' => false,
-    'SEWN_WS_DEBUG_ENABLED' => false,
-    'SEWN_WS_SSL_CERT_PATH' => '',
-    'SEWN_WS_SSL_KEY_PATH' => ''
-]); 
+    'SEWN_WS_ENV_DEFAULT_PORT' => 8080,
+    'SEWN_WS_ENV_LOCAL_MODE' => false,
+    'SEWN_WS_ENV_CONTAINER_MODE' => false,
+    'SEWN_WS_ENV_DEBUG_ENABLED' => false,
+    'SEWN_WS_ENV_SSL_CERT_PATH' => '',
+    'SEWN_WS_ENV_SSL_KEY_PATH' => ''
+]);
+
+// Add new constant for environment info storage
+!defined('SEWN_WS_ENV_INFO_OPTION') && define('SEWN_WS_ENV_INFO_OPTION', 'sewn_ws_env_info'); 

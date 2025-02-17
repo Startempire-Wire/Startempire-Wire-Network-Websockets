@@ -73,19 +73,13 @@ class Admin_UI {
     }
 
     public function register_settings() {
-        register_setting('sewn_ws_settings', 'sewn_ws_port', [
-            'type' => 'integer',
-            'description' => 'WebSocket server port',
-            'default' => 8080,
-            'sanitize_callback' => 'absint'
-        ]);
-
-        register_setting('sewn_ws_settings', 'sewn_ws_dev_mode', [
-            'type' => 'boolean',
-            'description' => 'Enable development mode',
-            'default' => false,
-            'sanitize_callback' => 'rest_sanitize_boolean'
-        ]);
+        register_setting('sewn-ws-settings', 'sewn_ws_env_local_mode');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_container_mode');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_debug_enabled');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_ssl_cert_path');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_ssl_key_path');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_default_port');
+        register_setting('sewn-ws-settings', 'sewn_ws_env_dev_mode');
 
         add_settings_section(
             'server_config',
@@ -95,23 +89,23 @@ class Admin_UI {
         );
 
         add_settings_field(
-            'sewn_ws_port',
+            'sewn_ws_env_default_port',
             __('WebSocket Port', 'sewn-ws'),
             function() {
-                $port = get_option('sewn_ws_port', 8080);
-                echo "<input type='number' name='sewn_ws_port' value='$port' min='1024' max='65535'>";
+                $port = get_option('sewn_ws_env_default_port', 8080);
+                echo "<input type='number' name='sewn_ws_env_default_port' value='$port' min='1024' max='65535'>";
             },
             'sewn-ws-settings',
             'server_config'
         );
 
         add_settings_field(
-            'sewn_ws_dev_mode',
+            'sewn_ws_env_dev_mode',
             __('Development Mode', 'sewn-ws'),
             function() {
-                $dev_mode = get_option('sewn_ws_dev_mode', false);
+                $dev_mode = get_option('sewn_ws_env_dev_mode', false);
                 echo '<label>';
-                echo "<input type='checkbox' name='sewn_ws_dev_mode' value='1' " . checked($dev_mode, true, false) . ">";
+                echo "<input type='checkbox' name='sewn_ws_env_dev_mode' value='1' " . checked($dev_mode, true, false) . ">";
                 echo __('Enable development mode (allows HTTP WebSocket connections)', 'sewn-ws');
                 echo '</label>';
                 if ($dev_mode) {
@@ -392,7 +386,7 @@ class Admin_UI {
         );
         
         // Get development mode status
-        $dev_mode = get_option('sewn_ws_dev_mode', false);
+        $dev_mode = get_option('sewn_ws_env_dev_mode', false);
         $is_local = (
             strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
             strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
@@ -402,7 +396,7 @@ class Admin_UI {
         wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
-            'port' => get_option('sewn_ws_port', 8080),
+            'port' => get_option('sewn_ws_env_default_port', 8080),
             'is_local' => $is_local,
             'dev_mode' => $dev_mode,
             'site_protocol' => is_ssl() ? 'https' : 'http',

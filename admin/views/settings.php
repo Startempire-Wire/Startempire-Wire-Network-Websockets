@@ -166,7 +166,7 @@ if (!defined('ABSPATH')) exit;
             <!-- Local Environment Mode -->
             <tr>
                 <th scope="row">
-                    <label for="sewn_ws_local_mode"><?php _e('Local Environment', 'sewn-ws'); ?></label>
+                    <label for="sewn_ws_env_local_mode"><?php _e('Local Environment', 'sewn-ws'); ?></label>
                     <p class="description">
                         <?php _e('Optimizes settings for local development', 'sewn-ws'); ?>
                     </p>
@@ -176,15 +176,15 @@ if (!defined('ABSPATH')) exit;
                         <label class="sewn-ws-toggle">
                             <input 
                                 type="checkbox" 
-                                id="sewn_ws_local_mode" 
-                                name="sewn_ws_local_mode" 
+                                id="sewn_ws_env_local_mode" 
+                                name="sewn_ws_env_local_mode" 
                                 value="1" 
-                                <?php checked($is_local || get_option('sewn_ws_local_mode', false)); ?>
+                                <?php checked(get_option('sewn_ws_env_local_mode', false)); ?>
                                 <?php disabled($is_local); ?>
                             >
                             <span class="sewn-ws-toggle-slider"></span>
                         </label>
-                        <label for="sewn_ws_local_mode">
+                        <label for="sewn_ws_env_local_mode">
                             <?php _e('Enable Local Environment Mode', 'sewn-ws'); ?>
                         </label>
                         <?php if ($is_local): ?>
@@ -202,9 +202,9 @@ if (!defined('ABSPATH')) exit;
             </tr>
 
             <!-- Container Mode -->
-            <tr class="container-mode-row <?php echo !get_option('sewn_ws_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
+            <tr class="container-mode-row <?php echo !get_option('sewn_ws_env_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
                 <th scope="row">
-                    <label for="sewn_ws_container_mode"><?php _e('Container Mode', 'sewn-ws'); ?></label>
+                    <label for="sewn_ws_env_container_mode"><?php _e('Container Mode', 'sewn-ws'); ?></label>
                     <p class="description">
                         <?php _e('Optimizes network settings for containerized environments', 'sewn-ws'); ?>
                     </p>
@@ -214,15 +214,15 @@ if (!defined('ABSPATH')) exit;
                         <label class="sewn-ws-toggle">
                             <input 
                                 type="checkbox" 
-                                id="sewn_ws_container_mode" 
-                                name="sewn_ws_container_mode" 
+                                id="sewn_ws_env_container_mode" 
+                                name="sewn_ws_env_container_mode" 
                                 value="1" 
-                                <?php checked($container_mode || get_option('sewn_ws_container_mode', false)); ?>
-                                <?php disabled($container_mode || (!get_option('sewn_ws_local_mode', false) && !$is_local)); ?>
+                                <?php checked(get_option('sewn_ws_env_container_mode', false)); ?>
+                                <?php disabled($container_mode || (!get_option('sewn_ws_env_local_mode', false) && !$is_local)); ?>
                             >
                             <span class="sewn-ws-toggle-slider"></span>
                         </label>
-                        <label for="sewn_ws_container_mode">
+                        <label for="sewn_ws_env_container_mode">
                             <?php _e('Enable Container Mode', 'sewn-ws'); ?>
                         </label>
                         <?php if ($container_mode): ?>
@@ -248,7 +248,7 @@ if (!defined('ABSPATH')) exit;
             </tr>
 
             <!-- Local Site URL -->
-            <tr class="local-url-row <?php echo !get_option('sewn_ws_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
+            <tr class="local-url-row <?php echo !get_option('sewn_ws_env_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
                 <th scope="row">
                     <label for="sewn_ws_local_site_url"><?php _e('Local Site URL', 'sewn-ws'); ?></label>
                     <p class="description">
@@ -263,11 +263,11 @@ if (!defined('ABSPATH')) exit;
                             name="sewn_ws_local_site_url" 
                             value="<?php echo esc_attr(get_option('sewn_ws_local_site_url', $detected_url)); ?>"
                             class="regular-text code"
-                            <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>
+                            <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>
                             placeholder="https://your-site.local"
                             data-detected-url="<?php echo esc_attr($detected_url); ?>"
                         >
-                        <button type="button" class="button button-secondary reset-url" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                        <button type="button" class="button button-secondary reset-url" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                             <span class="dashicons dashicons-update"></span>
                             <?php _e('Reset to Detected', 'sewn-ws'); ?>
                         </button>
@@ -285,7 +285,7 @@ if (!defined('ABSPATH')) exit;
             </tr>
 
             <!-- SSL Configuration -->
-            <tr class="ssl-config-row <?php echo !get_option('sewn_ws_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
+            <tr class="ssl-config-row <?php echo !get_option('sewn_ws_env_local_mode', false) && !$is_local ? 'disabled' : ''; ?>">
                 <th scope="row">
                     <label><?php _e('SSL Configuration', 'sewn-ws'); ?></label>
                     <p class="description">
@@ -303,13 +303,13 @@ if (!defined('ABSPATH')) exit;
                                     name="sewn_ws_ssl_cert" 
                                     value="<?php echo esc_attr(get_option('sewn_ws_ssl_cert', '')); ?>"
                                     class="regular-text code"
-                                    <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>
+                                    <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>
                                 >
-                                <button type="button" class="button button-secondary detect-ssl" data-type="cert" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                                <button type="button" class="button button-secondary detect-ssl" data-type="cert" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                                     <span class="dashicons dashicons-search"></span>
                                     <?php _e('Detect', 'sewn-ws'); ?>
                                 </button>
-                                <button type="button" class="button button-secondary browse-ssl" data-type="cert" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                                <button type="button" class="button button-secondary browse-ssl" data-type="cert" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                                     <span class="dashicons dashicons-portfolio"></span>
                                     <?php _e('Browse...', 'sewn-ws'); ?>
                                 </button>
@@ -324,20 +324,20 @@ if (!defined('ABSPATH')) exit;
                                     name="sewn_ws_ssl_key" 
                                     value="<?php echo esc_attr(get_option('sewn_ws_ssl_key', '')); ?>"
                                     class="regular-text code"
-                                    <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>
+                                    <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>
                                 >
-                                <button type="button" class="button button-secondary detect-ssl" data-type="key" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                                <button type="button" class="button button-secondary detect-ssl" data-type="key" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                                     <span class="dashicons dashicons-search"></span>
                                     <?php _e('Detect', 'sewn-ws'); ?>
                                 </button>
-                                <button type="button" class="button button-secondary browse-ssl" data-type="key" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                                <button type="button" class="button button-secondary browse-ssl" data-type="key" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                                     <span class="dashicons dashicons-portfolio"></span>
                                     <?php _e('Browse...', 'sewn-ws'); ?>
                                 </button>
                             </div>
                         </div>
                         <div class="ssl-actions">
-                            <button type="button" class="button button-secondary test-ssl" <?php disabled(!get_option('sewn_ws_local_mode', false) && !$is_local); ?>>
+                            <button type="button" class="button button-secondary test-ssl" <?php disabled(!get_option('sewn_ws_env_local_mode', false) && !$is_local); ?>>
                                 <span class="dashicons dashicons-shield"></span>
                                 <?php _e('Test SSL Configuration', 'sewn-ws'); ?>
                             </button>
@@ -661,15 +661,15 @@ if (!defined('ABSPATH')) exit;
             }, 'input:not([type="hidden"]), select, textarea, button');
 
             // Handle local mode toggle
-            $('#sewn_ws_local_mode').on('change', function() {
+            $('#sewn_ws_env_local_mode').on('change', function() {
                 var isEnabled = $(this).is(':checked');
                 $('.container-mode-row, .local-url-row, .ssl-config-row').toggleClass('disabled', !isEnabled);
-                $('#sewn_ws_container_mode, #sewn_ws_local_site_url, #sewn_ws_ssl_cert, #sewn_ws_ssl_key')
+                $('#sewn_ws_env_container_mode, #sewn_ws_local_site_url, #sewn_ws_ssl_cert, #sewn_ws_ssl_key')
                     .prop('disabled', !isEnabled);
                 $('.detect-ssl, .browse-ssl, .test-ssl, .reset-url').prop('disabled', !isEnabled);
                 
                 if (!isEnabled) {
-                    $('#sewn_ws_container_mode').prop('checked', false);
+                    $('#sewn_ws_env_container_mode').prop('checked', false);
                 }
             });
 
@@ -788,7 +788,7 @@ if (!defined('ABSPATH')) exit;
             });
 
             // Initial state
-            $('#sewn_ws_local_mode').trigger('change');
+            $('#sewn_ws_env_local_mode').trigger('change');
             updateUrlStatus($('#sewn_ws_local_site_url').val());
         });
         </script>
