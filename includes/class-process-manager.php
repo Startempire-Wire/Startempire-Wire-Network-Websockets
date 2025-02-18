@@ -9,12 +9,12 @@
  * for enterprise-grade WebRing content distribution. Coordinates with network authentication services for secure startup.
  */
 
- namespace SEWN\WebSockets;
+namespace SEWN\WebSockets;
 
- // Exit if accessed directly.
- if (!defined('ABSPATH')) {
-     exit;
- } 
+// Exit if accessed directly.
+if (!defined('ABSPATH')) {
+    exit;
+} 
 
 class Process_Manager {
     /**
@@ -36,9 +36,9 @@ class Process_Manager {
      * Constructor
      */
     public function __construct() {
-        $this->pid_file = SEWN_WEBSOCKETS_PATH . 'tmp/server.pid';
-        $this->log_file = SEWN_WEBSOCKETS_PATH . 'logs/server.log';
-        $this->server_script = SEWN_WEBSOCKETS_PATH . 'node-server/server.js';
+        $this->pid_file = SEWN_WS_PATH . 'tmp/server.pid';
+        $this->log_file = SEWN_WS_PATH . 'logs/server.log';
+        $this->server_script = SEWN_WS_NODE_SERVER . 'server.js';
         
         // Ensure directories exist
         wp_mkdir_p(dirname($this->pid_file));
@@ -248,7 +248,7 @@ class Process_Manager {
             // Sync VM timezone with host
             date_default_timezone_set('America/Los_Angeles'); // Match your Local config
             shell_exec('ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime');
-        } catch(Throwable $e) {
+        } catch(\Throwable $e) {
             update_option('sewn_ws_activation_error', $e->getMessage());
         }
     }

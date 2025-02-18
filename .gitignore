@@ -49,3 +49,11 @@ yarn-error.log*
 .wp-env.json
 .wp-env.override.json
 /phpunit.xml
+
+# Node.js server files
+node-server/node_modules/
+node-server/package-lock.json
+node-server/server.log
+node-server/server.pid
+node-server/stats.json
+node-server/env.example

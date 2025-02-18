@@ -35,8 +35,7 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_REST_NAMESPACE') && define('SEWN_WS_REST_NAMESPACE', 'sewn-ws/v1');
 
 // Server defaults
-!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 
-    defined('SEWN_WS_ENV_PORT') ? SEWN_WS_ENV_PORT : 8080);
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080);
 !defined('SEWN_WS_SETTINGS_GROUP') && define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
@@ -50,6 +49,12 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_SERVER_STATUS_STOPPED') && define('SEWN_WS_SERVER_STATUS_STOPPED', 'stopped');
 !defined('SEWN_WS_SERVER_STATUS_ERROR') && define('SEWN_WS_SERVER_STATUS_ERROR', 'error');
 !defined('SEWN_WS_SERVER_STATUS_UNINITIALIZED') && define('SEWN_WS_SERVER_STATUS_UNINITIALIZED', 'uninitialized');
+
+// Server Control Constants
+!defined('SEWN_WS_SERVER_CONTROL_PATH') && define('SEWN_WS_SERVER_CONTROL_PATH', SEWN_WS_PATH . 'tmp/');
+!defined('SEWN_WS_SERVER_PID_FILE') && define('SEWN_WS_SERVER_PID_FILE', SEWN_WS_SERVER_CONTROL_PATH . 'server.pid');
+!defined('SEWN_WS_SERVER_LOG_FILE') && define('SEWN_WS_SERVER_LOG_FILE', SEWN_WS_PATH . 'logs/server.log');
+!defined('SEWN_WS_SERVER_CONFIG_FILE') && define('SEWN_WS_SERVER_CONFIG_FILE', SEWN_WS_NODE_SERVER . 'config.json');
 
 // WebSocket Stats Constants
 !defined('SEWN_WS_STATS_UPDATE_INTERVAL') && define('SEWN_WS_STATS_UPDATE_INTERVAL', 10000);
@@ -74,16 +79,8 @@ define('SEWN_WS_IS_LOCAL', (
 // Add new constant for environment info storage
 !defined('SEWN_WS_ENV_INFO_OPTION') && define('SEWN_WS_ENV_INFO_OPTION', 'sewn_ws_env_info');
 
-// Update constant definitions to be explicitly global
-!defined('SEWN_WS_ENV_LOCAL_MODE') && define('SEWN_WS_ENV_LOCAL_MODE', 
-    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : false
-);
+// Define environment mode constants only once
+!defined('SEWN_WS_ENV_LOCAL_MODE') && define('SEWN_WS_ENV_LOCAL_MODE', false);
+!defined('SEWN_WS_ENV_CONTAINER_MODE') && define('SEWN_WS_ENV_CONTAINER_MODE', false);
 
-!defined('SEWN_WS_ENV_CONTAINER_MODE') && define('SEWN_WS_ENV_CONTAINER_MODE', 
-    defined('SEWN_WS_ENV_CONTAINER_MODE') ? SEWN_WS_ENV_CONTAINER_MODE : false
-);
-
-// Define all constants in global namespace
-define('SEWN_WS_ENV_LOCAL_MODE', 
-    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : false
-); 
+// End of file 

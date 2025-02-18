@@ -64,6 +64,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
     ?>
 
     <div class="sewn-ws-environment-panel">
+        <?php var_dump(get_option('sewn_ws_environment_info', [])); ?>
         <div class="notice <?php echo esc_attr($env_classes[$env_type] ?? 'notice-info'); ?> inline">
             <div class="environment-header">
                 <span class="dashicons <?php echo esc_attr($env_icons[$env_type] ?? 'dashicons-info'); ?>"></span>
