@@ -9,6 +9,9 @@
  */
 namespace SEWN\WebSockets;
 
+/**
+ * Handles plugin installation tasks including database table creation.
+ */
 class Install_Handler {
     private $node_server_dir;
     private $required_dependencies = [
@@ -16,12 +19,112 @@ class Install_Handler {
         'npm' => '7.0.0'
     ];
 
+    /**
+     * Constructor.
+     *
+     * @since 1.0.0
+     */
     public function __construct() {
         $this->node_server_dir = SEWN_WS_PATH . 'node-server/';
         
         add_action('wp_ajax_sewn_ws_install_node', [$this, 'handle_install']);
         add_action('wp_ajax_sewn_ws_check_installation', [$this, 'handle_installation_check']);
         add_action('wp_ajax_sewn_ws_initialize_server', [$this, 'handle_server_initialization']);
+
+        register_activation_hook(SEWN_WS_FILE, [$this, 'activate']);
+        register_deactivation_hook(SEWN_WS_FILE, [$this, 'deactivate']);
+    }
+
+    /**
+     * Activation handler.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function activate(): void {
+        $this->create_tables();
+        $this->initialize_options();
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Deactivation handler.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function deactivate(): void {
+        // Clear scheduled events
+        wp_clear_scheduled_hook('sewn_ws_persist_stats');
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Create necessary database tables.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    private function create_tables(): void {
+        global $wpdb;
+
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // Stats table
+        $table_name = $wpdb->prefix . 'sewn_ws_stats';
+        
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            stats_data longtext NOT NULL,
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+    }
+
+    /**
+     * Initialize plugin options.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    private function initialize_options(): void {
+        // Add default options if they don't exist
+        add_option('sewn_ws_version', '1.0.0');
+        add_option('sewn_ws_stats_retention_days', 30);
+        add_option('sewn_ws_buffer_size', 1000);
+    }
+
+    /**
+     * Check if database tables exist.
+     *
+     * @since 1.0.0
+     * @return bool True if tables exist, false otherwise.
+     */
+    public function check_tables(): bool {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'sewn_ws_stats';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        
+        return $table_exists;
+    }
+
+    /**
+     * Get plugin version.
+     *
+     * @since 1.0.0
+     * @return string Plugin version.
+     */
+    public function get_version(): string {
+        return get_option('sewn_ws_version', '1.0.0');
     }
 
     public function handle_install() {

@@ -1,7 +1,19 @@
 <?php
+/**
+ * AJAX Handler Class
+ *
+ * @package Startempire_Wire_Network_Websockets
+ * @subpackage Admin
+ * @since 1.0.0
+ */
 
 namespace SEWN\WebSockets\Admin;
 
+use SEWN\WebSockets\Stats_Handler;
+
+/**
+ * Handles AJAX requests for the admin interface.
+ */
 class Ajax_Handler {
     private static $instance = null;
     private $logger;
@@ -24,6 +36,7 @@ class Ajax_Handler {
         add_action('wp_ajax_sewn_ws_get_ssl_paths', [$this, 'get_ssl_paths']);
         add_action('wp_ajax_sewn_ws_toggle_debug', [$this, 'toggle_debug']);
         add_action('wp_ajax_sewn_ws_get_logs', [$this, 'get_logs']);
+        add_action('wp_ajax_sewn_ws_get_stats', [$this, 'get_stats']);
     }
 
     /**
@@ -198,4 +211,27 @@ class Ajax_Handler {
             wp_send_json_error('Failed to get SSL paths: ' . $e->getMessage());
         }
     }
-} 
+
+    /**
+     * Get current WebSocket statistics.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function get_stats(): void {
+        // Verify nonce and capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        // Get stats from handler
+        $stats_handler = Stats_Handler::get_instance();
+        $current_stats = $stats_handler->get_current_stats();
+
+        wp_send_json_success($current_stats);
+    }
+}
+
+// Initialize the AJAX handler
+new Ajax_Handler(); 

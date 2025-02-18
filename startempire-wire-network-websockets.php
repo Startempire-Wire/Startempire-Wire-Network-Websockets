@@ -295,7 +295,7 @@ add_action('plugins_loaded', function() {
 // Initialize handlers
 add_action('init', function() {
     Server_Controller::get_instance();
-    new Stats_Handler();
+    Stats_Handler::get_instance();
     new Log_Handler();
 });
 

@@ -1,0 +1,175 @@
+<?php
+/**
+ * BACKUP FILE - Original Stats_Collector Class
+ * @package Startempire_Wire_Network_Websockets
+ * @subpackage Includes
+ * @since 1.0.0
+ */
+
+// Original content preserved for reference
+namespace SEWN\WebSockets;
+
+class Stats_Collector {
+    private static $instance = null;
+    private $stats_buffer = [];
+    private $buffer_size = 1000;
+    private $stat_types = [
+        'connections' => [
+            'active',
+            'total',
+            'peak',
+            'dropped'
+        ],
+        'messages' => [
+            'sent',
+            'received',
+            'errors'
+        ],
+        'bandwidth' => [
+            'incoming',
+            'outgoing'
+        ],
+        'latency' => [
+            'average',
+            'peak'
+        ]
+    ];
+
+    public static function get_instance(): Stats_Collector {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    private function __construct() {
+        $this->init();
+    }
+
+    private function init(): void {
+        add_action('sewn_ws_server_started', [$this, 'initialize_stats']);
+        add_action('sewn_ws_client_connect', [$this, 'track_connection']);
+        add_action('sewn_ws_client_disconnect', [$this, 'track_disconnection']);
+        add_action('sewn_ws_message_received', [$this, 'track_message']);
+        add_action('sewn_ws_message_sent', [$this, 'track_message_sent']);
+        add_action('sewn_ws_error', [$this, 'track_error']);
+
+        add_action('sewn_ws_persist_stats', [$this, 'persist_stats']);
+        if (!wp_next_scheduled('sewn_ws_persist_stats')) {
+            wp_schedule_event(time(), 'every_minute', 'sewn_ws_persist_stats');
+        }
+    }
+
+    public function initialize_stats(): void {
+        $this->stats_buffer = [
+            'connections' => [
+                'active' => 0,
+                'total' => 0,
+                'peak' => 0,
+                'dropped' => 0
+            ],
+            'messages' => [
+                'sent' => 0,
+                'received' => 0,
+                'errors' => 0
+            ],
+            'bandwidth' => [
+                'incoming' => 0,
+                'outgoing' => 0
+            ],
+            'latency' => [
+                'average' => 0,
+                'peak' => 0
+            ],
+            'timestamp' => time()
+        ];
+
+        $this->persist_stats();
+    }
+
+    public function track_connection(string $client_id): void {
+        $this->stats_buffer['connections']['active']++;
+        $this->stats_buffer['connections']['total']++;
+        
+        if ($this->stats_buffer['connections']['active'] > $this->stats_buffer['connections']['peak']) {
+            $this->stats_buffer['connections']['peak'] = $this->stats_buffer['connections']['active'];
+        }
+
+        $this->maybe_persist_stats();
+    }
+
+    public function track_disconnection(string $client_id): void {
+        $this->stats_buffer['connections']['active']--;
+        $this->maybe_persist_stats();
+    }
+
+    public function track_message(array $message): void {
+        $this->stats_buffer['messages']['received']++;
+        $this->stats_buffer['bandwidth']['incoming'] += strlen(json_encode($message));
+        $this->maybe_persist_stats();
+    }
+
+    public function track_message_sent(array $message): void {
+        $this->stats_buffer['messages']['sent']++;
+        $this->stats_buffer['bandwidth']['outgoing'] += strlen(json_encode($message));
+        $this->maybe_persist_stats();
+    }
+
+    public function track_error(\Throwable $error): void {
+        $this->stats_buffer['messages']['errors']++;
+        $this->maybe_persist_stats();
+    }
+
+    private function maybe_persist_stats(): void {
+        if (count($this->stats_buffer) >= $this->buffer_size) {
+            $this->persist_stats();
+        }
+    }
+
+    public function persist_stats(): void {
+        global $wpdb;
+
+        $table_name = $wpdb->prefix . 'sewn_ws_stats';
+        
+        $this->stats_buffer['timestamp'] = $this->stats_buffer['timestamp'] ?? time();
+
+        $wpdb->insert(
+            $table_name,
+            [
+                'stats_data' => json_encode($this->stats_buffer),
+                'created_at' => date('Y-m-d H:i:s', $this->stats_buffer['timestamp'])
+            ],
+            [
+                '%s',
+                '%s'
+            ]
+        );
+
+        $this->initialize_stats();
+    }
+
+    public function get_current_stats(): array {
+        return $this->stats_buffer;
+    }
+
+    public function get_historical_stats(int $hours = 24): array {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'sewn_ws_stats';
+        $time_limit = date('Y-m-d H:i:s', strtotime("-{$hours} hours"));
+
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT stats_data, created_at FROM {$table_name} WHERE created_at >= %s ORDER BY created_at DESC",
+                $time_limit
+            )
+        );
+
+        return array_map(function($row) {
+            return [
+                'data' => json_decode($row->stats_data, true),
+                'timestamp' => strtotime($row->created_at)
+            ];
+        }, $results);
+    }
+} 
