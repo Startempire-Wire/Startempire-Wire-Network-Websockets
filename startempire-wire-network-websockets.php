@@ -18,6 +18,7 @@
  * @copyright         2024 Startempire Wire
  */
  
+
 // Add this at the VERY TOP of the file
 namespace SEWN\WebSockets;
 use SEWN\WebSockets\Admin\Dashboard;
@@ -27,6 +28,9 @@ use SEWN\WebSockets\Module_Registry;
 use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Socket_Manager;
 use SEWN\WebSockets\Unified_Roles;
+
+// Constants MUST load first
+require_once __DIR__ . '/includes/constants.php';
 
 // Define plugin file constant in global namespace
 if (!defined('SEWN_WS_FILE')) {
@@ -71,9 +75,6 @@ spl_autoload_register(function ($class) {
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 }
-
-// Define Global Constants
-require_once __DIR__ . '/includes/constants.php';
 
 // Load core dependencies in correct order
 require_once __DIR__ . '/includes/class-exception.php';

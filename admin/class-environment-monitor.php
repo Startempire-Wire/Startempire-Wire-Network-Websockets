@@ -71,8 +71,9 @@ class Environment_Monitor {
     public function check_environment() {
         try {
             $this->environment_info = array(
-                'is_local'           => get_option('sewn_ws_env_local_mode', 
-                    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : SEWN_WS_ENV_LOCAL_MODE),
+                'is_local'           => defined('SEWN_WS_ENV_LOCAL_MODE') 
+                    ? SEWN_WS_ENV_LOCAL_MODE 
+                    : get_option('sewn_ws_env_local_mode', SEWN_WS_ENV_LOCAL_MODE),
                 'server_info'        => $this->get_server_info(),
                 'php_info'           => $this->get_php_info(),
                 'ssl_info'           => $this->get_ssl_info(),

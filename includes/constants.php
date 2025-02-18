@@ -6,7 +6,7 @@
  * Purpose: Centralizes plugin-wide constant definitions and configuration values. Ensures consistent access to critical paths and settings across all plugin components.
  */
 
-namespace SEWN\WebSockets;
+// namespace SEWN\WebSockets; <-- COMMENT THIS OUT
 
 defined('ABSPATH') || exit;
 
@@ -72,4 +72,18 @@ define('SEWN_WS_IS_LOCAL', (
 ]);
 
 // Add new constant for environment info storage
-!defined('SEWN_WS_ENV_INFO_OPTION') && define('SEWN_WS_ENV_INFO_OPTION', 'sewn_ws_env_info'); 
+!defined('SEWN_WS_ENV_INFO_OPTION') && define('SEWN_WS_ENV_INFO_OPTION', 'sewn_ws_env_info');
+
+// Update constant definitions to be explicitly global
+!defined('SEWN_WS_ENV_LOCAL_MODE') && define('SEWN_WS_ENV_LOCAL_MODE', 
+    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : false
+);
+
+!defined('SEWN_WS_ENV_CONTAINER_MODE') && define('SEWN_WS_ENV_CONTAINER_MODE', 
+    defined('SEWN_WS_ENV_CONTAINER_MODE') ? SEWN_WS_ENV_CONTAINER_MODE : false
+);
+
+// Define all constants in global namespace
+define('SEWN_WS_ENV_LOCAL_MODE', 
+    defined('SEWN_WS_ENV_LOCAL_MODE') ? SEWN_WS_ENV_LOCAL_MODE : false
+); 
