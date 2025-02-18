@@ -187,18 +187,39 @@ class Environment_Monitor {
     private function detect_container_environment() {
         $container_info = array(
             'is_container' => false,
-            'type'        => 'standard',
+            'type'        => 'production',  // Default to production instead of standard
             'details'     => array(),
         );
 
-        if ( file_exists( '/.dockerenv' ) || file_exists( '/run/.containerenv' ) ) {
+        // Check for Local by Flywheel
+        if (defined('FLYWHEEL_CONFIG_DIR')) {
             $container_info['is_container'] = true;
-            $container_info['type'] = 'docker';
+            $container_info['type'] = 'local_by_flywheel';
+            return $container_info;
         }
 
-        if ( defined( 'FLYWHEEL_CONFIG_DIR' ) ) {
+        // Check for Docker
+        if (file_exists('/.dockerenv') || file_exists('/run/.containerenv')) {
             $container_info['is_container'] = true;
-            $container_info['type'] = 'flywheel';
+            $container_info['type'] = 'development';
+            return $container_info;
+        }
+
+        // Check for XAMPP
+        if (strpos(strtolower($_SERVER['SERVER_SOFTWARE'] ?? ''), 'xampp') !== false) {
+            $container_info['type'] = 'xampp';
+            return $container_info;
+        }
+
+        // Check for MAMP
+        if (strpos(strtolower($_SERVER['SERVER_SOFTWARE'] ?? ''), 'mamp') !== false) {
+            $container_info['type'] = 'mamp';
+            return $container_info;
+        }
+
+        // Check if we're in a development environment
+        if ($this->detect_local_environment()) {
+            $container_info['type'] = 'development';
         }
 
         return $container_info;
@@ -228,10 +249,12 @@ class Environment_Monitor {
         return array(
             'version'            => PHP_VERSION,
             'extensions'         => get_loaded_extensions(),
-            'memory_limit'       => ini_get( 'memory_limit' ),
-            'max_execution_time' => ini_get( 'max_execution_time' ),
-            'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
-            'post_max_size'      => ini_get( 'post_max_size' ),
+            'memory_limit'       => ini_get('memory_limit'),
+            'max_execution_time' => ini_get('max_execution_time'),
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'post_max_size'      => ini_get('post_max_size'),
+            'max_input_vars'     => ini_get('max_input_vars'),
+            'max_input_time'     => ini_get('max_input_time')
         );
     }
 
@@ -289,13 +312,15 @@ class Environment_Monitor {
      * @return array WordPress configuration details
      */
     private function get_wordpress_info() {
-        global $wp_version;
+        global $wpdb;
+        
         return array(
-            'version'      => $wp_version,
+            'version'       => get_bloginfo('version'),
+            'mysql_version' => $wpdb->db_version(),
+            'site_url'     => get_site_url(),
+            'home_url'     => get_home_url(),
             'is_multisite' => is_multisite(),
-            'debug_mode'   => defined( 'WP_DEBUG' ) && WP_DEBUG,
-            'theme'        => wp_get_theme()->get( 'Name' ),
-            'active_plugins' => get_option( 'active_plugins' ),
+            'debug_mode'   => defined('WP_DEBUG') && WP_DEBUG
         );
     }
 

@@ -20,6 +20,7 @@ use SEWN\WebSockets\Node_Check;
 use SEWN\WebSockets\Process_Manager;
 use SEWN\WebSockets\Server_Controller;
 use SEWN\WebSockets\Server_Process;
+use SEWN\WebSockets\Admin\Environment_Monitor;
 use Exception;
 
 class Admin_UI {
@@ -138,6 +139,10 @@ class Admin_UI {
         $node_check = new Node_Check();
         $node_status = $node_check->check_server_status();
         
+        // Get environment information
+        $environment_monitor = Environment_Monitor::get_instance();
+        $environment = $environment_monitor->check_environment();
+        
         // Add these MVP-critical metrics
         $health_metrics = [
             'message_queue' => Process_Manager::get_message_queue_depth(),
@@ -147,9 +152,10 @@ class Admin_UI {
         
         $data = [
             'node_status' => $node_status,
-            'health_metrics' => $health_metrics, // New metrics
+            'health_metrics' => $health_metrics,
             'connections' => Process_Manager::get_active_connections(),
-            'message_rates' => Process_Manager::get_message_throughput()
+            'message_rates' => Process_Manager::get_message_throughput(),
+            'environment' => $environment // Add environment data
         ];
         
         include plugin_dir_path(__DIR__) . 'admin/views/dashboard.php';

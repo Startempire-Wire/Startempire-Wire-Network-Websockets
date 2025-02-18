@@ -58,6 +58,9 @@ class Process_Manager {
             ];
         }
 
+        // Clean up any stale files
+        $this->cleanup_stale_files();
+
         $node_path = $this->get_node_path();
         if (!$node_path) {
             return [
@@ -66,8 +69,25 @@ class Process_Manager {
             ];
         }
 
+        // Ensure directories exist
+        wp_mkdir_p(dirname($this->pid_file));
+        wp_mkdir_p(dirname($this->log_file));
+
+        // Set up environment variables for Node process
+        $env = [
+            'WP_PLUGIN_DIR' => SEWN_WS_PATH,
+            'WP_PORT' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT),
+            'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false'
+        ];
+        
+        $env_string = '';
+        foreach ($env as $key => $value) {
+            $env_string .= sprintf('%s=%s ', escapeshellarg($key), escapeshellarg($value));
+        }
+
         $command = sprintf(
-            '%s %s > %s 2>&1 & echo $! > %s',
+            '%s %s %s > %s 2>&1 & echo $! > %s',
+            $env_string,
             escapeshellcmd($node_path),
             escapeshellarg($this->server_script),
             escapeshellarg($this->log_file),
@@ -83,11 +103,45 @@ class Process_Manager {
             ];
         }
 
+        // Wait briefly and verify process is still running
+        sleep(1);
+        if (!$this->is_running()) {
+            // Read the last few lines of the log for error details
+            $error_log = $this->get_log_tail(5);
+            return [
+                'success' => false,
+                'message' => 'Server failed to start. Check error log.',
+                'error_details' => $error_log
+            ];
+        }
+
         return [
             'success' => true,
             'message' => 'Server started successfully',
             'pid' => file_get_contents($this->pid_file)
         ];
+    }
+
+    /**
+     * Clean up stale server files
+     */
+    private function cleanup_stale_files() {
+        // Clean up PID file if process is not actually running
+        if (file_exists($this->pid_file)) {
+            $pid = (int) file_get_contents($this->pid_file);
+            if (!posix_kill($pid, 0)) {
+                unlink($this->pid_file);
+            }
+        }
+
+        // Clean up stats file if it exists
+        $stats_file = dirname($this->pid_file) . '/stats.json';
+        if (file_exists($stats_file)) {
+            $stats = json_decode(file_get_contents($stats_file), true);
+            if (isset($stats['pid']) && !posix_kill($stats['pid'], 0)) {
+                unlink($stats_file);
+            }
+        }
     }
 
     /**
@@ -147,7 +201,18 @@ class Process_Manager {
         }
 
         $pid = (int) file_get_contents($this->pid_file);
-        return posix_kill($pid, 0);
+        
+        // First check if process exists
+        if (!posix_kill($pid, 0)) {
+            $this->cleanup_stale_files();
+            return false;
+        }
+
+        // Then verify it's our Node.js process
+        $command = sprintf('ps -p %d -o command=', $pid);
+        $output = shell_exec($command);
+        
+        return strpos($output, 'node') !== false && strpos($output, $this->server_script) !== false;
     }
 
     /**

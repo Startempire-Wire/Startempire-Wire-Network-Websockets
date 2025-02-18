@@ -316,3 +316,9 @@ add_action('sewn_ws_after_core_init', function() {
     // Late initialization
     $registry->init_modules();
 });
+
+add_action('admin_init', function() {
+    if (is_admin()) {
+        \SEWN\WebSockets\Admin\Environment_Monitor::get_instance()->check_environment();
+    }
+});

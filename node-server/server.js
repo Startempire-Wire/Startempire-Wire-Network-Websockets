@@ -85,25 +85,56 @@ try {
     // Configure Winston logger with error handling
     let logger;
     try {
+        // Ensure log directory exists
+        const logDir = path.join(process.env.WP_PLUGIN_DIR || __dirname, 'logs');
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true, mode: 0o755 });
+        }
+
+        // Create console transport first for immediate logging
+        const transports = [new winston.transports.Console()];
+
+        // Try to add file transport, but continue if it fails
+        try {
+            transports.push(
+                new winston.transports.File({
+                    filename: path.join(logDir, 'server.log'),
+                    maxsize: 5242880, // 5MB
+                    maxFiles: 5,
+                    tailable: true,
+                    options: { flags: 'a' }
+                })
+            );
+        } catch (error) {
+            console.error('Failed to initialize file logging, falling back to console only:', error);
+        }
+
         logger = winston.createLogger({
-            level: debug ? 'debug' : 'info',
+            level: process.env.WP_DEBUG === 'true' ? 'debug' : 'info',
             format: winston.format.combine(
                 winston.format.timestamp(),
                 winston.format.json()
             ),
-            transports: [
-                new winston.transports.Console(),
-                new winston.transports.File({
-                    filename: logFile,
-                    maxsize: 5242880, // 5MB
-                    maxFiles: 5,
-                    tailable: true
-                })
-            ],
+            transports: transports,
+            exitOnError: false // Don't crash on logging errors
         });
+
+        // Add error handlers for each transport
+        logger.transports.forEach(transport => {
+            transport.on('error', (err) => {
+                console.error('Transport error:', err);
+                // Remove problematic transport
+                logger.remove(transport);
+            });
+        });
+
     } catch (error) {
         console.error('Failed to initialize logger:', error);
-        process.exit(1);
+        // Create minimal console-only logger as fallback
+        logger = winston.createLogger({
+            transports: [new winston.transports.Console()],
+            level: 'info'
+        });
     }
 
     // Load configuration with validation

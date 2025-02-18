@@ -2,8 +2,8 @@
 
 /**
  * LOCATION: admin/views/dashboard.php
- * DEPENDENCIES: Admin_UI class, WordPress admin styles
- * VARIABLES: $node_status (server state data)
+ * DEPENDENCIES: Server_Controller stats data
+ * VARIABLES: $data (array containing environment and stats)
  * CLASSES: None (template file)
  * 
  * Renders primary WebSocket server dashboard with real-time connection metrics and controls. Displays network
@@ -11,9 +11,12 @@
  * visualization for network operators.
  */
 
-if (!defined('ABSPATH')) exit; 
+if (!defined('ABSPATH')) exit;
 
-/** @var array $node_status */
+// Extract environment data
+$environment = $data['environment'] ?? [];
+$node_status = $data['node_status'] ?? [];
+
 // Define default values
 $default_status = [
     'version' => 'N/A',
@@ -37,8 +40,7 @@ $status_text = $node_status['running'] ? '✓ Operational' :
     <h1 class="wp-heading-inline"><?php _e('WebSocket Server Dashboard', 'sewn-ws'); ?></h1>
     
     <?php 
-    $environment = (array) get_option('sewn_ws_environment_info', []);
-    $env_type = $environment['type'] ?? 'production';
+    $env_type = $environment['container_info']['type'] ?? 'production';
 
     $env_classes = [
         'local_by_flywheel' => 'notice-info',
@@ -64,7 +66,6 @@ $status_text = $node_status['running'] ? '✓ Operational' :
     ?>
 
     <div class="sewn-ws-environment-panel">
-        <?php var_dump(get_option('sewn_ws_environment_info', [])); ?>
         <div class="notice <?php echo esc_attr($env_classes[$env_type] ?? 'notice-info'); ?> inline">
             <div class="environment-header">
                 <span class="dashicons <?php echo esc_attr($env_icons[$env_type] ?? 'dashicons-info'); ?>"></span>
@@ -77,19 +78,19 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                     <ul>
                         <li>
                             <strong><?php _e('Server Software:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['server_info'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['server_info']['software'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Operating System:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['operating_system'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['server_info']['os'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('PHP Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info']['version'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('MySQL Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['mysql_version'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['wordpress_info']['mysql_version'] ?? 'Unknown'); ?>
                         </li>
                     </ul>
                 </div>
@@ -99,19 +100,19 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                     <ul>
                         <li>
                             <strong><?php _e('WordPress Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['wordpress_version'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['wordpress_info']['version'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('SSL Enabled:', 'sewn-ws'); ?></strong>
-                            <?php echo $environment['ssl_valid'] ? '✓' : '✗'; ?>
+                            <?php echo $environment['ssl_info']['has_valid_cert'] ? '✓' : '✗'; ?>
                         </li>
                         <li>
                             <strong><?php _e('Memory Limit:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['memory_limit'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info']['memory_limit'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Max Execution Time:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['max_execution_time'] ?? 'Unknown'); ?>s
+                            <?php echo esc_html($environment['php_info']['max_execution_time'] ?? 'Unknown'); ?>s
                         </li>
                     </ul>
                 </div>
@@ -122,19 +123,19 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                     <ul>
                         <li>
                             <strong><?php _e('Upload Max Filesize:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['upload_max_filesize'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info']['upload_max_filesize'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Post Max Size:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['post_max_size'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info']['post_max_size'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Max Input Vars:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['max_input_vars'] ?? 'Unknown'); ?>
+                            <?php echo esc_html($environment['php_info']['max_input_vars'] ?? 'Unknown'); ?>
                         </li>
                         <li>
                             <strong><?php _e('Max Input Time:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['max_input_time'] ?? 'Unknown'); ?>s
+                            <?php echo esc_html($environment['php_info']['max_input_time'] ?? 'Unknown'); ?>s
                         </li>
                     </ul>
                 </div>
