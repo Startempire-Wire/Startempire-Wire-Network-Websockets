@@ -7,10 +7,14 @@
  */
 
 const Redis = require('ioredis');
+const fs = require('fs');
+const path = require('path');
 
 class Stats {
     constructor(config = {}) {
         this.config = config;
+        this.startTime = Date.now();
+        this.statsFile = process.env.WP_STATS_FILE || path.join(__dirname, '../../tmp/stats.json');
 
         // Initialize Redis if configured, otherwise use in-memory
         if (config.redis) {
@@ -23,8 +27,41 @@ class Stats {
                 totalConnections: 0,
                 totalMessages: 0,
                 totalErrors: 0,
-                startTime: Date.now()
+                startTime: this.startTime
             };
+        }
+
+        // Start periodic stats writing
+        this.startStatsWriter();
+    }
+
+    startStatsWriter() {
+        // Write stats every second
+        setInterval(() => this.writeStats(), 1000);
+    }
+
+    async writeStats() {
+        try {
+            const stats = await this.getStats();
+            const statsData = {
+                timestamp: Date.now(),
+                memory: process.memoryUsage().heapUsed,
+                connections: stats.currentConnections,
+                messageRate: stats.messageRate,
+                errorRate: stats.errorRate,
+                uptime: stats.uptime
+            };
+
+            // Ensure directory exists
+            const dir = path.dirname(this.statsFile);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+
+            // Write stats to file
+            fs.writeFileSync(this.statsFile, JSON.stringify(statsData, null, 2));
+        } catch (error) {
+            console.error('Error writing stats:', error);
         }
     }
 
@@ -103,32 +140,40 @@ class Stats {
                 this.store.get('stats:total_errors')
             ]);
 
+            const now = Date.now();
+            const messageRate = totalMessages ? parseInt(totalMessages, 10) / ((now - this.startTime) / 1000) : 0;
+            const errorRate = totalErrors ? parseInt(totalErrors, 10) / ((now - this.startTime) / 1000) : 0;
+
             return {
                 currentConnections: Object.values(connections || {})
                     .reduce((sum, val) => sum + parseInt(val, 10), 0),
                 totalConnections: parseInt(totalConnections, 10) || 0,
                 totalMessages: parseInt(totalMessages, 10) || 0,
                 totalErrors: parseInt(totalErrors, 10) || 0,
-                uptime: Date.now() - this.startTime
+                messageRate,
+                errorRate,
+                uptime: now - this.startTime
             };
         } else {
+            const now = Date.now();
+            const messageRate = this.stats.totalMessages / ((now - this.stats.startTime) / 1000);
+            const errorRate = this.stats.totalErrors / ((now - this.stats.startTime) / 1000);
+
             return {
                 currentConnections: Array.from(this.stats.connections.values())
                     .reduce((sum, val) => sum + val, 0),
                 totalConnections: this.stats.totalConnections,
                 totalMessages: this.stats.totalMessages,
                 totalErrors: this.stats.totalErrors,
-                uptime: Date.now() - this.stats.startTime
+                messageRate,
+                errorRate,
+                uptime: now - this.stats.startTime
             };
         }
     }
 
     async save() {
-        // Only needed for memory store, Redis persists automatically
-        if (!this.store) {
-            // Implement saving to file if needed
-            console.log('Stats saved');
-        }
+        await this.writeStats();
     }
 
     async close() {

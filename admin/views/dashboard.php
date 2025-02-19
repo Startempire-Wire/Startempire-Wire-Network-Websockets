@@ -13,6 +13,8 @@
 
 if (!defined('ABSPATH')) exit;
 
+use SEWN\WebSockets\Process_Manager;
+
 // Extract environment data
 $environment = $data['environment'] ?? [];
 $node_status = $data['node_status'] ?? [];
@@ -215,18 +217,37 @@ $status_text = $node_status['running'] ? '✓ Operational' :
             <div id="server-stats" class="metrics-grid">
                 <div class="metric-card">
                     <h3><?php _e('Connections', 'sewn-ws'); ?></h3>
-                    <div class="metric-value" id="live-connections-count">0</div>
-                    <div class="connection-graph" id="connection-graph"></div>
+                    <div class="metric-value" id="live-connections-count">
+                        <?php 
+                        $connections = Process_Manager::get_active_connections();
+                        echo esc_html(count($connections));
+                        ?>
+                    </div>
+                    <div class="connection-graph" id="connection-graph" 
+                         data-history="<?php echo esc_attr(json_encode(get_option('sewn_ws_connection_history', []))); ?>">
+                    </div>
                 </div>
                 <div class="metric-card">
                     <h3><?php _e('Message Rate', 'sewn-ws'); ?></h3>
-                    <div class="metric-value" id="message-throughput">0 msg/s</div>
-                    <span class="trend-indicator"></span>
+                    <div class="metric-value" id="message-throughput">
+                        <?php 
+                        $throughput = Process_Manager::get_message_throughput();
+                        echo esc_html(number_format($throughput['current'], 1) . ' msg/s');
+                        ?>
+                    </div>
+                    <span class="trend-indicator" data-peak="<?php echo esc_attr($throughput['max']); ?>"></span>
                 </div>
                 <div class="metric-card">
                     <h3><?php _e('Memory Usage', 'sewn-ws'); ?></h3>
-                    <div class="metric-value" id="memory-usage">0 MB</div>
-                    <div class="memory-graph" id="memory-graph"></div>
+                    <div class="metric-value" id="memory-usage">
+                        <?php 
+                        $memory = get_option('sewn_ws_last_memory_usage', 0);
+                        echo esc_html(number_format($memory / 1024 / 1024, 1) . ' MB');
+                        ?>
+                    </div>
+                    <div class="memory-graph" id="memory-graph" 
+                         data-history="<?php echo esc_attr(json_encode(get_option('sewn_ws_memory_history', []))); ?>">
+                    </div>
                 </div>
             </div>
         </div>
@@ -241,21 +262,121 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                 <div class="channel-grid">
                     <div class="metric-card">
                         <h3><?php _e('Messages Processed', 'sewn-ws'); ?></h3>
-                        <div id="channel-messages" class="metric-value">0</div>
-                        <span class="trend-indicator"></span>
+                        <div id="channel-messages" class="metric-value">
+                            <?php 
+                            $queue = Process_Manager::get_message_queue_depth();
+                            echo esc_html(number_format($queue['current']));
+                            ?>
+                        </div>
+                        <span class="trend-indicator" 
+                              data-warning="<?php echo esc_attr($queue['warning_threshold']); ?>"
+                              data-max="<?php echo esc_attr($queue['max_capacity']); ?>">
+                        </span>
                     </div>
                     <div class="metric-card">
                         <h3><?php _e('Active Subscribers', 'sewn-ws'); ?></h3>
-                        <div id="channel-subscribers" class="metric-value">0</div>
-                        <span class="trend-indicator"></span>
+                        <div id="channel-subscribers" class="metric-value">
+                            <?php 
+                            $subscribers = get_option('sewn_ws_active_subscribers', 0);
+                            echo esc_html(number_format($subscribers));
+                            ?>
+                        </div>
+                        <span class="trend-indicator" 
+                              data-peak="<?php echo esc_attr(get_option('sewn_ws_peak_subscribers', 0)); ?>">
+                        </span>
                     </div>
                     <div class="metric-card">
                         <h3><?php _e('Error Rate', 'sewn-ws'); ?></h3>
-                        <div id="channel-errors" class="metric-value">0</div>
-                        <span class="trend-indicator"></span>
+                        <div id="channel-errors" class="metric-value">
+                            <?php 
+                            $failure_rates = Process_Manager::get_failure_rates();
+                            echo esc_html(number_format($failure_rates['last_hour'] * 100, 2) . '%');
+                            ?>
+                        </div>
+                        <span class="trend-indicator" 
+                              data-threshold="<?php echo esc_attr($failure_rates['threshold'] * 100); ?>%"
+                              data-24h="<?php echo esc_attr($failure_rates['last_24h'] * 100); ?>%">
+                        </span>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Server History Panel -->
+    <div class="sewn-ws-card history-panel">
+        <h2 class="card-title">
+            <span class="dashicons dashicons-backup"></span>
+            <?php _e('Server History', 'sewn-ws'); ?>
+        </h2>
+        <div class="server-history">
+            <?php 
+            $history = Process_Manager::get_server_history();
+            $last_stats = Process_Manager::get_last_stats();
+            
+            if (empty($history)): ?>
+                <p class="no-history"><?php _e('No server history available yet.', 'sewn-ws'); ?></p>
+            <?php else: ?>
+                <div class="history-stats">
+                    <div class="stat-item">
+                        <h4><?php _e('Last Run Statistics', 'sewn-ws'); ?></h4>
+                        <ul>
+                            <li>
+                                <strong><?php _e('Uptime:', 'sewn-ws'); ?></strong>
+                                <?php echo human_time_diff(0, $last_stats['uptime']); ?>
+                            </li>
+                            <li>
+                                <strong><?php _e('Peak Memory:', 'sewn-ws'); ?></strong>
+                                <?php echo size_format($last_stats['memory'], 2); ?>
+                            </li>
+                            <li>
+                                <strong><?php _e('Peak Connections:', 'sewn-ws'); ?></strong>
+                                <?php echo number_format($last_stats['connections']); ?>
+                            </li>
+                            <li>
+                                <strong><?php _e('Message Rate:', 'sewn-ws'); ?></strong>
+                                <?php echo number_format($last_stats['message_rate'], 1); ?> msg/s
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="history-timeline">
+                    <h4><?php _e('Recent Activity', 'sewn-ws'); ?></h4>
+                    <ul>
+                    <?php 
+                    $history = array_reverse($history);
+                    foreach (array_slice($history, 0, 10) as $entry): 
+                        $time_diff = human_time_diff($entry['time'], time());
+                        $icon = $entry['action'] === 'start' ? 'play' : 'stop';
+                        $class = $entry['action'] === 'start' ? 'start' : 'stop';
+                    ?>
+                        <li class="history-entry <?php echo esc_attr($class); ?>">
+                            <span class="dashicons dashicons-controls-<?php echo esc_attr($icon); ?>"></span>
+                            <div class="entry-details">
+                                <span class="action">
+                                    <?php 
+                                    echo $entry['action'] === 'start' 
+                                        ? __('Server Started', 'sewn-ws')
+                                        : __('Server Stopped', 'sewn-ws');
+                                    ?>
+                                </span>
+                                <span class="time"><?php echo esc_html($time_diff . ' ' . __('ago', 'sewn-ws')); ?></span>
+                                <?php if ($entry['action'] === 'start'): ?>
+                                    <span class="port">
+                                        <?php echo sprintf(__('Port: %d', 'sewn-ws'), $entry['port']); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ($entry['action'] === 'stop' && isset($entry['uptime'])): ?>
+                                    <span class="uptime">
+                                        <?php echo sprintf(__('Uptime: %s', 'sewn-ws'), human_time_diff(0, $entry['uptime'])); ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        </li>
+                    <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -643,6 +764,135 @@ $status_text = $node_status['running'] ? '✓ Operational' :
     .detail-column ul li strong {
         display: block;
         margin-bottom: 2px;
+    }
+}
+
+/* Server History Panel Styles */
+.history-panel {
+    margin-top: 20px;
+}
+
+.history-panel .card-title {
+    display: flex;
+    align-items: center;
+}
+
+.history-panel .dashicons {
+    margin-right: 10px;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.server-history {
+    padding: 15px;
+}
+
+.history-stats {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.history-stats ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.history-stats li {
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.history-stats strong {
+    display: inline-block;
+    min-width: 120px;
+    color: #50575e;
+}
+
+.history-timeline {
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+
+.history-timeline h4 {
+    margin: 0 0 15px 0;
+    color: #1d2327;
+}
+
+.history-timeline ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.history-entry {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.history-entry:hover {
+    background: #f0f0f1;
+}
+
+.history-entry.start {
+    border-left: 3px solid #00c853;
+}
+
+.history-entry.stop {
+    border-left: 3px solid #ff9800;
+}
+
+.history-entry .dashicons {
+    margin-right: 10px;
+    color: #50575e;
+}
+
+.entry-details {
+    flex: 1;
+}
+
+.entry-details .action {
+    display: block;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.entry-details .time,
+.entry-details .port,
+.entry-details .uptime {
+    display: inline-block;
+    margin-right: 15px;
+    color: #666;
+    font-size: 12px;
+}
+
+.no-history {
+    text-align: center;
+    color: #666;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+@media screen and (max-width: 782px) {
+    .history-stats li strong {
+        display: block;
+        margin-bottom: 4px;
+    }
+    
+    .entry-details .time,
+    .entry-details .port,
+    .entry-details .uptime {
+        display: block;
+        margin: 5px 0;
     }
 }
 </style>

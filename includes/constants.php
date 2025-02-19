@@ -35,7 +35,7 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_REST_NAMESPACE') && define('SEWN_WS_REST_NAMESPACE', 'sewn-ws/v1');
 
 // Server defaults
-!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 8080);
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 3000);
 !defined('SEWN_WS_SETTINGS_GROUP') && define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
@@ -82,5 +82,12 @@ define('SEWN_WS_IS_LOCAL', (
 // Define environment mode constants only once
 !defined('SEWN_WS_ENV_LOCAL_MODE') && define('SEWN_WS_ENV_LOCAL_MODE', false);
 !defined('SEWN_WS_ENV_CONTAINER_MODE') && define('SEWN_WS_ENV_CONTAINER_MODE', false);
+
+// History and Stats Constants
+!defined('SEWN_WS_HISTORY_MAX_POINTS') && define('SEWN_WS_HISTORY_MAX_POINTS', 100);
+!defined('SEWN_WS_HISTORY_RETENTION_DAYS') && define('SEWN_WS_HISTORY_RETENTION_DAYS', 7);
+!defined('SEWN_WS_SERVER_HISTORY_OPTION') && define('SEWN_WS_SERVER_HISTORY_OPTION', 'sewn_ws_server_history');
+!defined('SEWN_WS_STATS_HISTORY_OPTION') && define('SEWN_WS_STATS_HISTORY_OPTION', 'sewn_ws_stats_history');
+!defined('SEWN_WS_LAST_STATS_OPTION') && define('SEWN_WS_LAST_STATS_OPTION', 'sewn_ws_last_stats');
 
 // End of file 

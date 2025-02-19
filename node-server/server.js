@@ -41,9 +41,10 @@ try {
     dotenv.config();
 
     // Get environment variables with validation and defaults
-    const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 8080;
+    const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 3000;
+    console.log('Server starting with port:', process.env.WP_PORT, 'parsed as:', port);
     const baseDir = process.env.WP_PLUGIN_DIR || path.join(__dirname);
-    const statsFile = process.env.WP_STATS_FILE || path.join(baseDir, 'stats.json');
+    const statsFile = process.env.WP_STATS_FILE || path.join(baseDir, 'tmp/stats.json');
     const pidFile = process.env.WP_PID_FILE || path.join(baseDir, 'server.pid');
     const logFile = process.env.WP_LOG_FILE || path.join(baseDir, 'server.log');
     const debug = process.argv.includes('--debug=true');
@@ -56,6 +57,13 @@ try {
         }
     };
 
+    // Initialize stats first
+    const Stats = require('./lib/stats');
+    const stats = new Stats({
+        statsFile,
+        debug
+    });
+
     // Create necessary directories with explicit error handling
     [statsFile, pidFile, logFile].forEach(file => {
         try {
@@ -66,6 +74,9 @@ try {
             process.exit(1);
         }
     });
+
+    // Write initial stats
+    await stats.writeStats();
 
     // Create Express app and HTTP server
     const app = express();
@@ -82,60 +93,43 @@ try {
         }
     });
 
-    // Configure Winston logger with error handling
-    let logger;
-    try {
-        // Ensure log directory exists
-        const logDir = path.join(process.env.WP_PLUGIN_DIR || __dirname, 'logs');
-        if (!fs.existsSync(logDir)) {
-            fs.mkdirSync(logDir, { recursive: true, mode: 0o755 });
-        }
+    // Initialize stats processor
+    const StatsProcessor = require('./lib/stats-processor');
+    const statsProcessor = new StatsProcessor(io, stats);
 
-        // Create console transport first for immediate logging
-        const transports = [new winston.transports.Console()];
+    // Initialize admin stats
+    const AdminStats = require('./lib/admin-stats');
+    const adminStats = new AdminStats(io, stats);
 
-        // Try to add file transport, but continue if it fails
+    // Handle admin namespace
+    const adminNamespace = io.of('/admin');
+    adminNamespace.on('connection', socket => {
+        adminStats.handleAdminConnection(socket);
+    });
+
+    // Start server with proper error handling
+    server.listen(port, () => {
+        console.log(`Server listening on port ${port}`);
+        fs.writeFileSync(pidFile, process.pid.toString());
+    });
+
+    // Handle cleanup on exit
+    const cleanup = async () => {
+        console.log('Cleaning up before exit...');
         try {
-            transports.push(
-                new winston.transports.File({
-                    filename: path.join(logDir, 'server.log'),
-                    maxsize: 5242880, // 5MB
-                    maxFiles: 5,
-                    tailable: true,
-                    options: { flags: 'a' }
-                })
-            );
+            await stats.save();
+            await stats.close();
+            if (fs.existsSync(pidFile)) {
+                fs.unlinkSync(pidFile);
+            }
         } catch (error) {
-            console.error('Failed to initialize file logging, falling back to console only:', error);
+            console.error('Error during cleanup:', error);
         }
+        process.exit(0);
+    };
 
-        logger = winston.createLogger({
-            level: process.env.WP_DEBUG === 'true' ? 'debug' : 'info',
-            format: winston.format.combine(
-                winston.format.timestamp(),
-                winston.format.json()
-            ),
-            transports: transports,
-            exitOnError: false // Don't crash on logging errors
-        });
-
-        // Add error handlers for each transport
-        logger.transports.forEach(transport => {
-            transport.on('error', (err) => {
-                console.error('Transport error:', err);
-                // Remove problematic transport
-                logger.remove(transport);
-            });
-        });
-
-    } catch (error) {
-        console.error('Failed to initialize logger:', error);
-        // Create minimal console-only logger as fallback
-        logger = winston.createLogger({
-            transports: [new winston.transports.Console()],
-            level: 'info'
-        });
-    }
+    process.on('SIGTERM', cleanup);
+    process.on('SIGINT', cleanup);
 
     // Load configuration with validation
     const config = {
@@ -159,39 +153,6 @@ try {
         redisClient.connect().catch(err => logger.error('Error connecting to Redis', err));
     }
 
-    // Initialize stats object but don't write the file yet
-    let stats = {
-        status: 'uninitialized',
-        pid: null,
-        port: port,
-        start_time: null,
-        connections: 0,
-        memory_usage: 0,
-        uptime: 0,
-        errors: 0,
-        timestamp: Date.now(),
-        total_messages: 0,
-        channels: {
-            message: {
-                subscribers: 0,
-                messages: 0
-            },
-            presence: {
-                subscribers: 0,
-                messages: 0
-            },
-            status: {
-                subscribers: 0,
-                messages: 0
-            }
-        },
-        tiers: {
-            free: { connections: 0, bandwidth: 0 },
-            api: { connections: 0, bandwidth: 0 },
-            admin: { connections: 0, bandwidth: 0 }
-        }
-    };
-
     // Initialize metrics tracking with safe defaults
     const metrics = {
         messagesIn: 0,
@@ -212,19 +173,6 @@ try {
     io.on('connect_error', (err) => {
         console.error('Socket.IO connection error:', err);
         logger.error('Socket.IO connection error:', err);
-    });
-
-    // Handle process signals
-    process.on('SIGTERM', () => {
-        console.log('Received SIGTERM signal');
-        cleanup();
-        process.exit(0);
-    });
-
-    process.on('SIGINT', () => {
-        console.log('Received SIGINT signal');
-        cleanup();
-        process.exit(0);
     });
 
     // JWT Authentication Middleware (for channels other than /admin)
@@ -261,46 +209,6 @@ try {
             next(new Error('Authentication failed'));
         }
     };
-
-    // Admin namespace for stats
-    const adminNamespace = io.of('/admin');
-    adminNamespace.on('connection', socket => {
-        logger.info('Admin dashboard connected');
-        stats.connections++;
-
-        // Send immediate stats on connection
-        emitStats();
-
-        // Listen for specific stat requests
-        socket.on('request_detailed_stats', () => {
-            const detailedStats = {
-                ...stats,
-                system: {
-                    platform: process.platform,
-                    nodeVersion: process.version,
-                    uptime: process.uptime(),
-                    memoryUsage: process.memoryUsage(),
-                    cpuUsage: process.cpuUsage()
-                }
-            };
-            socket.emit('detailed_stats_response', detailedStats);
-        });
-
-        // Handle real-time channel monitoring
-        socket.on('monitor_channel', (channelName) => {
-            socket.join(`monitor:${channelName}`);
-            socket.emit('channel_stats', stats.channels[channelName]);
-        });
-
-        socket.on('stop_monitor_channel', (channelName) => {
-            socket.leave(`monitor:${channelName}`);
-        });
-
-        socket.on('disconnect', () => {
-            stats.connections--;
-            logger.info('Admin dashboard disconnected');
-        });
-    });
 
     // Message channel namespace
     const messageNamespace = io.of('/message');

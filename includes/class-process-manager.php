@@ -46,6 +46,21 @@ class Process_Manager {
     }
 
     /**
+     * Check if a port is available
+     *
+     * @param int $port Port to check
+     * @return bool True if port is available
+     */
+    private function is_port_available($port) {
+        $sock = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
+        if ($sock) {
+            fclose($sock);
+            return false;  // Port is in use
+        }
+        return true;  // Port is available
+    }
+
+    /**
      * Start the Node.js server
      *
      * @return array Status of server start attempt
@@ -69,27 +84,65 @@ class Process_Manager {
             ];
         }
 
-        // Ensure directories exist
-        wp_mkdir_p(dirname($this->pid_file));
-        wp_mkdir_p(dirname($this->log_file));
+        // Create required directories with proper permissions
+        $dirs = [
+            dirname($this->pid_file),
+            dirname($this->log_file),
+            SEWN_WS_PATH . 'logs',
+            SEWN_WS_PATH . 'tmp'
+        ];
+
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                if (!wp_mkdir_p($dir)) {
+                    return [
+                        'success' => false,
+                        'message' => "Failed to create directory: $dir"
+                    ];
+                }
+                // Ensure directory is writable
+                chmod($dir, 0755);
+            }
+        }
+
+        // Get port configuration
+        $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
+        
+        // Ensure port is numeric
+        $port = is_numeric($port) ? (int)$port : SEWN_WS_DEFAULT_PORT;
+
+        // Check if port is available
+        if (!$this->is_port_available($port)) {
+            return [
+                'success' => false,
+                'message' => sprintf('Port %d is already in use. Please configure a different port in settings.', $port)
+            ];
+        }
 
         // Set up environment variables for Node process
         $env = [
             'WP_PLUGIN_DIR' => SEWN_WS_PATH,
-            'WP_PORT' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT),
-            'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false'
+            'WP_PORT' => (string)$port,  // Explicitly cast to string
+            'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false',
+            'WP_PID_FILE' => $this->pid_file,
+            'WP_LOG_FILE' => $this->log_file,
+            'WP_STATS_FILE' => SEWN_WS_PATH . 'tmp/stats.json',
+            'NODE_ENV' => defined('WP_DEBUG') && WP_DEBUG ? 'development' : 'production'
         ];
         
+        // Build environment string
         $env_string = '';
         foreach ($env as $key => $value) {
             $env_string .= sprintf('%s=%s ', escapeshellarg($key), escapeshellarg($value));
         }
 
+        // Build command with proper path handling
         $command = sprintf(
-            '%s %s %s > %s 2>&1 & echo $! > %s',
+            'cd %s && %s %s %s > %s 2>&1 & echo $! > %s',
+            escapeshellarg(SEWN_WS_NODE_SERVER),  // Change to Node server directory
             $env_string,
             escapeshellcmd($node_path),
-            escapeshellarg($this->server_script),
+            escapeshellarg('server.js'),
             escapeshellarg($this->log_file),
             escapeshellarg($this->pid_file)
         );
@@ -114,6 +167,9 @@ class Process_Manager {
                 'error_details' => $error_log
             ];
         }
+
+        // Record server start in history
+        $this->record_server_start();
 
         return [
             'success' => true,
@@ -159,6 +215,9 @@ class Process_Manager {
 
         $pid = (int) file_get_contents($this->pid_file);
         
+        // Save current stats before stopping
+        $this->persist_final_stats();
+        
         if (posix_kill($pid, SIGTERM)) {
             unlink($this->pid_file);
             return [
@@ -171,6 +230,83 @@ class Process_Manager {
             'success' => false,
             'message' => 'Failed to stop server'
         ];
+    }
+
+    /**
+     * Persist final stats before server stops
+     */
+    private function persist_final_stats() {
+        // Get current stats
+        $stats = $this->get_status();
+        
+        // Save memory usage
+        update_option('sewn_ws_last_memory_usage', $stats['memory_usage'] ?? 0);
+        
+        // Save connection history
+        $history = get_option('sewn_ws_connection_history', []);
+        $history[] = [
+            'time' => time(),
+            'connections' => count(self::get_active_connections())
+        ];
+        // Keep last 100 points
+        $history = array_slice($history, -SEWN_WS_HISTORY_MAX_POINTS);
+        update_option('sewn_ws_connection_history', $history);
+        
+        // Save memory history
+        $memory_history = get_option('sewn_ws_memory_history', []);
+        $memory_history[] = [
+            'time' => time(),
+            'usage' => $stats['memory_usage'] ?? 0
+        ];
+        // Keep last 100 points
+        $memory_history = array_slice($memory_history, -SEWN_WS_HISTORY_MAX_POINTS);
+        update_option('sewn_ws_memory_history', $memory_history);
+        
+        // Save server history
+        $server_history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $server_history[] = [
+            'time' => time(),
+            'action' => 'stop',
+            'uptime' => $stats['uptime'],
+            'memory' => $stats['memory_usage'] ?? 0,
+            'connections' => count(self::get_active_connections())
+        ];
+        // Keep last 100 points
+        $server_history = array_slice($server_history, -SEWN_WS_HISTORY_MAX_POINTS);
+        update_option(SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
+        
+        // Save last known stats
+        update_option(SEWN_WS_LAST_STATS_OPTION, [
+            'time' => time(),
+            'memory' => $stats['memory_usage'] ?? 0,
+            'uptime' => $stats['uptime'],
+            'connections' => count(self::get_active_connections()),
+            'message_rate' => self::get_message_throughput()['current'],
+            'error_rate' => self::get_failure_rates()['last_hour']
+        ]);
+        
+        // Save subscriber count and update peak
+        update_option('sewn_ws_active_subscribers', count(self::get_active_connections()));
+        $current_peak = get_option('sewn_ws_peak_subscribers', 0);
+        $current_subscribers = count(self::get_active_connections());
+        if ($current_subscribers > $current_peak) {
+            update_option('sewn_ws_peak_subscribers', $current_subscribers);
+        }
+    }
+
+    /**
+     * Record server start in history
+     */
+    private function record_server_start() {
+        $server_history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $server_history[] = [
+            'time' => time(),
+            'action' => 'start',
+            'pid' => file_exists($this->pid_file) ? (int)file_get_contents($this->pid_file) : null,
+            'port' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT)
+        ];
+        $server_history = array_slice($server_history, -SEWN_WS_HISTORY_MAX_POINTS);
+        update_option(SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
     }
 
     /**
@@ -216,18 +352,30 @@ class Process_Manager {
     }
 
     /**
-     * Get server status
-     *
-     * @return array Server status information
+     * Get server status with enhanced stats
      */
     public function get_status() {
         $running = $this->is_running();
         $pid = $running ? (int) file_get_contents($this->pid_file) : null;
         
+        // Try to get stats from stats file
+        $stats = [];
+        $stats_file = SEWN_WS_PATH . 'tmp/stats.json';
+        if (file_exists($stats_file)) {
+            $stats_content = file_get_contents($stats_file);
+            if ($stats_content) {
+                $stats = json_decode($stats_content, true) ?: [];
+            }
+        }
+        
         return [
             'running' => $running,
             'pid' => $pid,
             'uptime' => $running ? $this->get_uptime($pid) : 0,
+            'memory_usage' => $stats['memory'] ?? 0,
+            'connections' => $stats['connections'] ?? 0,
+            'message_rate' => $stats['messageRate'] ?? 0,
+            'error_rate' => $stats['errorRate'] ?? 0,
             'log_tail' => $this->get_log_tail()
         ];
     }
@@ -300,8 +448,8 @@ class Process_Manager {
                 wp_schedule_event(time(), 'hourly', 'sewn_ws_health_check');
             }
             
-            // 5. Default options
-            update_option('sewn_ws_port', 8080);
+            // 5. Default options - Use constants
+            update_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);  // Changed from 8080
             update_option('sewn_ws_tls_enabled', false);
             update_option('sewn_ws_rate_limits', [
                 'free' => 10,
@@ -310,8 +458,22 @@ class Process_Manager {
                 'extrawire' => 500
             ]);
 
+            // Create required directories with proper permissions
+            $dirs = [
+                SEWN_WS_PATH . 'logs',
+                SEWN_WS_PATH . 'tmp',
+                dirname(SEWN_WS_SERVER_CONFIG_FILE)
+            ];
+
+            foreach ($dirs as $dir) {
+                if (!file_exists($dir)) {
+                    wp_mkdir_p($dir);
+                    chmod($dir, 0755);  // Ensure Node can write
+                }
+            }
+
             // Sync VM timezone with host
-            date_default_timezone_set('America/Los_Angeles'); // Match your Local config
+            date_default_timezone_set('America/Los_Angeles');
             shell_exec('ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime');
         } catch(\Throwable $e) {
             update_option('sewn_ws_activation_error', $e->getMessage());
@@ -398,6 +560,39 @@ class Process_Manager {
             'outgoing' => (int) get_option('sewn_ws_bandwidth_out', 0),
             'max_allowed' => 1073741824 // 1GB default
         ];
+    }
+
+    /**
+     * Get server history
+     *
+     * @return array Server history
+     */
+    public static function get_server_history() {
+        $history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $retention = time() - (SEWN_WS_HISTORY_RETENTION_DAYS * 86400);
+        
+        // Filter out old entries
+        $history = array_filter($history, function($entry) use ($retention) {
+            return $entry['time'] >= $retention;
+        });
+        
+        return $history;
+    }
+
+    /**
+     * Get last known stats
+     *
+     * @return array Last known stats
+     */
+    public static function get_last_stats() {
+        return get_option(SEWN_WS_LAST_STATS_OPTION, [
+            'time' => 0,
+            'memory' => 0,
+            'uptime' => 0,
+            'connections' => 0,
+            'message_rate' => 0,
+            'error_rate' => 0
+        ]);
     }
 }
 
