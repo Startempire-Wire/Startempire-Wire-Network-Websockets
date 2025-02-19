@@ -268,4 +268,71 @@ jQuery(document).ready(function ($) {
             WsAdmin.init();
         });
     })(jQuery);
+
+    // Initialize WebSocket test client with proper Socket.IO protocol handling
+    function initializeTestSocket(wsUrl) {
+        const socket = io(wsUrl, {
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 3,
+            timeout: 45000,
+            auth: {
+                token: sewnWsAdmin.adminToken // Admin token from PHP
+            }
+        });
+
+        // Handle connection phases
+        socket.on('connect_error', (error) => {
+            logMessage(`Connection error: ${error.message}`, 'system');
+            updateConnectionStatus('disconnected', 'Connection Failed');
+        });
+
+        socket.on('connect', () => {
+            // Send explicit connect packet for namespace
+            socket.emit('connect');
+            logMessage('Socket.IO connection established, sending CONNECT packet...', 'system');
+        });
+
+        socket.on('connect_confirmed', (data) => {
+            updateConnectionStatus('connected', 'Connected');
+            logMessage(`Connection confirmed - Socket ID: ${data.socketId}`, 'system');
+            $('.connection-details').show();
+            $('.disconnect-test, .message-input input, .send-message').prop('disabled', false);
+            startLatencyCheck(socket);
+        });
+
+        socket.on('disconnect', (reason) => {
+            updateConnectionStatus('disconnected', `Disconnected: ${reason}`);
+            logMessage(`Disconnected: ${reason}`, 'system');
+            $('.disconnect-test, .message-input input, .send-message').prop('disabled', true);
+            stopLatencyCheck();
+        });
+
+        socket.on('server_shutdown', (data) => {
+            logMessage(`Server shutting down: ${data.reason}`, 'system');
+            socket.close();
+        });
+
+        return socket;
+    }
+
+    // Update the test connection handler
+    $('.test-connection').on('click', function () {
+        const button = $(this);
+        button.prop('disabled', true);
+
+        const siteUrl = window.location.hostname;
+        const isSecure = window.location.protocol === 'https:';
+        const port = sewnWsAdmin.serverPort || (isSecure ? '443' : '80');
+        const wsUrl = `${isSecure ? 'wss:' : 'ws:'}//${siteUrl}:${port}`;
+
+        try {
+            testSocket = initializeTestSocket(wsUrl);
+            $('.connection-url').text(wsUrl);
+        } catch (error) {
+            logMessage(`Failed to initialize connection: ${error.message}`, 'system');
+            button.prop('disabled', false);
+        }
+    });
 }); 

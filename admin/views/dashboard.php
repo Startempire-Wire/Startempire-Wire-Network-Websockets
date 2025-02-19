@@ -1022,148 +1022,172 @@ $status_text = $node_status['running'] ? '✓ Operational' :
 
 <script>
 jQuery(document).ready(function($) {
-    // Export initial status for admin.js
-    window.SEWN_WS_INITIAL_STATUS = {
-        running: <?php echo json_encode($node_status['running']); ?>,
-        status: <?php echo json_encode($node_status['status']); ?>,
-        version: <?php echo json_encode($node_status['version']); ?>
+    // Add Socket.IO configuration
+    window.SEWN_WS_CONFIG = {
+        serverPort: <?php echo esc_js(get_option('sewn_ws_port', 49200)); ?>,
+        adminToken: '<?php echo esc_js(wp_create_nonce('sewn_ws_admin')); ?>',
+        debug: <?php echo esc_js(get_option('sewn_ws_debug', false) ? 'true' : 'false'); ?>,
+        ssl: {
+            enabled: <?php echo esc_js(get_option('sewn_ws_ssl_enabled', false) ? 'true' : 'false'); ?>,
+            path: '<?php echo esc_js(get_option('sewn_ws_ssl_cert', '')); ?>'
+        },
+        namespaces: {
+            admin: '/admin',
+            message: '/message',
+            presence: '/presence',
+            status: '/status'
+        }
     };
 
-    // Initialize WebSocket test client
-    let testSocket = null;
-    const consoleMessages = $('.console-messages');
-    const connectionStatus = $('.test-connection-status');
-    const connectionDetails = $('.connection-details');
-    
-    function updateConnectionStatus(status, message) {
-        const dot = $('.connection-dot');
-        const text = $('.connection-text');
+    // Initialize Socket.IO monitoring
+    function initializeSocketMonitoring() {
+        const config = window.SEWN_WS_CONFIG;
         
-        dot.removeClass('connected disconnected');
-        dot.addClass(status);
-        text.text(message);
+        // Determine if we're in a local development environment
+        const isLocalDev = window.location.hostname.includes('.local') || 
+                          window.location.hostname === 'localhost' ||
+                          window.location.hostname.includes('.test');
+
+        // Protocol selection logic
+        let protocol;
+        if (isLocalDev) {
+            // In local dev, always use the protocol that matches the server's SSL setting
+            protocol = config.ssl.enabled ? 'wss:' : 'ws:';
+        } else {
+            // In production, always match the page protocol
+            protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        }
+
+        // If we're forcing HTTPS but server isn't SSL-enabled, show warning
+        if (window.location.protocol === 'https:' && !config.ssl.enabled && isLocalDev) {
+            console.warn('Warning: Page is HTTPS but WebSocket server is not SSL-enabled. ' +
+                        'Connection may fail due to mixed content restrictions.');
+        }
+
+        const wsUrl = `${protocol}//${window.location.hostname}:${config.serverPort}`;
+        console.log('Initializing WebSocket connection:', {
+            url: wsUrl,
+            isLocalDev,
+            pageProtocol: window.location.protocol,
+            wsProtocol: protocol,
+            sslEnabled: config.ssl.enabled
+        });
+
+        // Initialize admin namespace connection
+        const adminSocket = io(`${wsUrl}/admin`, {
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 3,
+            timeout: 45000,
+            secure: protocol === 'wss:',
+            rejectUnauthorized: !(isLocalDev && !config.ssl.enabled), // Only skip validation in non-SSL local dev
+            auth: {
+                token: config.adminToken
+            }
+        });
+
+        // Enhanced error handling
+        adminSocket.on('connect_error', (error) => {
+            console.error('Admin socket connection error:', error);
+            console.log('Connection details:', {
+                url: wsUrl,
+                secure: protocol === 'wss:',
+                isLocalDev,
+                sslEnabled: config.ssl.enabled,
+                pageProtocol: window.location.protocol
+            });
+            
+            // Provide more specific error messages
+            let errorMessage = error.message;
+            if (error.message.includes('Mixed Content') || error.message.includes('WebSocket connection failed')) {
+                errorMessage = 'Connection failed - SSL mismatch between page and WebSocket server. ' +
+                             'Either enable SSL on the server or access the page via HTTP.';
+            }
+            
+            updateServerStatus('error', errorMessage);
+        });
+
+        adminSocket.on('connect', () => {
+            // Send explicit connect packet
+            adminSocket.emit('connect');
+            console.log('Admin socket connected, sending CONNECT packet');
+        });
+
+        adminSocket.on('connect_confirmed', (data) => {
+            console.log('Admin socket connection confirmed:', data);
+            updateServerStatus('running');
+        });
+
+        adminSocket.on('stats_update', (stats) => {
+            updateDashboardStats(stats);
+        });
+
+        adminSocket.on('server_shutdown', (data) => {
+            console.log('Server shutting down:', data);
+            updateServerStatus('stopped', data.reason);
+        });
+
+        return adminSocket;
     }
 
-    function logMessage(message, type = 'system') {
-        const timestamp = new Date().toLocaleTimeString();
-        const msgHtml = `<div class="message ${type}">
-            <span class="timestamp">${timestamp}</span>
-            ${message}
-        </div>`;
-        consoleMessages.append(msgHtml);
-        consoleMessages.scrollTop(consoleMessages[0].scrollHeight);
+    // Update server status display
+    function updateServerStatus(status, message = '') {
+        const statusDot = $('.status-dot');
+        const statusText = $('.status-text');
+        const realTimeIndicators = $('.real-time-indicator');
+
+        statusDot.removeClass('running stopped error starting');
+        realTimeIndicators.removeClass('running stopped error starting');
+
+        switch(status) {
+            case 'running':
+                statusDot.addClass('running');
+                realTimeIndicators.addClass('running');
+                statusText.text('✓ Operational');
+                break;
+            case 'stopped':
+                statusDot.addClass('stopped');
+                realTimeIndicators.addClass('stopped');
+                statusText.text('✗ Stopped' + (message ? `: ${message}` : ''));
+                break;
+            case 'error':
+                statusDot.addClass('error');
+                realTimeIndicators.addClass('error');
+                statusText.text('⚠ Error: ' + message);
+                break;
+            case 'starting':
+                statusDot.addClass('starting');
+                realTimeIndicators.addClass('starting');
+                statusText.text('Starting...');
+                break;
+        }
     }
 
-    $('.test-connection').on('click', function() {
+    // Initialize monitoring when document is ready
+    const adminSocket = initializeSocketMonitoring();
+
+    // Update server control handlers
+    $('.sewn-ws-controls button').on('click', function() {
+        const action = $(this).data('action');
         const button = $(this);
+        
         button.prop('disabled', true);
         
-        // Get current site URL and protocol
-        const siteUrl = window.location.hostname;
-        const isSecure = window.location.protocol === 'https:';
-        const isLocal = siteUrl.includes('.local');
-        
-        // Use secure WebSocket with proper path
-        const protocol = isSecure ? 'wss:' : 'ws:';
-        const port = isSecure ? '443' : '80';
-        const wsUrl = `${protocol}//${siteUrl}:${port}/websocket`;
-
-        try {
-            testSocket = io(wsUrl, {
-                path: '/websocket',
-                transports: ['websocket'],
-                secure: isSecure,
-                rejectUnauthorized: !isLocal
-            });
-
-            // Update UI
-            $('.connection-url').text(wsUrl);
-            connectionDetails.show();
-            logMessage('Connecting to WebSocket server...');
-
-            testSocket.on('connect', () => {
-                updateConnectionStatus('connected', 'Connected');
-                logMessage('Connected to WebSocket server');
-                
-                // Enable controls
-                $('.disconnect-test, .message-input input, .send-message').prop('disabled', false);
-                button.prop('disabled', true);
-
-                // Start latency check
-                startLatencyCheck();
-            });
-
-            testSocket.on('disconnect', () => {
-                updateConnectionStatus('disconnected', 'Disconnected');
-                logMessage('Disconnected from WebSocket server');
-                
-                // Disable controls
-                $('.disconnect-test, .message-input input, .send-message').prop('disabled', true);
-                button.prop('disabled', false);
-                
-                // Stop latency check
-                stopLatencyCheck();
-            });
-
-            testSocket.on('error', (error) => {
-                logMessage(`Error: ${error.message}`, 'system');
+        if (adminSocket && adminSocket.connected) {
+            adminSocket.emit('server_control', { action }, (response) => {
+                if (response.success) {
+                    updateServerStatus(action === 'start' ? 'starting' : 'stopped');
+                } else {
+                    updateServerStatus('error', response.message);
+                }
                 button.prop('disabled', false);
             });
-
-            testSocket.on('message', (data) => {
-                logMessage(data, 'received');
-            });
-
-        } catch (error) {
-            logMessage(`Connection error: ${error.message}`, 'system');
+        } else {
+            console.error('Admin socket not connected');
+            updateServerStatus('error', 'Not connected to server');
             button.prop('disabled', false);
         }
     });
-
-    $('.disconnect-test').on('click', function() {
-        if (testSocket) {
-            testSocket.disconnect();
-        }
-    });
-
-    $('.send-message').on('click', function() {
-        const input = $('.message-input input');
-        const message = input.val().trim();
-        
-        if (message && testSocket && testSocket.connected) {
-            testSocket.emit('message', message);
-            logMessage(message, 'sent');
-            input.val('');
-        }
-    });
-
-    $('.message-input input').on('keypress', function(e) {
-        if (e.which === 13) {
-            $('.send-message').click();
-        }
-    });
-
-    // Latency checking
-    let latencyInterval;
-    
-    function startLatencyCheck() {
-        latencyInterval = setInterval(() => {
-            if (testSocket && testSocket.connected) {
-                const start = Date.now();
-                testSocket.emit('ping');
-                testSocket.once('pong', () => {
-                    const latency = Date.now() - start;
-                    $('.connection-latency').text(`${latency}ms`);
-                });
-            }
-        }, 5000);
-    }
-
-    function stopLatencyCheck() {
-        if (latencyInterval) {
-            clearInterval(latencyInterval);
-            $('.connection-latency').text('-');
-        }
-    }
 });
 </script> 

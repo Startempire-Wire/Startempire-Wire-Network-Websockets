@@ -118,4 +118,8 @@ define('SEWN_WS_IS_LOCAL', (
 !defined('SEWN_WS_STATS_HISTORY_OPTION') && define('SEWN_WS_STATS_HISTORY_OPTION', 'sewn_ws_stats_history');
 !defined('SEWN_WS_LAST_STATS_OPTION') && define('SEWN_WS_LAST_STATS_OPTION', 'sewn_ws_last_stats');
 
+// Configuration System Constants
+!defined('SEWN_WS_CONFIG_VERSION') && define('SEWN_WS_CONFIG_VERSION', '1.0.0');
+!defined('SEWN_WS_CONFIG_INITIALIZED') && define('SEWN_WS_CONFIG_INITIALIZED', false);
+
 // End of file 

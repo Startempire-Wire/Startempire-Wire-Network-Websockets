@@ -80,6 +80,7 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 require_once __DIR__ . '/includes/class-exception.php';
 require_once __DIR__ . '/includes/class-error-handler.php';
 require_once __DIR__ . '/includes/class-log-handler.php';
+require_once __DIR__ . '/includes/class-config.php';
 
 // Load critical admin dependencies first
 require_once __DIR__ . '/admin/class-error-logger.php';

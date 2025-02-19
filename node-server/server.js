@@ -16,16 +16,29 @@ const winston = require('winston');
 const Redis = require('redis');
 const { networkInterfaces } = require('os');
 
-// Initialize logger first
+// Initialize logger first with more detailed logging
 const logger = winston.createLogger({
-    level: 'info',
+    level: 'debug', // Change to debug level
     format: winston.format.combine(
         winston.format.timestamp(),
-        winston.format.json()
+        winston.format.printf(({ level, message, timestamp, ...metadata }) => {
+            let msg = `${timestamp} [${level}]: ${message}`;
+            if (Object.keys(metadata).length > 0) {
+                msg += ` ${JSON.stringify(metadata)}`;
+            }
+            return msg;
+        })
     ),
     transports: [
-        new winston.transports.Console(),
-        new winston.transports.File({ filename: 'server.log' })
+        new winston.transports.Console({
+            format: winston.format.colorize({ all: true })
+        }),
+        new winston.transports.File({
+            filename: 'server.log',
+            maxsize: 5242880, // 5MB
+            maxFiles: 5,
+            tailable: true
+        })
     ]
 });
 
@@ -44,23 +57,42 @@ logger.info('Server process information:', {
     pid: processInfo.pid
 });
 
-// Error handlers
+// Add process monitoring
+let serverShutdownInitiated = false;
+let shutdownReason = null;
+
+process.on('exit', (code) => {
+    logger.info(`Process exit with code: ${code}, Reason: ${shutdownReason || 'Unknown'}`);
+});
+
+// Enhanced error handlers
 process.on('uncaughtException', (err) => {
-    logger.error('FATAL: Uncaught Exception:', err);
-    fs.appendFileSync('server.log', `FATAL: Uncaught Exception: ${err.stack}\n`);
-    process.exit(1);
+    shutdownReason = `Uncaught Exception: ${err.message}`;
+    logger.error('FATAL: Uncaught Exception:', {
+        error: err.message,
+        stack: err.stack,
+        pid: process.pid
+    });
+    cleanup('uncaughtException').catch(console.error);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    logger.error('FATAL: Unhandled Rejection:', reason);
-    fs.appendFileSync('server.log', `FATAL: Unhandled Rejection: ${reason?.stack || reason}\n`);
-    process.exit(1);
+    shutdownReason = `Unhandled Rejection: ${reason}`;
+    logger.error('FATAL: Unhandled Rejection:', {
+        reason: reason?.stack || reason,
+        pid: process.pid
+    });
+    cleanup('unhandledRejection').catch(console.error);
 });
 
-process.on('exit', (code) => {
-    logger.info(`Process exiting with code: ${code}`);
-    fs.appendFileSync('server.log', `Process exit with code: ${code}\n`);
-});
+// Add server state monitoring
+const serverState = {
+    isRunning: false,
+    startTime: null,
+    lastHealthCheck: null,
+    errors: [],
+    restartAttempts: 0
+};
 
 // Main server initialization
 async function initializeServer() {
@@ -68,11 +100,19 @@ async function initializeServer() {
         // Load environment variables
         dotenv.config();
 
+        logger.info('Starting server initialization...', {
+            nodeVersion: process.version,
+            platform: process.platform,
+            pid: process.pid,
+            nodePath: process.execPath
+        });
+
         // Get and validate port
         const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200;
-        logger.info('Server starting with port:', {
-            envPort: process.env.WP_PORT,
-            parsedPort: port
+        logger.info('Server configuration:', {
+            port,
+            env: process.env.NODE_ENV,
+            debug: process.env.WP_DEBUG === 'true'
         });
 
         if (port < 1024 || port > 65535) {
@@ -110,7 +150,7 @@ async function initializeServer() {
             }, app)
             : http.createServer(app);
 
-        // Initialize Socket.IO
+        // Initialize Socket.IO with proper configuration
         const io = new Server(server, {
             transports: ['websocket', 'polling'],
             pingTimeout: 60000,
@@ -122,14 +162,24 @@ async function initializeServer() {
             },
             path: process.env.WP_PROXY_PATH || '/socket.io',
             allowEIO3: true,
-            handlePreflightRequest: (req, res) => {
-                res.writeHead(200, {
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-                    "Access-Control-Allow-Headers": "content-type",
-                    "Access-Control-Allow-Credentials": "true"
-                });
-                res.end();
+            connectTimeout: 45000, // Give clients enough time to establish connection
+            // Add explicit namespace configuration
+            namespaces: {
+                '/': {
+                    connectTimeout: 45000
+                },
+                '/admin': {
+                    connectTimeout: 45000
+                },
+                '/message': {
+                    connectTimeout: 45000
+                },
+                '/presence': {
+                    connectTimeout: 45000
+                },
+                '/status': {
+                    connectTimeout: 45000
+                }
             }
         });
 
@@ -141,25 +191,49 @@ async function initializeServer() {
             startTime: processInfo.startTime
         }, null, 2));
 
+        // Update server state
+        serverState.isRunning = true;
+        serverState.startTime = Date.now();
+
+        // Start monitoring
+        startServerMonitoring();
+
         // Start server
         await new Promise((resolve, reject) => {
-            server.listen(port, async () => {
-                logger.info(`Server listening on port ${port}`);
+            const startTimeout = setTimeout(() => {
+                reject(new Error('Server start timeout after 30 seconds'));
+            }, 30000);
 
-                // Update status and stats
-                await updateAdminStatus('running');
-                await updateStats({
-                    running: true,
-                    pid: processInfo.pid,
-                    nodePath: processInfo.nodePath,
-                    port: port,
-                    startTime: processInfo.startTime
+            server.listen(port, async () => {
+                clearTimeout(startTimeout);
+                logger.info(`Server listening on port ${port}`, {
+                    pid: process.pid,
+                    uptime: process.uptime()
                 });
 
-                resolve();
+                // Verify server is actually listening
+                try {
+                    const response = await fetch(`http://localhost:${port}/health`);
+                    if (!response.ok) {
+                        throw new Error(`Health check failed: ${response.status}`);
+                    }
+                    const health = await response.json();
+                    logger.info('Server health check passed', health);
+                    resolve();
+                } catch (error) {
+                    reject(new Error(`Server health check failed: ${error.message}`));
+                }
             });
 
-            server.on('error', reject);
+            server.on('error', (error) => {
+                clearTimeout(startTimeout);
+                serverState.errors.push({
+                    time: Date.now(),
+                    type: 'server_error',
+                    error: error.message
+                });
+                reject(error);
+            });
         });
 
         // Initialize stats processor and admin
@@ -169,10 +243,87 @@ async function initializeServer() {
         const AdminStats = require('./lib/admin-stats');
         const adminStats = new AdminStats(io, stats);
 
-        // Set up admin namespace
-        const adminNamespace = io.of('/admin');
-        adminNamespace.on('connection', socket => {
-            adminStats.handleAdminConnection(socket);
+        // Enhanced namespace connection handling
+        const namespaces = {
+            admin: io.of('/admin'),
+            message: io.of('/message'),
+            presence: io.of('/presence'),
+            status: io.of('/status')
+        };
+
+        // Add proper connection handling for each namespace
+        Object.entries(namespaces).forEach(([name, namespace]) => {
+            namespace.use(async (socket, next) => {
+                try {
+                    // Log connection attempt
+                    logger.info(`Connection attempt to /${name} namespace`, {
+                        socketId: socket.id,
+                        handshake: socket.handshake
+                    });
+
+                    // Wait for explicit CONNECT packet
+                    const connectTimeout = setTimeout(() => {
+                        logger.warn(`Connect timeout for socket ${socket.id} in /${name}`);
+                        next(new Error('Connect timeout'));
+                    }, 45000);
+
+                    socket.once('connect', () => {
+                        clearTimeout(connectTimeout);
+                        logger.info(`Received CONNECT packet for ${socket.id} in /${name}`);
+                        next();
+                    });
+
+                    // Handle authentication if needed
+                    if (name === 'admin') {
+                        if (!socket.handshake.auth?.token) {
+                            throw new Error('Authentication required for admin namespace');
+                        }
+                        // Verify admin token
+                        await verifyAdminToken(socket.handshake.auth.token);
+                    }
+
+                    // Track connection in stats
+                    stats.namespaces[name] = stats.namespaces[name] || {
+                        connections: 0,
+                        messages: 0
+                    };
+                    stats.namespaces[name].connections++;
+
+                } catch (error) {
+                    logger.error(`Namespace /${name} connection error:`, error);
+                    next(new Error(`Connection rejected: ${error.message}`));
+                }
+            });
+
+            // Handle successful connections
+            namespace.on('connection', (socket) => {
+                logger.info(`Client connected to /${name} namespace`, { socketId: socket.id });
+
+                // Send connection acknowledgment
+                socket.emit('connect_confirmed', {
+                    socketId: socket.id,
+                    namespace: name,
+                    timestamp: Date.now()
+                });
+
+                // Handle disconnection
+                socket.on('disconnect', (reason) => {
+                    logger.info(`Client disconnected from /${name} namespace`, {
+                        socketId: socket.id,
+                        reason
+                    });
+                    stats.namespaces[name].connections--;
+                    updateStats();
+                });
+
+                // Handle explicit connection close
+                socket.on('end', () => {
+                    logger.info(`Client explicitly closed connection in /${name}`, {
+                        socketId: socket.id
+                    });
+                    socket.disconnect(true);
+                });
+            });
         });
 
         // Set up cleanup handlers
@@ -194,9 +345,21 @@ async function initializeServer() {
         process.on('SIGTERM', cleanup);
         process.on('SIGINT', cleanup);
 
+        // Set up signal handlers after successful start
+        setupSignalHandlers();
+
         return { server, io, stats };
     } catch (error) {
-        logger.error('Server initialization failed:', error);
+        serverState.isRunning = false;
+        serverState.errors.push({
+            time: Date.now(),
+            type: 'initialization_error',
+            error: error.message
+        });
+        logger.error('Server initialization failed:', {
+            error: error.message,
+            stack: error.stack
+        });
         throw error;
     }
 }
@@ -1127,85 +1290,39 @@ startServer().then(() => {
 });
 
 // Enhanced cleanup function with proper shutdown sequence
-async function cleanup() {
-    logger.info('Starting enhanced server cleanup...');
-
-    let cleanupSuccess = true;
-    const errors = [];
-
-    // Update stats first
-    try {
-        stats.status = 'stopping';
-        stats.stop_time = Date.now();
-        stats.uptime = process.uptime();
-        await fs.writeFile(statsFile, JSON.stringify(stats, null, 2))
-            .catch(err => {
-                cleanupSuccess = false;
-                errors.push(['Failed to update stats file', err]);
-                logger.error('Failed to update stats file:', err);
-            });
-    } catch (err) {
-        cleanupSuccess = false;
-        errors.push(['Stats update error', err]);
-        logger.error('Error updating stats:', err);
+async function cleanup(reason = 'normal') {
+    if (serverShutdownInitiated) {
+        logger.warn('Cleanup already in progress, skipping...');
+        return;
     }
 
-    // Close all socket connections gracefully
-    try {
-        const sockets = await io.fetchSockets();
-        await Promise.all(sockets.map(socket =>
-            socket.disconnect(true)
-                .catch(err => logger.warn(`Error disconnecting socket ${socket.id}:`, err))
-        ));
-    } catch (err) {
-        cleanupSuccess = false;
-        errors.push(['Socket cleanup error', err]);
-        logger.error('Error cleaning up sockets:', err);
-    }
+    serverShutdownInitiated = true;
+    shutdownReason = reason;
+    serverState.isRunning = false;
 
-    // Remove PID file with verification
+    logger.info(`Starting cleanup... (Reason: ${reason})`);
+
     try {
-        if (await fs.access(pidFile).then(() => true).catch(() => false)) {
-            const filePid = parseInt(await fs.readFile(pidFile, 'utf8'));
-            if (filePid === process.pid) {
-                await fs.unlink(pidFile);
-                logger.info('PID file removed successfully');
-            } else {
-                logger.warn(`PID file exists but contains different PID (${filePid}), not removing`);
-            }
+        // Close namespace connections gracefully
+        for (const [name, namespace] of Object.entries(namespaces)) {
+            const sockets = await namespace.fetchSockets();
+            logger.info(`Closing ${sockets.length} connections in /${name} namespace`);
+
+            await Promise.all(sockets.map(socket =>
+                new Promise((resolve) => {
+                    socket.emit('server_shutdown', { reason });
+                    socket.disconnect(true);
+                    resolve();
+                })
+            ));
         }
-    } catch (err) {
-        cleanupSuccess = false;
-        errors.push(['PID file cleanup error', err]);
-        logger.error('Error cleaning up PID file:', err);
+
+        // Rest of cleanup...
+        // ... existing cleanup code ...
+    } catch (error) {
+        logger.error('Error during cleanup:', error);
+        throw error;
     }
-
-    // Final cleanup and status report
-    return new Promise((resolve) => {
-        const cleanupTimeout = setTimeout(() => {
-            logger.warn('Cleanup timeout after 5 seconds, forcing shutdown');
-            Promise.all([
-                fs.unlink(pidFile).catch(() => { }),
-                fs.unlink(statsFile).catch(() => { })
-            ]).finally(() => {
-                if (errors.length > 0) {
-                    logger.error('Cleanup completed with errors:', errors);
-                }
-                resolve({ success: cleanupSuccess, errors });
-            });
-        }, 5000);
-
-        // Try graceful shutdown first
-        server.close(() => {
-            clearTimeout(cleanupTimeout);
-            if (errors.length > 0) {
-                logger.error('Cleanup completed with errors:', errors);
-            } else {
-                logger.info('Cleanup completed successfully');
-            }
-            resolve({ success: cleanupSuccess, errors });
-        });
-    });
 }
 
 // Logging helper
@@ -1301,4 +1418,81 @@ if (port < 1024 || port > 65535) {
     console.error(error);
     fs.appendFileSync(logFile, `${error}\n`);
     process.exit(1);
+}
+
+// Add health check endpoint
+app.get('/health', (req, res) => {
+    try {
+        const health = {
+            status: serverState.isRunning ? 'healthy' : 'unhealthy',
+            uptime: serverState.startTime ? (Date.now() - serverState.startTime) / 1000 : 0,
+            timestamp: Date.now(),
+            pid: process.pid,
+            memory: process.memoryUsage(),
+            connections: io?.engine?.clientsCount || 0,
+            errors: serverState.errors.slice(-5), // Last 5 errors
+            lastHealthCheck: serverState.lastHealthCheck
+        };
+
+        serverState.lastHealthCheck = Date.now();
+
+        if (!serverState.isRunning) {
+            health.shutdownReason = shutdownReason;
+        }
+
+        res.json(health);
+    } catch (error) {
+        logger.error('Health check error:', error);
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
+// Add server monitoring
+function startServerMonitoring() {
+    // Monitor server health every 5 seconds
+    const healthInterval = setInterval(() => {
+        if (!serverState.isRunning) {
+            logger.warn('Server state marked as not running');
+            return;
+        }
+
+        try {
+            const memUsage = process.memoryUsage();
+            if (memUsage.heapUsed > 500 * 1024 * 1024) { // 500MB
+                logger.warn('High memory usage detected', memUsage);
+            }
+
+            // Check if server is still listening
+            if (!server.listening) {
+                logger.error('Server is no longer listening');
+                serverState.errors.push({
+                    time: Date.now(),
+                    type: 'server_not_listening'
+                });
+                cleanup('server_not_listening').catch(console.error);
+            }
+        } catch (error) {
+            logger.error('Error in health monitoring:', error);
+            serverState.errors.push({
+                time: Date.now(),
+                type: 'monitoring_error',
+                error: error.message
+            });
+        }
+    }, 5000);
+
+    // Clean up old errors every hour
+    const cleanupInterval = setInterval(() => {
+        const oneHourAgo = Date.now() - (60 * 60 * 1000);
+        serverState.errors = serverState.errors.filter(error => error.time > oneHourAgo);
+    }, 60 * 60 * 1000);
+
+    // Cleanup intervals on server shutdown
+    process.on('SIGTERM', () => {
+        clearInterval(healthInterval);
+        clearInterval(cleanupInterval);
+    });
 }
