@@ -9,21 +9,34 @@
 
 namespace SEWN\WebSockets\Tests;
 
+// Require composer autoloader for PHPUnit dependencies
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../../../../wp-load.php';
+require_once __DIR__ . '/../includes/class-websocket-server.php';
+
 use PHPUnit\Framework\TestCase;
 use Ratchet\Client\Connection;
 use Ratchet\Client\WebSocketClient;
 
-require_once __DIR__ . '/../../../../wp-load.php';
-require_once __DIR__ . '/../includes/class-websocket-server.php';
-
 use SEWN\WebSockets\WebSocketServer;
 
+/**
+ * WebSocket Server Test Class
+ * 
+ * @requires PHP 7.4
+ * @requires extension sockets
+ */
 class WebSocketTest extends TestCase {
     protected static $server;
-    protected static $port = 8080;
+    
+    /**
+     * Test port using IANA Dynamic Port range (49152-65535)
+     * Port 49200 chosen to avoid conflicts with common development ports
+     */
+    protected static $port = 49200;
 
     public static function setUpBeforeClass(): void {
-        self::$server = new WebSocketServer();
+        self::$server = new WebSocketServer(self::$port);
     }
 
     public function testConnectionHandling() {

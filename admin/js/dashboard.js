@@ -192,7 +192,7 @@ function updateStats(stats) {
 function initializeSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const port = 8080; // Your WebSocket server port
+    const port = window.SEWN_WS_PORT || 49200; // Default to IANA Dynamic Port range (49152-65535)
 
     // Update indicators based on initial server status
     updateIndicators(window.SEWN_WS_INITIAL_STATUS?.status || 'uninitialized');

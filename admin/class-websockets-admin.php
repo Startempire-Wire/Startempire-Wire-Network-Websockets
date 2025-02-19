@@ -104,7 +104,7 @@ class Websockets_Admin {
 
     public function sanitize_port($value) {
         $port = absint($value);
-        return ($port >= 1024 && $port <= 65535) ? $port : 8080;
+        return ($port >= 1024 && $port <= 65535) ? $port : SEWN_WS_DEFAULT_PORT;
     }
 }
 

@@ -504,7 +504,7 @@ class Process_Manager {
 
     private static function create_default_config() {
         $config = [
-            'port' => get_option('sewn_ws_port', 8080),
+            'port' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT),  // Use constant
             'tls' => [
                 'enabled' => false,
                 'cert' => '',

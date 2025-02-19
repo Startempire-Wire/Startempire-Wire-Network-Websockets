@@ -44,15 +44,21 @@ if (!defined('ABSPATH')) exit;
                         type="number" 
                         id="sewn_ws_port" 
                         name="sewn_ws_port" 
-                        value="<?php echo esc_attr(get_option('sewn_ws_port', '8080')); ?>"
+                        value="<?php echo esc_attr(get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT)); ?>"
                         class="sewn-ws-validate-field"
                         data-validate="port"
                         min="1024"
                         max="65535"
                     >
                     <p class="description">
-                        <?php _e('Port number for WebSocket server (1024-65535)', 'sewn-ws'); ?>
+                        <?php _e('Port for WebSocket server. Default is 49200 (from IANA dynamic port range 49152-65535). This range avoids conflicts with common development ports and other services.', 'sewn-ws'); ?>
                     </p>
+                    <?php if (SEWN_WS_IS_LOCAL): ?>
+                    <p class="description notice-warning">
+                        <strong><?php _e('Local Development Note:', 'sewn-ws'); ?></strong>
+                        <?php _e('Common ports like 8080, 3000, etc. may conflict with development servers. The default port 49200 is chosen to avoid these conflicts.', 'sewn-ws'); ?>
+                    </p>
+                    <?php endif; ?>
                 </td>
             </tr>
 

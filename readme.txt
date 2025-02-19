@@ -36,7 +36,11 @@ Enterprise-grade WebSocket solution for WordPress with real-time communication f
 
     wp sewn-ws server start
 
-6. Configure firewall rules to allow WebSocket traffic on port 8080
+6. Configure firewall rules to allow WebSocket traffic on port 49200 (default)
+   - Port 49200 is chosen from IANA Dynamic Port range (49152-65535)
+   - This avoids conflicts with common development ports
+   - Can be changed in plugin settings if needed
+
 7. Enable TLS encryption in plugin settings
 
 == REST API Endpoints ==
@@ -121,7 +125,7 @@ STARTEMPIRE WIRE NETWORK WEBSOCKETS DOCUMENTATION
    cd wp-content/plugins/startempire-wire-network-websockets/node-server
    npm install --production
 3. Configure .env:
-   WS_PORT=8080
+   WS_PORT=49200  # Using IANA Dynamic Port range (49152-65535)
    JWT_SECRET=your-secret-key
    REDIS_URL=redis://localhost:6379
 4. Start service:
@@ -221,7 +225,7 @@ Issue: Connection Timeout
 Solution:
 1. Verify firewall rules
 2. Check WS_PORT availability
-3. Test with: telnet yoursite.com 8080
+3. Test with: telnet yoursite.com 49200
 
 Issue: JWT Validation Failures
 1. Ensure system clocks are synchronized
@@ -436,7 +440,7 @@ Technical Implementation Details:
                        'invalid_port',
                        __('Port must be between 1024 and 65535', 'sewn-ws')
                    );
-                   return 8080; // Default fallback
+                   return 49200; // Default fallback
                }
                return $port;
            }

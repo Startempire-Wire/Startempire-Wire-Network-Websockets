@@ -2,7 +2,7 @@
 /**
  * LOCATION: includes/class-node-check.php
  * DEPENDENCIES: Process_Manager, Server_Controller
- * VARIABLES: SEWN_WS_NODE_SERVER (path constant)
+ * VARIABLES: SEWN_WS_NODE_SERVER (path constant), SEWN_WS_DEFAULT_PORT
  * CLASSES: Node_Check (environment validator)
  * 
  * Verifies Node.js runtime compatibility and service availability. Essential for maintaining WebSocket server
@@ -84,7 +84,7 @@ class Node_Check {
         }
 
         $node_script = SEWN_WS_PATH . 'server/index.js';
-        $port = get_option('sewn_ws_port', 8080);
+        $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
         
         exec("node $node_script --port=$port > /dev/null 2>&1 & echo $!", $output);
         

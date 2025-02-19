@@ -26,9 +26,9 @@ class Server_Process {
     /**
      * Initialize a new server process instance
      * 
-     * @param int $port Port number for WebSocket server
+     * @param int $port Port number for WebSocket server (default: 49200 from IANA Dynamic Port range)
      */
-    public function __construct($port = 8080) {
+    public function __construct($port = 49200) {
         $this->port = $port;
         $this->node_script = plugin_dir_path(dirname(__FILE__)) . 'node-server/server.js';
         $this->log_file = plugin_dir_path(dirname(__FILE__)) . 'node-server/server.log';

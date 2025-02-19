@@ -29,7 +29,7 @@ class WebSocketServer implements MessageComponentInterface {
     private $clients;
     private $connectionCount = 0;
     
-    public function __construct($port = 8080) {
+    public function __construct($port = 49200) {
         try {
             if (!$this->is_port_available($port)) {
                 throw new \Exception(sprintf(

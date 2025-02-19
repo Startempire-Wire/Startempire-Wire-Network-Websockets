@@ -93,8 +93,11 @@ class Admin_UI {
             'sewn_ws_env_default_port',
             __('WebSocket Port', 'sewn-ws'),
             function() {
-                $port = get_option('sewn_ws_env_default_port', 8080);
+                $port = get_option('sewn_ws_env_default_port', SEWN_WS_DEFAULT_PORT);
                 echo "<input type='number' name='sewn_ws_env_default_port' value='$port' min='1024' max='65535'>";
+                echo "<p class='description'>";
+                echo __('Default: 49200 (IANA Dynamic Port range 49152-65535)', 'sewn-ws');
+                echo "</p>";
             },
             'sewn-ws-settings',
             'server_config'
@@ -402,7 +405,7 @@ class Admin_UI {
         wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION),
-            'port' => get_option('sewn_ws_env_default_port', 8080),
+            'port' => get_option('sewn_ws_env_default_port', SEWN_WS_DEFAULT_PORT),
             'is_local' => $is_local,
             'dev_mode' => $dev_mode,
             'site_protocol' => is_ssl() ? 'https' : 'http',

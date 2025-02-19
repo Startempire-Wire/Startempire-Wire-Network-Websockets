@@ -41,8 +41,21 @@ try {
     dotenv.config();
 
     // Get environment variables with validation and defaults
-    const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 3000;
+    /**
+     * Port Configuration:
+     * - Default: 49200 (IANA Dynamic Port Range 49152-65535)
+     * - Chosen to avoid conflicts with common development ports
+     * - Can be overridden via WP_PORT environment variable
+     */
+    const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200;
     console.log('Server starting with port:', process.env.WP_PORT, 'parsed as:', port);
+
+    // Validate port is in acceptable range
+    if (port < 1024 || port > 65535) {
+        console.error('Invalid port number. Must be between 1024 and 65535');
+        process.exit(1);
+    }
+
     const baseDir = process.env.WP_PLUGIN_DIR || path.join(__dirname);
     const statsFile = process.env.WP_STATS_FILE || path.join(baseDir, 'tmp/stats.json');
     const pidFile = process.env.WP_PID_FILE || path.join(baseDir, 'server.pid');
@@ -564,7 +577,7 @@ try {
 
         // Default configuration
         const config = {
-            port: process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 8080,
+            port: process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200,
             host: process.env.WP_HOST || '0.0.0.0', // Listen on all interfaces by default
             ssl: {
                 enabled: process.env.WP_SSL === 'true',

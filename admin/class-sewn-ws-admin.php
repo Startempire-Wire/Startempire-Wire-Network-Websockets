@@ -47,7 +47,7 @@ public function enqueue_admin_assets() {
         'sewn-ws-dashboard',
         'sewnWsSettings',
         array(
-            'wsPort' => 8080,
+            'wsPort' => 49200,
             'nonce' => wp_create_nonce('sewn_ws_dashboard'),
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'i18n' => array(

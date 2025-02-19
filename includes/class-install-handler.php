@@ -332,7 +332,7 @@ class Install_Handler {
 
     private function generate_config() {
         $config = [
-            'port' => get_option('sewn_ws_port', 3000),
+            'port' => get_option('sewn_ws_port', 49200),
             'host' => get_option('sewn_ws_host', '0.0.0.0'),
             'ssl' => get_option('sewn_ws_ssl', false),
             'logLevel' => WP_DEBUG ? 'debug' : 'info',

@@ -35,7 +35,14 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_REST_NAMESPACE') && define('SEWN_WS_REST_NAMESPACE', 'sewn-ws/v1');
 
 // Server defaults
-!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 3000);
+/**
+ * Default WebSocket port - Using 49200 because:
+ * 1. Falls within IANA Dynamic/Private port range (49152-65535)
+ * 2. Early in dynamic range for easy remembering
+ * 3. Avoids common development ports (3000, 8080, etc)
+ * 4. Reduces likelihood of conflicts with other services
+ */
+!defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 49200);
 !defined('SEWN_WS_SETTINGS_GROUP') && define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
@@ -68,7 +75,7 @@ define('SEWN_WS_IS_LOCAL', (
 
 // Update ENV_OVERRIDABLE constants
 !defined('SEWN_WS_ENV_OVERRIDABLE') && define('SEWN_WS_ENV_OVERRIDABLE', [
-    'SEWN_WS_ENV_DEFAULT_PORT' => 8080,
+    'SEWN_WS_ENV_DEFAULT_PORT' => 49200,
     'SEWN_WS_ENV_LOCAL_MODE' => false,
     'SEWN_WS_ENV_CONTAINER_MODE' => false,
     'SEWN_WS_ENV_DEBUG_ENABLED' => false,

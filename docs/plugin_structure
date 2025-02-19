@@ -22,7 +22,7 @@ SEWN_WS_ADMIN_MENU_SLUG    # Admin menu slug ('sewn-ws')
 SEWN_WS_SCRIPT_HANDLE_ADMIN # Admin script handle ('sewn-ws-admin')
 
 ## Server Configuration
-SEWN_WS_DEFAULT_PORT        # Default WebSocket port (8080)
+SEWN_WS_DEFAULT_PORT        # Default WebSocket port (49200)
 SEWN_WS_SETTINGS_GROUP      # Settings option group ('sewn_ws_settings')
 SEWN_WS_STATS_UPDATE_INTERVAL # Stats refresh interval (10000ms)
 SEWN_WS_STATS_MAX_POINTS    # Max data points kept (20)
@@ -121,7 +121,7 @@ ARCHITECTURE OVERVIEW
 ---------------------
 Client connections flow through these components:
 
-1. Chrome Extension --> WebSocket Server (Port 8080)
+1. Chrome Extension --> WebSocket Server (Port 49200)
 2. WebSocket Server --> Ring Leader Plugin (HTTP)
 3. Ring Leader Plugin --> WordPress Database (REST)
 4. WebSocket Server <--> Connect Plugins (WebRTC)
@@ -194,3 +194,24 @@ add_filter('sewn_ws_register_protocols', function($protocols) {
 add_action('sewn_ws_client_connected', function($client) {
     error_log("New connection: " . $client->getId());
 });
+
+# Server Configuration
+
+## Port Configuration
+Default port: 49200
+- Chosen from IANA Dynamic Port range (49152-65535)
+- Avoids conflicts with common development ports
+- Can be configured in WordPress admin or via environment variables
+- Validated range: 1024-65535 (privileged ports < 1024 not allowed)
+
+## Environment Variables
+WP_PORT: WebSocket server port (default: 49200)
+WP_HOST: WebSocket server host (default: localhost)
+WP_DEBUG: Enable debug mode (true/false)
+WP_SSL_ENABLED: Enable SSL (true/false)
+
+## Configuration Files
+config.json: Server configuration
+- port: 49200 (default)
+- tls: SSL/TLS settings
+- origins: Allowed origin domains
