@@ -167,4 +167,105 @@ jQuery(document).ready(function ($) {
 
     // Trigger initial state
     $localMode.trigger('change');
+
+    (function ($) {
+        'use strict';
+
+        const WsAdmin = {
+            init: function () {
+                this.statsRefresh = null;
+                this.bindEvents();
+                this.startStatsRefresh();
+            },
+
+            bindEvents: function () {
+                $('.sewn-ws-controls button').on('click', this.handleServerAction.bind(this));
+            },
+
+            startStatsRefresh: function () {
+                this.updateStats();
+                this.statsRefresh = setInterval(() => {
+                    this.updateStats();
+                }, sewnWsAdmin.refresh_interval);
+            },
+
+            updateStats: function () {
+                $.ajax({
+                    url: sewnWsAdmin.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'sewn_ws_get_stats',
+                        nonce: sewnWsAdmin.nonce
+                    },
+                    success: (response) => {
+                        if (response.success) {
+                            this.updateDashboard(response.data);
+                        }
+                    }
+                });
+            },
+
+            updateDashboard: function (data) {
+                // Update server status
+                const statusDot = $('.status-dot');
+                const statusText = $('.status-text');
+
+                if (data.server_status === 'running') {
+                    statusDot.addClass('active').removeClass('inactive');
+                    statusText.text('Running');
+                } else {
+                    statusDot.addClass('inactive').removeClass('active');
+                    statusText.text('Stopped');
+                }
+
+                // Update connection stats
+                $('#live-connections-count').text(data.connections.active);
+                $('#total-connections').text(data.connections.total);
+                $('#peak-connections').text(data.connections.peak);
+
+                // Update message rate
+                $('#message-rate').text(data.message_rate + ' msg/s');
+
+                // Update memory usage
+                const memoryMB = (data.memory_usage / 1024 / 1024).toFixed(1);
+                $('#memory-usage').text(memoryMB + ' MB');
+
+                // Update uptime
+                $('#server-uptime').text(data.uptime);
+
+                // Update graphs if they exist
+                if (window.connectionGraph) {
+                    window.connectionGraph.addPoint(data.connections.active);
+                }
+                if (window.memoryGraph) {
+                    window.memoryGraph.addPoint(parseFloat(memoryMB));
+                }
+            },
+
+            handleServerAction: function (e) {
+                const action = $(e.currentTarget).data('action');
+
+                $.ajax({
+                    url: sewnWsAdmin.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'sewn_ws_server_control',
+                        command: action,
+                        nonce: sewnWsAdmin.nonce
+                    },
+                    success: (response) => {
+                        if (response.success) {
+                            this.updateStats();
+                        } else {
+                            alert(response.data.message || 'Action failed');
+                        }
+                    }
+                });
+            }
+        };
+
+        $(document).ready(function () {
+            WsAdmin.init();
+        });
+    })(jQuery);
 }); 

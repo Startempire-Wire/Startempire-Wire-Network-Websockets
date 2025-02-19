@@ -18,6 +18,7 @@ class Ajax_Handler {
     private static $instance = null;
     private $logger;
     private $monitor;
+    private $stats_handler;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -29,6 +30,7 @@ class Ajax_Handler {
     public function __construct() {
         $this->logger = Error_Logger::get_instance();
         $this->monitor = Environment_Monitor::get_instance();
+        $this->stats_handler = new Stats_Handler();
 
         add_action('wp_ajax_sewn_ws_clear_logs', [$this, 'clear_logs']);
         add_action('wp_ajax_sewn_ws_export_logs', [$this, 'export_logs']);
@@ -36,7 +38,7 @@ class Ajax_Handler {
         add_action('wp_ajax_sewn_ws_get_ssl_paths', [$this, 'get_ssl_paths']);
         add_action('wp_ajax_sewn_ws_toggle_debug', [$this, 'toggle_debug']);
         add_action('wp_ajax_sewn_ws_get_logs', [$this, 'get_logs']);
-        add_action('wp_ajax_sewn_ws_get_stats', [$this, 'get_stats']);
+        add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_get_stats']);
     }
 
     /**
@@ -218,18 +220,15 @@ class Ajax_Handler {
      * @since 1.0.0
      * @return void
      */
-    public function get_stats(): void {
-        // Verify nonce and capabilities
+    public function handle_get_stats() {
+        check_ajax_referer('sewn_ws_admin', 'nonce');
+        
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
-            return;
         }
-
-        // Get stats from handler
-        $stats_handler = Stats_Handler::get_instance();
-        $current_stats = $stats_handler->get_current_stats();
-
-        wp_send_json_success($current_stats);
+        
+        $stats = $this->stats_handler->collect_real_time_stats();
+        wp_send_json_success($stats);
     }
 }
 

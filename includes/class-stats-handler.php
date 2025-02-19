@@ -42,6 +42,9 @@ class Stats_Handler {
      */
     private $stats_file;
 
+    private $cache_key = 'sewn_ws_stats';
+    private $cache_expiration = 30; // seconds
+
     /**
      * Get instance of this class.
      *
@@ -466,5 +469,149 @@ class Stats_Handler {
                 'timestamp' => strtotime($row->created_at)
             ];
         }, $results);
+    }
+
+    public function collect_real_time_stats() {
+        $server_status = $this->get_server_status();
+        
+        // If server is not running, return minimal stats
+        if ($server_status !== 'running') {
+            return [
+                'server_status' => $server_status,
+                'connections' => [
+                    'active' => 0,
+                    'total' => $this->stats_buffer['connections']['total'] ?? 0,
+                    'peak' => $this->stats_buffer['connections']['peak'] ?? 0
+                ],
+                'memory_usage' => 0,
+                'message_rate' => 0,
+                'uptime' => 0
+            ];
+        }
+
+        // Server is running, get live stats
+        $memory_usage = $this->get_memory_usage();
+        $uptime = $this->get_uptime();
+        
+        // Update peak connections if necessary
+        $active_connections = $this->count_active_connections();
+        if ($active_connections > ($this->stats_buffer['connections']['peak'] ?? 0)) {
+            $this->stats_buffer['connections']['peak'] = $active_connections;
+        }
+
+        return [
+            'server_status' => $server_status,
+            'connections' => [
+                'active' => $active_connections,
+                'total' => $this->stats_buffer['connections']['total'] ?? 0,
+                'peak' => $this->stats_buffer['connections']['peak'] ?? 0
+            ],
+            'memory_usage' => $memory_usage,
+            'message_rate' => $this->get_message_rate(),
+            'uptime' => $uptime
+        ];
+    }
+    
+    private function count_active_connections() {
+        global $wpdb;
+        return (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}sewn_ws_connections 
+             WHERE disconnected_at IS NULL"
+        );
+    }
+    
+    private function get_total_connections() {
+        global $wpdb;
+        return (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}sewn_ws_connections"
+        );
+    }
+    
+    private function get_peak_connections() {
+        return get_option('sewn_ws_peak_connections', 0);
+    }
+    
+    private function get_message_rate() {
+        $current_rate = get_transient('sewn_ws_message_rate');
+        return $current_rate ? $current_rate : 0;
+    }
+
+    private function get_server_status() {
+        $pid_file = SEWN_WS_PATH . 'tmp/server.pid';
+        
+        if (!file_exists($pid_file)) {
+            return 'stopped';
+        }
+
+        $pid = (int) file_get_contents($pid_file);
+        if (!$pid || !posix_kill($pid, 0)) {
+            return 'stopped';
+        }
+
+        // Check if process is actually our Node.js server
+        $command = "ps -p $pid -o command=";
+        $output = [];
+        exec($command, $output);
+        
+        if (empty($output) || strpos($output[0], 'server.js') === false) {
+            return 'stopped';
+        }
+
+        return 'running';
+    }
+
+    private function get_memory_usage() {
+        $pid_file = SEWN_WS_PATH . 'tmp/server.pid';
+        
+        if (!file_exists($pid_file)) {
+            return 0;
+        }
+
+        $pid = (int) file_get_contents($pid_file);
+        if (!$pid) {
+            return 0;
+        }
+
+        // Get memory usage in bytes
+        $command = "ps -o rss= -p $pid";
+        $output = [];
+        exec($command, $output);
+        
+        if (empty($output)) {
+            return 0;
+        }
+
+        // Convert KB to bytes
+        return (int) $output[0] * 1024;
+    }
+
+    private function get_uptime() {
+        $pid_file = SEWN_WS_PATH . 'tmp/server.pid';
+        
+        if (!file_exists($pid_file)) {
+            return 0;
+        }
+
+        $pid = (int) file_get_contents($pid_file);
+        if (!$pid) {
+            return 0;
+        }
+
+        // Get process start time
+        $stat = @file_get_contents("/proc/$pid/stat");
+        if (!$stat) {
+            return 0;
+        }
+
+        $stat_array = explode(' ', $stat);
+        $start_time = isset($stat_array[21]) ? (int) $stat_array[21] : 0;
+        
+        if (!$start_time) {
+            return 0;
+        }
+
+        // Calculate uptime in seconds
+        $system_start = (int) file_get_contents('/proc/uptime');
+        return $system_start - ($start_time / 100);
     }
 } 
