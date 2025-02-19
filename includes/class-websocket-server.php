@@ -37,28 +37,15 @@ class WebSocketServer implements MessageComponentInterface {
      */
     public function __construct($port = null) {
         try {
-            // Get port configuration with deprecation support
+            // Handle port configuration with deprecation support
             if ($port === null) {
-                $port = defined('\SEWN_WS_ENV_DEFAULT_PORT') 
-                    ? \SEWN_WS_ENV_DEFAULT_PORT 
-                    : \SEWN_WS_DEFAULT_PORT;
-
-                if (defined('\SEWN_WS_ENV_DEFAULT_PORT')) {
+                $port = defined('SEWN_WS_ENV_DEFAULT_PORT') ? SEWN_WS_ENV_DEFAULT_PORT : SEWN_WS_DEFAULT_PORT;
+                if (defined('SEWN_WS_ENV_DEFAULT_PORT')) {
                     error_log('[SEWN WebSocket] Warning: Using deprecated SEWN_WS_ENV_DEFAULT_PORT constant');
                 }
             }
             
             error_log(sprintf('[SEWN WebSocket] Initializing WebSocket server with port: %d', $port));
-            
-            // Validate port number
-            if (!is_numeric($port) || $port < 1024 || $port > 65535) {
-                $error_message = sprintf(
-                    __('Invalid port number: %d. Port must be between 1024 and 65535.', 'sewn-ws'),
-                    $port
-                );
-                error_log('[SEWN WebSocket] ' . $error_message);
-                throw new \Exception($error_message);
-            }
             
             if (!$this->is_port_available($port)) {
                 $error_message = sprintf(
@@ -89,11 +76,38 @@ class WebSocketServer implements MessageComponentInterface {
             error_log('[SEWN WebSocket] Creating event loop');
             $this->loop = ReactLoop::create();
             
-            error_log(sprintf('[SEWN WebSocket] Creating socket server on port %d', $this->port));
-            $this->socket = new ReactServer("0.0.0.0:{$this->port}", $this->loop);
+            // Get environment configuration
+            $env = $this->detect_environment();
             
-            // Initialize WebSocket handler
-            $this->handler = new WebSocket_Handler();
+            // Configure socket with SSL if available
+            if ($env['is_local'] && !empty($env['ssl_cert']) && !empty($env['ssl_key'])) {
+                $context = [
+                    'ssl' => [
+                        'local_cert' => $env['ssl_cert'],
+                        'local_pk' => $env['ssl_key'],
+                        'verify_peer' => false
+                    ]
+                ];
+                
+                $this->socket = new ReactServer(
+                    "tls://0.0.0.0:{$this->port}",
+                    $this->loop,
+                    $context
+                );
+            } else {
+                $this->socket = new ReactServer(
+                    "0.0.0.0:{$this->port}",
+                    $this->loop
+                );
+            }
+            
+            // Initialize WebSocket handler with proxy support
+            $this->handler = new WebSocket_Handler([
+                'proxy' => [
+                    'enabled' => true,
+                    'path' => SEWN_WS_PROXY_PATH
+                ]
+            ]);
             
             // Create server stack
             $ws_server = new WsServer($this->handler);
@@ -109,6 +123,28 @@ class WebSocketServer implements MessageComponentInterface {
             error_log('[SEWN WebSocket] Server component initialization failed: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    private function detect_environment() {
+        // Check if running in Local
+        $is_local = (
+            strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
+            isset($_SERVER['LOCAL_SITE_URL'])
+        );
+
+        if ($is_local) {
+            // Get Local's SSL paths
+            $site_path = ABSPATH;
+            $conf_path = dirname($site_path) . '/conf';
+            
+            return [
+                'is_local' => true,
+                'ssl_cert' => $conf_path . '/ssl/certs/site.crt',
+                'ssl_key' => $conf_path . '/ssl/private/site.key'
+            ];
+        }
+
+        return ['is_local' => false];
     }
 
     public function run() {
@@ -145,39 +181,12 @@ class WebSocketServer implements MessageComponentInterface {
     }
 
     private function is_port_available($port) {
-        // Validate port number first
-        if (!is_numeric($port) || $port < 1024 || $port > 65535) {
-            throw new \Exception(sprintf(__('Invalid port number: %d. Port must be between 1024 and 65535.', 'sewn-ws'), $port));
+        $sock = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
+        if ($sock) {
+            fclose($sock);
+            return false;  // Port is in use
         }
-
-        try {
-            // Create a socket
-            $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-            if ($socket === false) {
-                throw new \Exception("Failed to create socket: " . socket_strerror(socket_last_error()));
-            }
-
-            // Set socket options
-            socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
-
-            // Attempt to bind to the port
-            $result = @socket_bind($socket, '127.0.0.1', $port);
-            
-            // Clean up
-            socket_close($socket);
-
-            if ($result === false) {
-                return false; // Port is in use
-            }
-
-            return true; // Port is available
-
-        } catch (\Exception $e) {
-            error_log(sprintf('[SEWN WebSocket] Port check error: %s', $e->getMessage()));
-            throw new \Exception(
-                sprintf(__('Failed to check port availability: %s', 'sewn-ws'), $e->getMessage())
-            );
-        }
+        return true;  // Port is available
     }
 
     public function onOpen(ConnectionInterface $conn) {

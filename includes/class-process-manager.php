@@ -593,6 +593,79 @@ class Process_Manager {
             'error_rate' => 0
         ]);
     }
+
+    /**
+     * Detect environment and get configuration
+     * 
+     * @return array Environment configuration
+     */
+    private function detect_environment() {
+        // Check if running in Local
+        $is_local = (
+            strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
+            isset($_SERVER['LOCAL_SITE_URL'])
+        );
+
+        if ($is_local) {
+            // Get Local's SSL paths
+            $local_ssl = $this->get_local_ssl_paths();
+            
+            return [
+                'is_local' => true,
+                'ssl_cert' => $local_ssl['cert'] ?? null,
+                'ssl_key' => $local_ssl['key'] ?? null,
+                'site_url' => $_SERVER['HTTP_HOST']
+            ];
+        }
+
+        return ['is_local' => false];
+    }
+
+    /**
+     * Get SSL certificate paths for Local environment
+     * 
+     * @return array SSL certificate paths
+     */
+    private function get_local_ssl_paths() {
+        $site_path = ABSPATH;
+        $conf_path = dirname($site_path) . '/conf';
+        
+        return [
+            'cert' => $conf_path . '/ssl/certs/site.crt',
+            'key' => $conf_path . '/ssl/private/site.key'
+        ];
+    }
+
+    /**
+     * Check if running on Windows
+     * 
+     * @return bool True if running on Windows
+     */
+    private function is_windows() {
+        return strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+    }
+
+    /**
+     * Check if server process is running
+     * 
+     * @return bool True if server is running
+     */
+    private function is_server_running() {
+        $pid_file = SEWN_WS_PATH . 'node-server/server.pid';
+        
+        if (!file_exists($pid_file)) {
+            return false;
+        }
+
+        $pid = (int)file_get_contents($pid_file);
+        
+        if ($this->is_windows()) {
+            exec("tasklist /FI \"PID eq $pid\" 2>&1", $output);
+            return count($output) > 1 && strpos($output[1], (string)$pid) !== false;
+        }
+        
+        return posix_kill($pid, 0);
+    }
 }
 
 // Add to admin notices

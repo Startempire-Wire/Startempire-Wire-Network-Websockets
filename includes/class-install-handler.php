@@ -33,6 +33,8 @@ class Install_Handler {
 
         register_activation_hook(SEWN_WS_FILE, [$this, 'activate']);
         register_deactivation_hook(SEWN_WS_FILE, [$this, 'deactivate']);
+
+        add_action('admin_init', [$this, 'setup_server_proxy']);
     }
 
     /**
@@ -357,5 +359,57 @@ class Install_Handler {
         }
 
         return array_unique(array_filter($origins));
+    }
+
+    public function setup_server_proxy() {
+        // Only run in Local environment
+        if (!$this->is_local_environment()) {
+            return;
+        }
+
+        // Get Local's Apache configuration path
+        $site_path = ABSPATH;
+        $vhost_file = dirname($site_path) . '/conf/apache/site.conf.hbs';
+        
+        if (!file_exists($vhost_file)) {
+            error_log('[SEWN WebSocket] Local Apache configuration not found');
+            return;
+        }
+
+        $vhost_content = file_get_contents($vhost_file);
+        
+        // Add WebSocket proxy configuration if not present
+        if (strpos($vhost_content, 'ProxyPass /websocket') === false) {
+            $proxy_config = "
+    # WebSocket Proxy Configuration
+    ProxyPass /websocket ws://localhost:" . SEWN_WS_DEFAULT_PORT . "
+    ProxyPassReverse /websocket ws://localhost:" . SEWN_WS_DEFAULT_PORT . "
+    
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /websocket/(.*) ws://localhost:" . SEWN_WS_DEFAULT_PORT . "/$1 [P,L]
+";
+            
+            // Add proxy config before closing VirtualHost tag
+            $vhost_content = str_replace(
+                '</VirtualHost>',
+                $proxy_config . "\n</VirtualHost>",
+                $vhost_content
+            );
+            
+            file_put_contents($vhost_file, $vhost_content);
+            
+            // Restart Apache through Local's CLI if available
+            if (shell_exec('which wp')) {
+                shell_exec('wp local-server restart');
+            }
+        }
+    }
+
+    private function is_local_environment() {
+        return (
+            strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
+            isset($_SERVER['LOCAL_SITE_URL'])
+        );
     }
 } 

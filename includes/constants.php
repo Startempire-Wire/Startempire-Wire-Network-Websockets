@@ -45,6 +45,13 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 49200);
 
 /**
+ * WebSocket proxy configuration
+ * While server runs on SEWN_WS_DEFAULT_PORT (49200),
+ * clients connect through standard HTTPS port (443) via proxy
+ */
+!defined('SEWN_WS_PROXY_PATH') && define('SEWN_WS_PROXY_PATH', '/websocket');
+
+/**
  * @deprecated 1.1.0 Use SEWN_WS_DEFAULT_PORT instead.
  * This constant will be removed in version 2.0.0
  */
