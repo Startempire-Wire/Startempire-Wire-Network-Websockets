@@ -11,6 +11,8 @@
  * visualization for network operators.
  */
 
+namespace SEWN\WebSockets\Admin;
+
 if (!defined('ABSPATH')) exit;
 
 use SEWN\WebSockets\Process_Manager;
@@ -377,6 +379,33 @@ $status_text = $node_status['running'] ? '✓ Operational' :
                     </ul>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Connection Test Card -->
+    <div class="sewn-ws-card connection-test">
+        <h2><?php _e('WebSocket Test Connection', 'sewn-ws'); ?></h2>
+        <div class="test-connection-status">
+            <span class="connection-dot"></span>
+            <span class="connection-text"><?php _e('Not Connected', 'sewn-ws'); ?></span>
+        </div>
+        <div class="test-controls">
+            <button class="button button-primary test-connection"><?php _e('Test Connection', 'sewn-ws'); ?></button>
+            <button class="button button-secondary disconnect-test" disabled><?php _e('Disconnect', 'sewn-ws'); ?></button>
+        </div>
+        <div class="connection-details" style="display: none;">
+            <h3><?php _e('Connection Details', 'sewn-ws'); ?></h3>
+            <p><strong><?php _e('URL:', 'sewn-ws'); ?></strong> <span class="connection-url"></span></p>
+            <p><strong><?php _e('Status:', 'sewn-ws'); ?></strong> <span class="connection-status"></span></p>
+            <p><strong><?php _e('Latency:', 'sewn-ws'); ?></strong> <span class="connection-latency">-</span></p>
+        </div>
+        <div class="test-console">
+            <h3><?php _e('Test Console', 'sewn-ws'); ?></h3>
+            <div class="console-messages"></div>
+            <div class="message-input">
+                <input type="text" placeholder="<?php esc_attr_e('Type a message...', 'sewn-ws'); ?>" disabled>
+                <button class="button button-secondary send-message" disabled><?php _e('Send', 'sewn-ws'); ?></button>
+            </div>
         </div>
     </div>
 </div>
@@ -895,6 +924,100 @@ $status_text = $node_status['running'] ? '✓ Operational' :
         margin: 5px 0;
     }
 }
+
+/* Connection Test Card Styles */
+.connection-test {
+    margin-top: 20px;
+}
+
+.test-connection-status {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.connection-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background-color: #ccc;
+}
+
+.connection-dot.connected {
+    background-color: #46b450;
+}
+
+.connection-dot.disconnected {
+    background-color: #dc3232;
+}
+
+.test-controls {
+    margin-top: 15px;
+}
+
+.test-controls button {
+    margin-right: 10px;
+}
+
+.test-console {
+    margin-top: 20px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.console-messages {
+    height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #ddd;
+    font-family: monospace;
+}
+
+.message-input {
+    display: flex;
+    padding: 10px;
+    background: #fff;
+}
+
+.message-input input {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.connection-details {
+    margin: 15px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.console-messages .message {
+    margin-bottom: 5px;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+.console-messages .message.received {
+    background: #e8f5e9;
+}
+
+.console-messages .message.sent {
+    background: #e3f2fd;
+    text-align: right;
+}
+
+.console-messages .message.system {
+    background: #fff3e0;
+    font-style: italic;
+}
+
+.console-messages .timestamp {
+    color: #666;
+    font-size: 0.8em;
+    margin-right: 5px;
+}
 </style>
 
 <script>
@@ -905,5 +1028,142 @@ jQuery(document).ready(function($) {
         status: <?php echo json_encode($node_status['status']); ?>,
         version: <?php echo json_encode($node_status['version']); ?>
     };
+
+    // Initialize WebSocket test client
+    let testSocket = null;
+    const consoleMessages = $('.console-messages');
+    const connectionStatus = $('.test-connection-status');
+    const connectionDetails = $('.connection-details');
+    
+    function updateConnectionStatus(status, message) {
+        const dot = $('.connection-dot');
+        const text = $('.connection-text');
+        
+        dot.removeClass('connected disconnected');
+        dot.addClass(status);
+        text.text(message);
+    }
+
+    function logMessage(message, type = 'system') {
+        const timestamp = new Date().toLocaleTimeString();
+        const msgHtml = `<div class="message ${type}">
+            <span class="timestamp">${timestamp}</span>
+            ${message}
+        </div>`;
+        consoleMessages.append(msgHtml);
+        consoleMessages.scrollTop(consoleMessages[0].scrollHeight);
+    }
+
+    $('.test-connection').on('click', function() {
+        const button = $(this);
+        button.prop('disabled', true);
+        
+        // Get current site URL and protocol
+        const siteUrl = window.location.hostname;
+        const isSecure = window.location.protocol === 'https:';
+        const isLocal = siteUrl.includes('.local');
+        
+        // Use secure WebSocket with proper path
+        const protocol = isSecure ? 'wss:' : 'ws:';
+        const port = isSecure ? '443' : '80';
+        const wsUrl = `${protocol}//${siteUrl}:${port}/websocket`;
+
+        try {
+            testSocket = io(wsUrl, {
+                path: '/websocket',
+                transports: ['websocket'],
+                secure: isSecure,
+                rejectUnauthorized: !isLocal
+            });
+
+            // Update UI
+            $('.connection-url').text(wsUrl);
+            connectionDetails.show();
+            logMessage('Connecting to WebSocket server...');
+
+            testSocket.on('connect', () => {
+                updateConnectionStatus('connected', 'Connected');
+                logMessage('Connected to WebSocket server');
+                
+                // Enable controls
+                $('.disconnect-test, .message-input input, .send-message').prop('disabled', false);
+                button.prop('disabled', true);
+
+                // Start latency check
+                startLatencyCheck();
+            });
+
+            testSocket.on('disconnect', () => {
+                updateConnectionStatus('disconnected', 'Disconnected');
+                logMessage('Disconnected from WebSocket server');
+                
+                // Disable controls
+                $('.disconnect-test, .message-input input, .send-message').prop('disabled', true);
+                button.prop('disabled', false);
+                
+                // Stop latency check
+                stopLatencyCheck();
+            });
+
+            testSocket.on('error', (error) => {
+                logMessage(`Error: ${error.message}`, 'system');
+                button.prop('disabled', false);
+            });
+
+            testSocket.on('message', (data) => {
+                logMessage(data, 'received');
+            });
+
+        } catch (error) {
+            logMessage(`Connection error: ${error.message}`, 'system');
+            button.prop('disabled', false);
+        }
+    });
+
+    $('.disconnect-test').on('click', function() {
+        if (testSocket) {
+            testSocket.disconnect();
+        }
+    });
+
+    $('.send-message').on('click', function() {
+        const input = $('.message-input input');
+        const message = input.val().trim();
+        
+        if (message && testSocket && testSocket.connected) {
+            testSocket.emit('message', message);
+            logMessage(message, 'sent');
+            input.val('');
+        }
+    });
+
+    $('.message-input input').on('keypress', function(e) {
+        if (e.which === 13) {
+            $('.send-message').click();
+        }
+    });
+
+    // Latency checking
+    let latencyInterval;
+    
+    function startLatencyCheck() {
+        latencyInterval = setInterval(() => {
+            if (testSocket && testSocket.connected) {
+                const start = Date.now();
+                testSocket.emit('ping');
+                testSocket.once('pong', () => {
+                    const latency = Date.now() - start;
+                    $('.connection-latency').text(`${latency}ms`);
+                });
+            }
+        }, 5000);
+    }
+
+    function stopLatencyCheck() {
+        if (latencyInterval) {
+            clearInterval(latencyInterval);
+            $('.connection-latency').text('-');
+        }
+    }
 });
 </script> 

@@ -376,6 +376,23 @@ try {
 
     // Add real-time connection tracking
     io.on('connection', (socket) => {
+        console.log('Client connected');
+
+        // Handle ping messages for latency testing
+        socket.on('ping', () => {
+            socket.emit('pong');
+        });
+
+        // Handle chat messages
+        socket.on('message', (data) => {
+            // Broadcast to all other clients
+            socket.broadcast.emit('message', data);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Client disconnected');
+        });
+
         // Existing connection logging
         logEvent('connection', { socketId: socket.id });
 
