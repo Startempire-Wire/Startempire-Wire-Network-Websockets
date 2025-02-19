@@ -29,29 +29,68 @@ class WebSocketServer implements MessageComponentInterface {
     private $clients;
     private $connectionCount = 0;
     
-    public function __construct($port = 49200) {
+    /**
+     * Initialize a new server process instance
+     * 
+     * @param int|null $port Port number for WebSocket server
+     * @throws \Exception If port is invalid or unavailable
+     */
+    public function __construct($port = null) {
         try {
-            if (!$this->is_port_available($port)) {
-                throw new \Exception(sprintf(
-                    __('Port %d is already in use. Please choose a different port in the WebSocket settings.', 'sewn-ws'), 
+            // Get port configuration with deprecation support
+            if ($port === null) {
+                $port = defined('\SEWN_WS_ENV_DEFAULT_PORT') 
+                    ? \SEWN_WS_ENV_DEFAULT_PORT 
+                    : \SEWN_WS_DEFAULT_PORT;
+
+                if (defined('\SEWN_WS_ENV_DEFAULT_PORT')) {
+                    error_log('[SEWN WebSocket] Warning: Using deprecated SEWN_WS_ENV_DEFAULT_PORT constant');
+                }
+            }
+            
+            error_log(sprintf('[SEWN WebSocket] Initializing WebSocket server with port: %d', $port));
+            
+            // Validate port number
+            if (!is_numeric($port) || $port < 1024 || $port > 65535) {
+                $error_message = sprintf(
+                    __('Invalid port number: %d. Port must be between 1024 and 65535.', 'sewn-ws'),
                     $port
-                ));
+                );
+                error_log('[SEWN WebSocket] ' . $error_message);
+                throw new \Exception($error_message);
+            }
+            
+            if (!$this->is_port_available($port)) {
+                $error_message = sprintf(
+                    __('Port %d is already in use. Please choose a different port from range 49152-65535 to avoid conflicts.', 'sewn-ws'), 
+                    $port
+                );
+                error_log('[SEWN WebSocket] ' . $error_message);
+                throw new \Exception($error_message);
             }
             
             $this->port = $port;
-            
-            // Create event loop
+            error_log('[SEWN WebSocket] Port validated successfully');
+
+            // Initialize server components
+            $this->init_server();
+
+        } catch (\Exception $e) {
+            error_log('[SEWN WebSocket] Server initialization failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Initialize server components
+     */
+    private function init_server() {
+        try {
+            error_log('[SEWN WebSocket] Creating event loop');
             $this->loop = ReactLoop::create();
             
-            // Create socket server with error handling
-            try {
-                $this->socket = new ReactServer("0.0.0.0:$port", $this->loop);
-            } catch (\Exception $e) {
-                throw new \Exception(sprintf(
-                    __('Failed to create socket server: %s', 'sewn-ws'),
-                    $e->getMessage()
-                ));
-            }
+            error_log(sprintf('[SEWN WebSocket] Creating socket server on port %d', $this->port));
+            $this->socket = new ReactServer("0.0.0.0:{$this->port}", $this->loop);
             
             // Initialize WebSocket handler
             $this->handler = new WebSocket_Handler();
@@ -64,8 +103,10 @@ class WebSocketServer implements MessageComponentInterface {
             $this->server = new IoServer($http_server, $this->socket, $this->loop);
             
             $this->clients = new \SplObjectStorage;
+            
+            error_log('[SEWN WebSocket] Server components initialized successfully');
         } catch (\Exception $e) {
-            error_log('[SEWN WebSocket] Server initialization failed: ' . $e->getMessage());
+            error_log('[SEWN WebSocket] Server component initialization failed: ' . $e->getMessage());
             throw $e;
         }
     }

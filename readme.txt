@@ -43,6 +43,18 @@ Enterprise-grade WebSocket solution for WordPress with real-time communication f
 
 7. Enable TLS encryption in plugin settings
 
+== Port Configuration ==
+
+The plugin supports two methods for configuring the WebSocket port:
+
+1. Recommended (Current):
+   define('SEWN_WS_DEFAULT_PORT', 49200);  // In wp-config.php
+
+2. Legacy (Deprecated):
+   define('SEWN_WS_ENV_DEFAULT_PORT', 8081);  // Will be removed in v2.0.0
+
+The default port 49200 is chosen from the IANA Dynamic Port range (49152-65535) to avoid conflicts with common development ports. See MIGRATION.md for detailed upgrade instructions.
+
 == REST API Endpoints ==
 | Endpoint                | Method | Description                     |
 |-------------------------|--------|---------------------------------|
@@ -125,11 +137,19 @@ STARTEMPIRE WIRE NETWORK WEBSOCKETS DOCUMENTATION
    cd wp-content/plugins/startempire-wire-network-websockets/node-server
    npm install --production
 3. Configure .env:
-   WS_PORT=49200  # Using IANA Dynamic Port range (49152-65535)
+   WP_PORT=49200  # Using IANA Dynamic Port range (49152-65535)
    JWT_SECRET=your-secret-key
    REDIS_URL=redis://localhost:6379
-4. Start service:
-   wp sewn-ws server start
+4. Start service via WP-CLI:
+
+    wp sewn-ws server start
+
+5. Configure firewall rules to allow WebSocket traffic on port 49200 (default)
+   - Port 49200 is chosen from IANA Dynamic Port range (49152-65535)
+   - This avoids conflicts with common development ports
+   - Can be changed in plugin settings if needed
+
+6. Enable TLS encryption in plugin settings
 
 3. CONFIGURATION
 ----------------

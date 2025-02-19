@@ -43,6 +43,21 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
  * 4. Reduces likelihood of conflicts with other services
  */
 !defined('SEWN_WS_DEFAULT_PORT') && define('SEWN_WS_DEFAULT_PORT', 49200);
+
+/**
+ * @deprecated 1.1.0 Use SEWN_WS_DEFAULT_PORT instead.
+ * This constant will be removed in version 2.0.0
+ */
+!defined('SEWN_WS_ENV_DEFAULT_PORT') && define('SEWN_WS_ENV_DEFAULT_PORT', SEWN_WS_DEFAULT_PORT);
+
+// Add deprecation notice
+if (defined('SEWN_WS_ENV_DEFAULT_PORT')) {
+    trigger_error(
+        'SEWN_WS_ENV_DEFAULT_PORT is deprecated and will be removed in version 2.0.0. Use SEWN_WS_DEFAULT_PORT instead.',
+        E_USER_DEPRECATED
+    );
+}
+
 !defined('SEWN_WS_SETTINGS_GROUP') && define('SEWN_WS_SETTINGS_GROUP', 'sewn_ws_settings');
 
 // Module system
@@ -75,7 +90,6 @@ define('SEWN_WS_IS_LOCAL', (
 
 // Update ENV_OVERRIDABLE constants
 !defined('SEWN_WS_ENV_OVERRIDABLE') && define('SEWN_WS_ENV_OVERRIDABLE', [
-    'SEWN_WS_ENV_DEFAULT_PORT' => 49200,
     'SEWN_WS_ENV_LOCAL_MODE' => false,
     'SEWN_WS_ENV_CONTAINER_MODE' => false,
     'SEWN_WS_ENV_DEBUG_ENABLED' => false,

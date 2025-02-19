@@ -7,7 +7,7 @@
 const express = require('express');
 const { Server } = require('socket.io');
 const http = require('http');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
@@ -63,10 +63,12 @@ try {
     const debug = process.argv.includes('--debug=true');
 
     // Ensure directories exist with error handling
-    const ensureDirectoryExists = (filePath) => {
+    const ensureDirectoryExists = async (filePath) => {
         const dirname = path.dirname(filePath);
-        if (!fs.existsSync(dirname)) {
-            fs.mkdirSync(dirname, { recursive: true, mode: 0o755 });
+        try {
+            await fs.access(dirname);
+        } catch {
+            await fs.mkdir(dirname, { recursive: true, mode: 0o755 });
         }
     };
 
@@ -78,15 +80,11 @@ try {
     });
 
     // Create necessary directories with explicit error handling
-    [statsFile, pidFile, logFile].forEach(file => {
-        try {
-            ensureDirectoryExists(file);
-        } catch (error) {
-            console.error('FATAL: Failed to create directory for file:', file, error);
-            fs.appendFileSync('server.log', `FATAL: Directory creation failed for ${file}: ${error.stack}\n`);
-            process.exit(1);
-        }
-    });
+    await Promise.all([
+        ensureDirectoryExists(statsFile),
+        ensureDirectoryExists(pidFile),
+        ensureDirectoryExists(logFile)
+    ]);
 
     // Write initial stats
     await stats.writeStats();
@@ -121,9 +119,11 @@ try {
     });
 
     // Start server with proper error handling
-    server.listen(port, () => {
+    server.listen(port, async () => {
         console.log(`Server listening on port ${port}`);
-        fs.writeFileSync(pidFile, process.pid.toString());
+        await fs.writeFile(pidFile, process.pid.toString());
+        await stats.save();
+        await stats.close();
     });
 
     // Handle cleanup on exit
@@ -132,11 +132,12 @@ try {
         try {
             await stats.save();
             await stats.close();
-            if (fs.existsSync(pidFile)) {
-                fs.unlinkSync(pidFile);
+            if (await fs.access(pidFile).then(() => true).catch(() => false)) {
+                await fs.unlink(pidFile);
             }
         } catch (error) {
             console.error('Error during cleanup:', error);
+            await logError(error);
         }
         process.exit(0);
     };
@@ -873,7 +874,7 @@ try {
     const startServer = async () => {
         try {
             console.log('Starting server initialization...');
-            fs.appendFileSync('server.log', `Starting server initialization...\n`);
+            await fs.appendFile(logFile, `Starting server initialization...\n`);
 
             // Get environment configuration
             const config = getEnvironmentConfig();
@@ -964,7 +965,7 @@ try {
             stats.status = 'error';
             stats.last_error = error.message;
             stats.error_time = Date.now();
-            await fs.promises.writeFile(statsFile, JSON.stringify(stats, null, 2));
+            await fs.writeFile(statsFile, JSON.stringify(stats, null, 2));
 
             // Check if we need to clean up files
             const processStatus = await verifyProcess(process.pid);
@@ -1046,7 +1047,7 @@ try {
             stats.status = 'stopping';
             stats.stop_time = Date.now();
             stats.uptime = process.uptime();
-            await fs.promises.writeFile(statsFile, JSON.stringify(stats, null, 2))
+            await fs.writeFile(statsFile, JSON.stringify(stats, null, 2))
                 .catch(err => {
                     cleanupSuccess = false;
                     errors.push(['Failed to update stats file', err]);
@@ -1073,10 +1074,10 @@ try {
 
         // Remove PID file with verification
         try {
-            if (await fs.promises.access(pidFile).then(() => true).catch(() => false)) {
-                const filePid = parseInt(await fs.promises.readFile(pidFile, 'utf8'));
+            if (await fs.access(pidFile).then(() => true).catch(() => false)) {
+                const filePid = parseInt(await fs.readFile(pidFile, 'utf8'));
                 if (filePid === process.pid) {
-                    await fs.promises.unlink(pidFile);
+                    await fs.unlink(pidFile);
                     logger.info('PID file removed successfully');
                 } else {
                     logger.warn(`PID file exists but contains different PID (${filePid}), not removing`);
@@ -1093,8 +1094,8 @@ try {
             const cleanupTimeout = setTimeout(() => {
                 logger.warn('Cleanup timeout after 5 seconds, forcing shutdown');
                 Promise.all([
-                    fs.promises.unlink(pidFile).catch(() => { }),
-                    fs.promises.unlink(statsFile).catch(() => { })
+                    fs.unlink(pidFile).catch(() => { }),
+                    fs.unlink(statsFile).catch(() => { })
                 ]).finally(() => {
                     if (errors.length > 0) {
                         logger.error('Cleanup completed with errors:', errors);
@@ -1124,12 +1125,12 @@ try {
             data
         };
 
-        fs.appendFileSync(config.logPath, JSON.stringify(logEntry) + '\n');
+        fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
     }
 
     // Add status file writing for admin UI
     function updateAdminStatus(status) {
-        fs.writeFileSync(config.statusPath, JSON.stringify({
+        fs.writeFileSync(path.join(path.dirname(statsFile), 'status.json'), JSON.stringify({
             running: true,
             connections: io.engine.clientsCount,
             uptime: process.uptime(),
@@ -1143,7 +1144,7 @@ try {
 
     // Add stats file writing for admin UI
     function updateAdminStats() {
-        fs.writeFileSync(config.statsPath, JSON.stringify({
+        fs.writeFileSync(statsFile, JSON.stringify({
             timestamp: Date.now(),
             connections: io.engine.clientsCount,
             rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
@@ -1162,11 +1163,45 @@ try {
     function updateStats(newStats) {
         stats = { ...stats, ...newStats, timestamp: Date.now() };
         try {
-            fs.writeFileSync(config.statsPath, JSON.stringify(stats, null, 2));
+            fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
         } catch (err) {
             console.error('Error writing stats file:', err);
-            fs.appendFileSync(config.logPath, `Stats File Error: ${err}\n`);
+            fs.appendFileSync(logFile, `Stats File Error: ${err}\n`);
         }
+    }
+
+    // Enhanced environment logging
+    console.log('Environment variables:', {
+        WP_PORT: process.env.WP_PORT,
+        NODE_ENV: process.env.NODE_ENV,
+        WP_DEBUG: process.env.WP_DEBUG
+    });
+
+    // Add startup error handling
+    process.on('uncaughtException', (error) => {
+        console.error('Uncaught Exception:', error);
+        fs.appendFileSync(logFile, `Uncaught Exception: ${error}\n${error.stack}\n`);
+        process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        fs.appendFileSync(logFile, `Unhandled Rejection: ${reason}\n`);
+        process.exit(1);
+    });
+
+    // Log server startup phases
+    console.log('Starting WebSocket server initialization...');
+
+    // After port is declared, add port configuration logging
+    console.log(`Using port: ${port} (from ${process.env.WP_PORT ? 'environment' : 'default'})`);
+
+    // Add port validation
+    if (port < 1024 || port > 65535) {
+        const error = `Invalid port number: ${port}. Must be between 1024 and 65535.`;
+        console.error(error);
+        fs.appendFileSync(logFile, `${error}\n`);
+        process.exit(1);
     }
 } catch (error) {
     console.error('FATAL: Server initialization failed:', error);

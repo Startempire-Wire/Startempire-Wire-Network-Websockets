@@ -60,6 +60,29 @@ class Process_Manager {
         return true;  // Port is available
     }
 
+    private function get_server_port() {
+        // Get port configuration with deprecation support
+        $default_port = defined('\SEWN_WS_ENV_DEFAULT_PORT') 
+            ? \SEWN_WS_ENV_DEFAULT_PORT 
+            : \SEWN_WS_DEFAULT_PORT;
+
+        if (defined('\SEWN_WS_ENV_DEFAULT_PORT')) {
+            error_log('[SEWN WebSocket] Warning: Using deprecated SEWN_WS_ENV_DEFAULT_PORT constant. Please update to SEWN_WS_DEFAULT_PORT.');
+        }
+
+        $port = get_option('sewn_ws_port', $default_port);
+        error_log(sprintf('[SEWN WebSocket] Port configuration: %s (Default: %s)', $port, $default_port));
+
+        // Validate port number
+        $port = absint($port);
+        if ($port < 1024 || $port > 65535) {
+            error_log(sprintf('[SEWN WebSocket] Invalid port %d, using default port %d', $port, \SEWN_WS_DEFAULT_PORT));
+            return \SEWN_WS_DEFAULT_PORT;
+        }
+
+        return $port;
+    }
+
     /**
      * Start the Node.js server
      *
@@ -67,6 +90,7 @@ class Process_Manager {
      */
     public function start_server() {
         if ($this->is_running()) {
+            error_log('[SEWN WebSocket] Start server called but server is already running');
             return [
                 'success' => false,
                 'message' => 'Server is already running'
@@ -76,76 +100,51 @@ class Process_Manager {
         // Clean up any stale files
         $this->cleanup_stale_files();
 
-        $node_path = $this->get_node_path();
-        if (!$node_path) {
-            return [
-                'success' => false,
-                'message' => 'Node.js not found'
-            ];
-        }
-
-        // Create required directories with proper permissions
-        $dirs = [
-            dirname($this->pid_file),
-            dirname($this->log_file),
-            SEWN_WS_PATH . 'logs',
-            SEWN_WS_PATH . 'tmp'
-        ];
-
-        foreach ($dirs as $dir) {
-            if (!file_exists($dir)) {
-                if (!wp_mkdir_p($dir)) {
-                    return [
-                        'success' => false,
-                        'message' => "Failed to create directory: $dir"
-                    ];
-                }
-                // Ensure directory is writable
-                chmod($dir, 0755);
-            }
-        }
-
-        // Get port configuration
-        $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
-        
-        // Ensure port is numeric
-        $port = is_numeric($port) ? (int)$port : SEWN_WS_DEFAULT_PORT;
+        // Get and validate port configuration
+        $port = $this->get_server_port();
+        error_log(sprintf('[SEWN WebSocket] Starting server with port: %d', $port));
 
         // Check if port is available
         if (!$this->is_port_available($port)) {
+            $error_message = sprintf('Port %d is already in use. Please configure a different port in settings.', $port);
+            error_log('[SEWN WebSocket] ' . $error_message);
             return [
                 'success' => false,
-                'message' => sprintf('Port %d is already in use. Please configure a different port in settings.', $port)
+                'message' => $error_message
             ];
         }
 
-        // Set up environment variables for Node process
+        // Set up environment variables for Node process with detailed logging
         $env = [
             'WP_PLUGIN_DIR' => SEWN_WS_PATH,
-            'WP_PORT' => (string)$port,  // Explicitly cast to string
+            'WP_PORT' => (string)$port,
             'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false',
             'WP_PID_FILE' => $this->pid_file,
             'WP_LOG_FILE' => $this->log_file,
             'WP_STATS_FILE' => SEWN_WS_PATH . 'tmp/stats.json',
             'NODE_ENV' => defined('WP_DEBUG') && WP_DEBUG ? 'development' : 'production'
         ];
-        
+
+        error_log('[SEWN WebSocket] Environment configuration:');
+        error_log(print_r($env, true));
+
         // Build environment string
         $env_string = '';
         foreach ($env as $key => $value) {
             $env_string .= sprintf('%s=%s ', escapeshellarg($key), escapeshellarg($value));
         }
 
-        // Build command with proper path handling
+        // Build command with proper path handling and logging
         $command = sprintf(
-            'cd %s && %s %s %s > %s 2>&1 & echo $! > %s',
-            escapeshellarg(SEWN_WS_NODE_SERVER),  // Change to Node server directory
+            'cd %s && %s %s %s > %s 2>&1 & echo $!',
+            escapeshellarg(SEWN_WS_NODE_SERVER),
             $env_string,
-            escapeshellcmd($node_path),
+            escapeshellcmd($this->get_node_path()),
             escapeshellarg('server.js'),
-            escapeshellarg($this->log_file),
-            escapeshellarg($this->pid_file)
+            escapeshellarg($this->log_file)
         );
+
+        error_log('[SEWN WebSocket] Executing command: ' . $command);
 
         exec($command, $output, $return_var);
 
