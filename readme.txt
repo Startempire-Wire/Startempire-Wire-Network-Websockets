@@ -303,47 +303,7 @@ Each module in the WebSocket system follows a standardized structure with these 
        - activate(): void
        - deactivate(): void
 
-   - class-{module}-protocol.php (Protocol Handler)
-     * Extends Protocol_Base
-     * Implements WebSocket protocol handling
-     * Required methods:
-       - register(): void
-       - handle_message($message, $context): array
-       - register_protocol($handler): void
-       - init_config(): void
-       - add_protocol_config($config): array
-
-   - class-{module}-handler.php (Business Logic)
-     * Optional but recommended for complex modules
-     * Handles message processing and business logic
-     * Recommended methods:
-       - process_message(): array
-       - validate_message(): bool
-       - handle_error(): array
-
-2. Configuration Management:
-   Each module uses the centralized Config class for settings:
-
-   ```php
-   // Getting module settings
-   $value = Config::get_module_setting('module_slug', 'setting_name', $default);
-
-   // Setting module settings
-   Config::set_module_setting('module_slug', 'setting_name', $value);
-
-   // Checking for legacy settings
-   if (Config::has_legacy_settings('module_slug')) {
-       // Handle migration
-   }
-   ```
-
-   Legacy Settings Support:
-   - Automatic detection of old format settings
-   - Transparent migration to new format
-   - Cleanup of legacy options after migration
-   - Visual indicators in admin UI
-
-3. Settings System:
+2. Settings System:
    Each module defines its settings interface by implementing the `admin_ui()` method:
 
    ```php
@@ -360,6 +320,7 @@ Each module in the WebSocket system follows a standardized structure with these 
                    'section' => 'section_id',   // Section ID where field appears
                    'options' => [],            // Required for select fields
                    'sanitize' => 'callback',   // Optional sanitization callback
+                   'default' => 'value',       // Default value
                    'depends_on' => 'field_name' // Optional dependency on another field
                ]
            ],
@@ -379,9 +340,9 @@ Each module in the WebSocket system follows a standardized structure with these 
    - password: Password field with masked input
    - checkbox: Boolean toggle
    - select: Dropdown with options
-   - number: Numeric input
-   - url: URL input field
    - textarea: Multi-line text input
+   - url: URL input field
+   - number: Numeric input with validation
    - color: Color picker input
    - file: File upload field
    - radio: Radio button group
@@ -422,9 +383,10 @@ Each module in the WebSocket system follows a standardized structure with these 
       ```
 
    3. Validation & Error Handling:
-      - Each setting can define a sanitization callback
-      - Built-in validation for common field types
-      - Errors are displayed inline with fields
+      - Built-in sanitization for common field types
+      - Custom sanitization callback support
+      - Inline error display
+      - Field dependency management
       - Example validation:
       ```php
       'settings' => [
@@ -447,17 +409,8 @@ Each module in the WebSocket system follows a standardized structure with these 
       ]
       ```
 
-   4. Integration with Module_Settings_Base:
-      - Extends core WordPress Settings API
-      - Handles automatic section registration
-      - Manages settings page rendering
-      - Provides consistent styling and layout
-      - Supports custom field types
-      - Handles AJAX updates
-      - Manages form submissions
-      - Provides validation hooks
-
-   Each module automatically receives these base settings and standardized UI components:
+3. Standardized UI Components:
+   Each module automatically receives these base settings and UI components:
 
    1. Core Settings Tab:
       Module Information Section:
@@ -517,98 +470,7 @@ Each module in the WebSocket system follows a standardized structure with these 
       - Status indicators
       - Rollback options
 
-   Standard UI Components:
-   ```php
-   // Standard settings section
-   add_settings_section(
-       'module_info',
-       __('Module Information', 'sewn-ws'),
-       [$this, 'render_info_section'],
-       'sewn_ws_module_' . $module_slug
-   );
-
-   // Standard setting field
-   add_settings_field(
-       'debug_mode',
-       __('Debug Mode', 'sewn-ws'),
-       [$this, 'render_setting_field'],
-       'sewn_ws_module_' . $module_slug,
-       'debug_settings',
-       [
-           'type' => 'checkbox',
-           'name' => 'debug_enabled',
-           'description' => __('Enable debug logging', 'sewn-ws')
-       ]
-   );
-   ```
-
-   Layout Standards:
-   - Two-column layout for settings
-   - Consistent spacing and padding
-   - Standard form element styling
-   - Responsive design support
-   - Accessibility compliance
-
-   Visual Components:
-   - Status indicators
-   - Error/warning notices
-   - Loading indicators
-   - Tooltips and help text
-   - Validation feedback
-
-   Integration Points:
-   - WordPress admin styles
-   - Custom module styles
-   - JavaScript dependencies
-   - AJAX handlers
-   - Form processors
-
-   Example Implementation:
-   ```php
-   public function render_module_page() {
-       ?>
-       <div class="wrap">
-           <h1><?php echo esc_html($this->get_title()); ?></h1>
-           
-           <div class="sewn-ws-tabs">
-               <nav class="nav-tab-wrapper">
-                   <a href="#core" class="nav-tab nav-tab-active">
-                       <?php _e('Core Settings', 'sewn-ws'); ?>
-                   </a>
-                   <a href="#performance" class="nav-tab">
-                       <?php _e('Performance', 'sewn-ws'); ?>
-                   </a>
-                   <a href="#module" class="nav-tab">
-                       <?php _e('Module Settings', 'sewn-ws'); ?>
-                   </a>
-               </nav>
-
-               <form method="post" action="options.php">
-                   <?php
-                   settings_fields($this->get_option_group());
-                   
-                   echo '<div id="core" class="sewn-ws-tab-content active">';
-                   do_settings_sections($this->get_core_page());
-                   echo '</div>';
-                   
-                   echo '<div id="performance" class="sewn-ws-tab-content">';
-                   do_settings_sections($this->get_performance_page());
-                   echo '</div>';
-                   
-                   echo '<div id="module" class="sewn-ws-tab-content">';
-                   do_settings_sections($this->get_module_page());
-                   echo '</div>';
-                   
-                   submit_button();
-                   ?>
-               </form>
-           </div>
-       </div>
-       <?php
-   }
-   ```
-
-   CSS Standards:
+4. Layout Standards:
    ```css
    .sewn-ws-tabs {
        margin-top: 20px;
@@ -643,7 +505,7 @@ Each module in the WebSocket system follows a standardized structure with these 
    }
    ```
 
-   JavaScript Integration:
+5. JavaScript Integration:
    ```javascript
    jQuery(document).ready(function($) {
        // Tab switching
@@ -669,6 +531,32 @@ Each module in the WebSocket system follows a standardized structure with these 
        });
    });
    ```
+
+6. Required Hooks:
+   ```php
+   // Register settings
+   add_action('admin_init', [$this, 'register_settings']);
+
+   // Handle settings validation
+   add_filter("pre_update_option_{$setting_name}", [$this, 'validate_setting']);
+
+   // Process form submission
+   add_action('admin_post_save_module_settings', [$this, 'handle_save']);
+   ```
+
+7. Security Implementation:
+   - Capability checks for all operations
+   - Data sanitization on input/output
+   - Nonce verification for forms
+   - XSS prevention
+   - CSRF protection
+
+8. Error Handling:
+   - Standardized error messages
+   - Validation feedback
+   - User-friendly notices
+   - Debug logging support
+   - Recovery options
 
 10. SUPPORT & MAINTENANCE
 -------------------------
@@ -746,6 +634,272 @@ C. Legal
        'context' => array    // Additional context
    ]
    ```
+
+9.4 Basic Module Requirements
+----------------------------
+
+1. Module File Structure:
+```
+modules/example/
+├── class-example-module.php         # Core module class
+├── class-example-protocol.php       # WebSocket protocol handler
+├── includes/                        # Module includes
+│   ├── class-example-handler.php    # Business logic
+│   └── class-example-api.php        # API implementation
+├── admin/                           # Admin interface
+│   ├── class-admin.php             # Admin functionality
+│   ├── js/                         # Admin JavaScript
+│   │   └── admin.js               # Admin scripts
+│   ├── css/                        # Admin styles
+│   │   └── admin.css             # Admin stylesheets
+│   └── views/                      # Admin templates
+│       └── settings.php           # Settings page
+└── public/                         # Public assets
+    ├── js/                         # Public JavaScript
+    │   └── client.js              # Client-side code
+    └── css/                        # Public styles
+        └── style.css              # Public stylesheets
+```
+
+2. Basic Module Implementation Example:
+
+```php
+<?php
+/**
+ * Example Module Implementation
+ *
+ * @package SEWN\WebSockets\Modules\Example
+ */
+
+namespace SEWN\WebSockets\Modules\Example;
+
+use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Exception;
+
+class Example_Module extends Module_Base {
+    /**
+     * Get module slug
+     *
+     * @return string
+     */
+    public function get_module_slug(): string {
+        return 'example';
+    }
+
+    /**
+     * Module metadata
+     *
+     * @return array
+     */
+    public function metadata(): array {
+        return [
+            'name'        => 'Example Module',
+            'version'     => '1.0.0',
+            'description' => 'Example module implementation',
+            'author'      => 'Your Name',
+            'author_uri'  => 'https://example.com',
+            'requires'    => [
+                'php' => '7.4',
+                'wp'  => '5.8'
+            ]
+        ];
+    }
+
+    /**
+     * Initialize module
+     *
+     * @return void
+     * @throws Exception
+     */
+    public function init(): void {
+        try {
+            // Register hooks
+            add_action('sewn_ws_init', [$this, 'setup_module']);
+            add_action('sewn_ws_client_connected', [$this, 'handle_connection']);
+            add_action('sewn_ws_client_disconnected', [$this, 'handle_disconnection']);
+
+            // Initialize components
+            $this->init_protocol();
+            $this->init_admin();
+
+        } catch (\Throwable $e) {
+            throw new Exception(
+                sprintf('Failed to initialize %s module: %s', 
+                    $this->get_module_slug(), 
+                    $e->getMessage()
+                )
+            );
+        }
+    }
+
+    /**
+     * Check dependencies
+     *
+     * @return array|bool
+     */
+    public function check_dependencies() {
+        $errors = [];
+
+        // Check PHP version
+        if (version_compare(PHP_VERSION, '7.4', '<')) {
+            $errors[] = 'PHP 7.4 or higher required';
+        }
+
+        // Check WordPress version
+        if (version_compare($GLOBALS['wp_version'], '5.8', '<')) {
+            $errors[] = 'WordPress 5.8 or higher required';
+        }
+
+        return empty($errors) ? true : $errors;
+    }
+
+    /**
+     * Module requirements
+     *
+     * @return array
+     */
+    public function requires(): array {
+        return [
+            'modules' => [],  // Required modules
+            'plugins' => [],  // Required plugins
+            'php_extensions' => ['json']  // Required PHP extensions
+        ];
+    }
+
+    /**
+     * Admin UI configuration
+     *
+     * @return array
+     */
+    public function admin_ui(): array {
+        return [
+            'menu_title' => 'Example Settings',
+            'capability' => 'manage_options',
+            'settings' => [
+                [
+                    'name' => 'example_setting',
+                    'label' => 'Example Setting',
+                    'type' => 'text',
+                    'description' => 'Example setting description',
+                    'section' => 'general',
+                    'default' => ''
+                ]
+            ],
+            'sections' => [
+                [
+                    'id' => 'general',
+                    'title' => 'General Settings'
+                ]
+            ]
+        ];
+    }
+
+    /**
+     * Handle module activation
+     *
+     * @return void
+     */
+    public function activate(): void {
+        // Activation tasks
+        update_option('example_module_activated', time());
+    }
+
+    /**
+     * Handle module deactivation
+     *
+     * @return void
+     */
+    public function deactivate(): void {
+        // Cleanup tasks
+        delete_option('example_module_activated');
+    }
+}
+```
+
+3. Required Components:
+
+a. Core Requirements:
+   - PHP 7.4+
+   - WordPress 5.8+
+   - Proper namespace (SEWN\WebSockets\Modules\{ModuleName})
+   - Must extend Module_Base class
+
+b. Required Methods:
+   - get_module_slug(): string
+   - metadata(): array
+   - init(): void
+   - check_dependencies(): array|bool
+
+c. Optional Methods:
+   - requires(): array
+   - admin_ui(): array
+   - activate(): void
+   - deactivate(): void
+
+d. Required Hooks:
+   - sewn_ws_init
+   - sewn_ws_client_connected
+   - sewn_ws_client_disconnected
+   - sewn_ws_register_protocols (if implementing protocol)
+
+4. Error Handling:
+
+```php
+try {
+    // Potentially dangerous operation
+    $result = $this->perform_operation();
+    
+    if (!$result) {
+        throw new Exception('Operation failed');
+    }
+    
+} catch (\Throwable $e) {
+    // Log error
+    error_log(sprintf(
+        '[%s] Module Error: %s', 
+        $this->get_module_slug(), 
+        $e->getMessage()
+    ));
+    
+    // Notify admin if critical
+    add_action('admin_notices', function() use ($e) {
+        printf(
+            '<div class="notice notice-error"><p>%s</p></div>',
+            esc_html($e->getMessage())
+        );
+    });
+    
+    // Handle gracefully
+    return false;
+}
+```
+
+5. Best Practices:
+
+a. File Organization:
+   - One class per file
+   - Clear file naming
+   - Logical directory structure
+   - Separate admin and public assets
+
+b. Code Standards:
+   - Follow WordPress Coding Standards
+   - Use proper documentation blocks
+   - Implement proper error handling
+   - Follow security best practices
+
+c. Security:
+   - Validate all input
+   - Sanitize all output
+   - Use nonces for forms
+   - Check capabilities
+   - Implement rate limiting
+
+d. Performance:
+   - Cache expensive operations
+   - Optimize database queries
+   - Minimize asset loading
+   - Use WordPress transients
 
 6. Security Requirements:
    Admin Settings Security:
@@ -1125,5 +1279,271 @@ jQuery(document).ready(function($) {
     });
 });
 ```
+
+9.4 Basic Module Requirements
+----------------------------
+
+1. Module File Structure:
+```
+modules/example/
+├── class-example-module.php         # Core module class
+├── class-example-protocol.php       # WebSocket protocol handler
+├── includes/                        # Module includes
+│   ├── class-example-handler.php    # Business logic
+│   └── class-example-api.php        # API implementation
+├── admin/                           # Admin interface
+│   ├── class-admin.php             # Admin functionality
+│   ├── js/                         # Admin JavaScript
+│   │   └── admin.js               # Admin scripts
+│   ├── css/                        # Admin styles
+│   │   └── admin.css             # Admin stylesheets
+│   └── views/                      # Admin templates
+│       └── settings.php           # Settings page
+└── public/                         # Public assets
+    ├── js/                         # Public JavaScript
+    │   └── client.js              # Client-side code
+    └── css/                        # Public styles
+        └── style.css              # Public stylesheets
+```
+
+2. Basic Module Implementation Example:
+
+```php
+<?php
+/**
+ * Example Module Implementation
+ *
+ * @package SEWN\WebSockets\Modules\Example
+ */
+
+namespace SEWN\WebSockets\Modules\Example;
+
+use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Exception;
+
+class Example_Module extends Module_Base {
+    /**
+     * Get module slug
+     *
+     * @return string
+     */
+    public function get_module_slug(): string {
+        return 'example';
+    }
+
+    /**
+     * Module metadata
+     *
+     * @return array
+     */
+    public function metadata(): array {
+        return [
+            'name'        => 'Example Module',
+            'version'     => '1.0.0',
+            'description' => 'Example module implementation',
+            'author'      => 'Your Name',
+            'author_uri'  => 'https://example.com',
+            'requires'    => [
+                'php' => '7.4',
+                'wp'  => '5.8'
+            ]
+        ];
+    }
+
+    /**
+     * Initialize module
+     *
+     * @return void
+     * @throws Exception
+     */
+    public function init(): void {
+        try {
+            // Register hooks
+            add_action('sewn_ws_init', [$this, 'setup_module']);
+            add_action('sewn_ws_client_connected', [$this, 'handle_connection']);
+            add_action('sewn_ws_client_disconnected', [$this, 'handle_disconnection']);
+
+            // Initialize components
+            $this->init_protocol();
+            $this->init_admin();
+
+        } catch (\Throwable $e) {
+            throw new Exception(
+                sprintf('Failed to initialize %s module: %s', 
+                    $this->get_module_slug(), 
+                    $e->getMessage()
+                )
+            );
+        }
+    }
+
+    /**
+     * Check dependencies
+     *
+     * @return array|bool
+     */
+    public function check_dependencies() {
+        $errors = [];
+
+        // Check PHP version
+        if (version_compare(PHP_VERSION, '7.4', '<')) {
+            $errors[] = 'PHP 7.4 or higher required';
+        }
+
+        // Check WordPress version
+        if (version_compare($GLOBALS['wp_version'], '5.8', '<')) {
+            $errors[] = 'WordPress 5.8 or higher required';
+        }
+
+        return empty($errors) ? true : $errors;
+    }
+
+    /**
+     * Module requirements
+     *
+     * @return array
+     */
+    public function requires(): array {
+        return [
+            'modules' => [],  // Required modules
+            'plugins' => [],  // Required plugins
+            'php_extensions' => ['json']  // Required PHP extensions
+        ];
+    }
+
+    /**
+     * Admin UI configuration
+     *
+     * @return array
+     */
+    public function admin_ui(): array {
+        return [
+            'menu_title' => 'Example Settings',
+            'capability' => 'manage_options',
+            'settings' => [
+                [
+                    'name' => 'example_setting',
+                    'label' => 'Example Setting',
+                    'type' => 'text',
+                    'description' => 'Example setting description',
+                    'section' => 'general',
+                    'default' => ''
+                ]
+            ],
+            'sections' => [
+                [
+                    'id' => 'general',
+                    'title' => 'General Settings'
+                ]
+            ]
+        ];
+    }
+
+    /**
+     * Handle module activation
+     *
+     * @return void
+     */
+    public function activate(): void {
+        // Activation tasks
+        update_option('example_module_activated', time());
+    }
+
+    /**
+     * Handle module deactivation
+     *
+     * @return void
+     */
+    public function deactivate(): void {
+        // Cleanup tasks
+        delete_option('example_module_activated');
+    }
+}
+```
+
+3. Required Components:
+
+a. Core Requirements:
+   - PHP 7.4+
+   - WordPress 5.8+
+   - Proper namespace (SEWN\WebSockets\Modules\{ModuleName})
+   - Must extend Module_Base class
+
+b. Required Methods:
+   - get_module_slug(): string
+   - metadata(): array
+   - init(): void
+   - check_dependencies(): array|bool
+
+c. Optional Methods:
+   - requires(): array
+   - admin_ui(): array
+   - activate(): void
+   - deactivate(): void
+
+d. Required Hooks:
+   - sewn_ws_init
+   - sewn_ws_client_connected
+   - sewn_ws_client_disconnected
+   - sewn_ws_register_protocols (if implementing protocol)
+
+4. Error Handling:
+
+```php
+try {
+    // Potentially dangerous operation
+    $result = $this->perform_operation();
+    
+    if (!$result) {
+        throw new Exception('Operation failed');
+    }
+    
+} catch (\Throwable $e) {
+    // Log error
+    error_log(sprintf(
+        '[%s] Module Error: %s', 
+        $this->get_module_slug(), 
+        $e->getMessage()
+    ));
+    
+    // Notify admin if critical
+    add_action('admin_notices', function() use ($e) {
+        printf(
+            '<div class="notice notice-error"><p>%s</p></div>',
+            esc_html($e->getMessage())
+        );
+    });
+    
+    // Handle gracefully
+    return false;
+}
+```
+
+5. Best Practices:
+
+a. File Organization:
+   - One class per file
+   - Clear file naming
+   - Logical directory structure
+   - Separate admin and public assets
+
+b. Code Standards:
+   - Follow WordPress Coding Standards
+   - Use proper documentation blocks
+   - Implement proper error handling
+   - Follow security best practices
+
+c. Security:
+   - Validate all input
+   - Sanitize all output
+   - Use nonces for forms
+   - Check capabilities
+   - Implement rate limiting
+
+d. Performance:
+   - Cache expensive operations
+   - Optimize database queries
+   - Minimize asset loading
+   - Use WordPress transients
 
 
