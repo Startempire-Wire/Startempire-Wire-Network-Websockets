@@ -11,6 +11,7 @@
 
 namespace SEWN\WebSockets\Admin;   
 
+use SEWN\WebSockets\Config;
 use SEWN\WebSockets\Module_Registry;
 
 if (!defined('ABSPATH')) exit;
@@ -22,6 +23,84 @@ if (!defined('ABSPATH')) exit;
 <div class="wrap">
     <h1><?php _e('WebSocket Modules', 'sewn-ws'); ?></h1>
 
+    <?php 
+    // Display activation success notice
+    $activated_module = get_transient('sewn_module_activated');
+    if ($activated_module) {
+        $module_slug = $activated_module['module'];
+        $has_warnings = $activated_module['has_warnings'];
+        delete_transient('sewn_module_activated');
+        
+        // Show success notice
+        ?>
+        <div class="notice notice-success is-dismissible">
+            <p><?php printf(__('Module "%s" activated successfully.', 'sewn-ws'), esc_html($module_slug)); ?></p>
+        </div>
+        <?php
+        
+        // If there are warnings, show them
+        if ($has_warnings) {
+            $warnings = get_transient('sewn_module_warnings_' . $module_slug);
+            delete_transient('sewn_module_warnings_' . $module_slug);
+            if ($warnings) {
+                ?>
+                <div class="notice notice-warning is-dismissible">
+                    <p><strong><?php _e('Module activated with warnings:', 'sewn-ws'); ?></strong></p>
+                    <ul>
+                        <?php foreach ($warnings as $warning): ?>
+                            <li><?php echo esc_html($warning['message']); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <?php
+            }
+        }
+    }
+
+    // Display activation error notice
+    $activation_error = get_transient('sewn_module_activation_error');
+    if ($activation_error) {
+        delete_transient('sewn_module_activation_error');
+        ?>
+        <div class="notice notice-error is-dismissible">
+            <p>
+                <?php 
+                printf(
+                    __('Failed to activate module "%s": %s', 'sewn-ws'),
+                    esc_html($activation_error['module']),
+                    esc_html($activation_error['error'])
+                ); 
+                ?>
+            </p>
+        </div>
+        <?php
+    }
+    
+    // Check for modules with legacy settings
+    $legacy_modules = [];
+    foreach ($modules as $module) {
+        $module_slug = method_exists($module, 'get_module_slug') ? 
+            $module->get_module_slug() : 
+            (property_exists($module, 'module_slug') ? $module->module_slug : 'unknown');
+            
+        if (Config::has_legacy_settings($module_slug)) {
+            $legacy_modules[] = $module_slug;
+        }
+    }
+    
+    if (!empty($legacy_modules)): ?>
+    <div class="notice notice-warning is-dismissible">
+        <p>
+            <?php 
+            printf(
+                __('Legacy settings detected for module(s): %s. These will be automatically migrated.', 'sewn-ws'),
+                implode(', ', array_map('esc_html', $legacy_modules))
+            ); 
+            ?>
+        </p>
+    </div>
+    <?php endif; ?>
+
     <div class="sewn-ws-modules-grid">
         <?php foreach ($modules as $module): ?>
             <?php 
@@ -29,7 +108,7 @@ if (!defined('ABSPATH')) exit;
                 $module->get_module_slug() : 
                 (property_exists($module, 'module_slug') ? $module->module_slug : 'unknown');
                 
-            $is_active = get_option("sewn_module_{$module_slug}_active", false);
+            $is_active = Config::get_module_setting($module_slug, 'active', false);
             $status_class = $is_active ? 'active' : 'inactive';
             
             // Get module metadata
@@ -39,12 +118,20 @@ if (!defined('ABSPATH')) exit;
             $module_author = $metadata['author'] ?? 'Unknown';
             $module_description = $metadata['description'] ?? '';
             $module_dependencies = $metadata['dependencies'] ?? [];
+
+            // Check for legacy settings
+            $has_legacy = Config::has_legacy_settings($module_slug);
             ?>
             <div class="sewn-ws-module-card <?php echo esc_attr($status_class); ?>">
                 <div class="module-header">
                     <div class="module-title">
                         <h3><?php echo esc_html($module_name); ?></h3>
                         <span class="module-version">v<?php echo esc_html($module_version); ?></span>
+                        <?php if ($has_legacy): ?>
+                        <span class="legacy-indicator" title="<?php esc_attr_e('Has legacy settings', 'sewn-ws'); ?>">
+                            <span class="dashicons dashicons-backup"></span>
+                        </span>
+                        <?php endif; ?>
                     </div>
                     <div class="module-status">
                         <span class="status-dot <?php echo esc_attr($status_class); ?>"></span>
@@ -260,6 +347,19 @@ if (!defined('ABSPATH')) exit;
     background: #f0f0f1;
     border-color: #0a4b78;
     color: #0a4b78;
+}
+
+.legacy-indicator {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    color: #856404;
+}
+
+.legacy-indicator .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
 }
 </style>
 

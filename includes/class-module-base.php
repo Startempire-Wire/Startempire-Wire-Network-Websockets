@@ -59,6 +59,13 @@ abstract class Module_Base {
      */
     protected $dependencies = array();
 
+    /**
+     * Module slug
+     *
+     * @var string
+     */
+    protected $slug;
+
     public function __construct() {
         // Empty constructor - activation hook moved to separate method
     }
@@ -190,7 +197,7 @@ abstract class Module_Base {
      * @return string
      */
     public function get_id() {
-        return $this->id;
+        return $this->get_module_slug();
     }
 
     /**
@@ -279,14 +286,68 @@ abstract class Module_Base {
      *
      * @return string
      */
-    protected function get_module_slug() {
-        if (empty($this->id)) {
-            // Fallback to class name if id not set
-            $class_name = get_class($this);
-            $parts = explode('\\', $class_name);
-            $base_name = end($parts);
-            return strtolower(str_replace('_Module', '', $base_name));
+    public function get_module_slug() {
+        if (empty($this->slug)) {
+            // Get slug from metadata if available
+            $meta = $this->metadata();
+            if (!empty($meta['module_slug'])) {
+                $this->slug = $meta['module_slug'];
+            } else {
+                // Fallback to class name based slug
+                $class_name = get_class($this);
+                $parts = explode('\\', $class_name);
+                $base_name = end($parts);
+                $this->slug = strtolower(str_replace('_Module', '', $base_name));
+            }
         }
-        return $this->id;
+        return $this->slug;
+    }
+
+    /**
+     * Get module setting
+     *
+     * @param string $key Setting key
+     * @param mixed $default Default value
+     * @return mixed Setting value
+     */
+    protected function get_setting($key, $default = null) {
+        return Config::get_module_setting($this->slug, $key, $default);
+    }
+
+    /**
+     * Save module setting
+     *
+     * @param string $key Setting key
+     * @param mixed $value Setting value
+     * @return bool Whether the setting was saved
+     */
+    protected function save_setting($key, $value) {
+        return Config::set_module_setting($this->slug, $key, $value);
+    }
+
+    /**
+     * Get all module settings
+     *
+     * @return array Module settings
+     */
+    protected function get_all_settings() {
+        $schema = Config::get_module_schema($this->slug);
+        $settings = [];
+
+        foreach (array_keys($schema) as $key) {
+            $settings[$key] = $this->get_setting($key);
+        }
+
+        return $settings;
+    }
+
+    /**
+     * Validate module settings
+     *
+     * @param array $settings Settings to validate
+     * @return array Validation results
+     */
+    protected function validate_settings($settings) {
+        return Config::validate_module_config($this->slug, $settings);
     }
 } 

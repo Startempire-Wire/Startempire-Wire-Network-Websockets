@@ -16,6 +16,7 @@ namespace SEWN\WebSockets\Admin;
 if (!defined('ABSPATH')) exit;
 
 use SEWN\WebSockets\Process_Manager;
+use SEWN\WebSockets\Config;
 
 // Extract environment data
 $environment = $data['environment'] ?? [];
@@ -37,6 +38,11 @@ $status_class = $node_status['running'] ? 'running' :
 
 $status_text = $node_status['running'] ? '✓ Operational' : 
     (isset($node_status['status']) && $node_status['status'] === 'uninitialized' ? 'Uninitialized' : '✗ Stopped');
+
+// Get configuration
+$server_config = Config::get_server_config();
+$env_config = Config::get_environment_config();
+$client_config = Config::get_client_config();
 
 ?>
 
@@ -1023,54 +1029,38 @@ $status_text = $node_status['running'] ? '✓ Operational' :
 <script>
 jQuery(document).ready(function($) {
     // Add Socket.IO configuration
-    window.SEWN_WS_CONFIG = {
-        serverPort: <?php echo esc_js(get_option('sewn_ws_port', 49200)); ?>,
-        adminToken: '<?php echo esc_js(wp_create_nonce('sewn_ws_admin')); ?>',
-        debug: <?php echo esc_js(get_option('sewn_ws_debug', false) ? 'true' : 'false'); ?>,
-        ssl: {
-            enabled: <?php echo esc_js(get_option('sewn_ws_ssl_enabled', false) ? 'true' : 'false'); ?>,
-            path: '<?php echo esc_js(get_option('sewn_ws_ssl_cert', '')); ?>'
-        },
-        namespaces: {
-            admin: '/admin',
-            message: '/message',
-            presence: '/presence',
-            status: '/status'
-        }
-    };
+    window.SEWN_WS_CONFIG = <?php echo json_encode($client_config); ?>;
 
     // Initialize Socket.IO monitoring
     function initializeSocketMonitoring() {
         const config = window.SEWN_WS_CONFIG;
         
         // Determine if we're in a local development environment
-        const isLocalDev = window.location.hostname.includes('.local') || 
-                          window.location.hostname === 'localhost' ||
-                          window.location.hostname.includes('.test');
+        const isLocalDev = config.environment.is_local;
 
         // Protocol selection logic
         let protocol;
         if (isLocalDev) {
             // In local dev, always use the protocol that matches the server's SSL setting
-            protocol = config.ssl.enabled ? 'wss:' : 'ws:';
+            protocol = config.environment.ssl_enabled ? 'wss:' : 'ws:';
         } else {
             // In production, always match the page protocol
             protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         }
 
         // If we're forcing HTTPS but server isn't SSL-enabled, show warning
-        if (window.location.protocol === 'https:' && !config.ssl.enabled && isLocalDev) {
+        if (window.location.protocol === 'https:' && !config.environment.ssl_enabled && isLocalDev) {
             console.warn('Warning: Page is HTTPS but WebSocket server is not SSL-enabled. ' +
                         'Connection may fail due to mixed content restrictions.');
         }
 
-        const wsUrl = `${protocol}//${window.location.hostname}:${config.serverPort}`;
+        const wsUrl = `${protocol}//${window.location.hostname}:${config.server.port}`;
         console.log('Initializing WebSocket connection:', {
             url: wsUrl,
             isLocalDev,
             pageProtocol: window.location.protocol,
             wsProtocol: protocol,
-            sslEnabled: config.ssl.enabled
+            sslEnabled: config.environment.ssl_enabled
         });
 
         // Initialize admin namespace connection
@@ -1078,10 +1068,10 @@ jQuery(document).ready(function($) {
             path: '/socket.io',
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionAttempts: 3,
-            timeout: 45000,
+            reconnectionAttempts: config.server.reconnection_attempts,
+            timeout: config.server.connection_timeout,
             secure: protocol === 'wss:',
-            rejectUnauthorized: !(isLocalDev && !config.ssl.enabled), // Only skip validation in non-SSL local dev
+            rejectUnauthorized: !(isLocalDev && !config.environment.ssl_enabled),
             auth: {
                 token: config.adminToken
             }
@@ -1094,7 +1084,7 @@ jQuery(document).ready(function($) {
                 url: wsUrl,
                 secure: protocol === 'wss:',
                 isLocalDev,
-                sslEnabled: config.ssl.enabled,
+                sslEnabled: config.environment.ssl_enabled,
                 pageProtocol: window.location.protocol
             });
             

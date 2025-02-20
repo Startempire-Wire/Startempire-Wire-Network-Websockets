@@ -15,6 +15,7 @@ namespace SEWN\WebSockets\Admin;
 
 use SEWN\WebSockets\Admin\Environment_Monitor;
 use SEWN\WebSockets\Admin\Error_Logger;
+use SEWN\WebSockets\Config;
 
 /**
  * Class Settings_Page
@@ -232,16 +233,36 @@ class Settings_Page {
         if (isset($input['port'])) {
             $port = absint($input['port']);
             $sanitized['port'] = ($port >= 1024 && $port <= 65535) ? $port : SEWN_WS_DEFAULT_PORT;
+            Config::set('port', $sanitized['port']);
         }
 
-        // Sanitize other fields...
+        // Sanitize environment settings
+        if (isset($input['local_mode'])) {
+            $sanitized['local_mode'] = (bool) $input['local_mode'];
+            Config::set('local_mode', $sanitized['local_mode']);
+        }
+
+        if (isset($input['container_mode'])) {
+            $sanitized['container_mode'] = (bool) $input['container_mode'];
+            Config::set('container_mode', $sanitized['container_mode']);
+        }
+
+        // Sanitize SSL settings
+        if (isset($input['ssl_cert_path'])) {
+            $sanitized['ssl_cert_path'] = sanitize_text_field($input['ssl_cert_path']);
+            Config::set('ssl_cert_path', $sanitized['ssl_cert_path']);
+        }
+
+        if (isset($input['ssl_key_path'])) {
+            $sanitized['ssl_key_path'] = sanitize_text_field($input['ssl_key_path']);
+            Config::set('ssl_key_path', $sanitized['ssl_key_path']);
+        }
 
         return $sanitized;
     }
 
     public function render_port_field() {
-        $port = get_option('sewn_ws_port', 
-            defined('SEWN_WS_ENV_PORT') ? SEWN_WS_ENV_PORT : SEWN_WS_DEFAULT_PORT);
+        $port = Config::get('port', SEWN_WS_DEFAULT_PORT);
         echo "<input name='sewn_ws_port' value='$port'>";
     }
 
@@ -268,7 +289,7 @@ class Settings_Page {
      */
     public function local_mode_callback($args) {
         $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || (isset($this->options['local_mode']) && $this->options['local_mode']) ? ' checked="checked"' : '';
+        $checked = $args['disabled'] || Config::get('local_mode', false) ? ' checked="checked"' : '';
         ?>
         <label>
             <input type="checkbox" id="local_mode" name="sewn_ws_settings[local_mode]" value="1"<?php echo $disabled . $checked; ?>>
@@ -290,7 +311,7 @@ class Settings_Page {
      */
     public function container_mode_callback($args) {
         $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || (isset($this->options['container_mode']) && $this->options['container_mode']) ? ' checked="checked"' : '';
+        $checked = $args['disabled'] || Config::get('container_mode', false) ? ' checked="checked"' : '';
         ?>
         <label>
             <input type="checkbox" id="container_mode" name="sewn_ws_settings[container_mode]" value="1"<?php echo $disabled . $checked; ?>>
@@ -298,11 +319,11 @@ class Settings_Page {
         </label>
         <?php if ($args['auto_detected']) : ?>
             <p class="description">
-                <?php esc_html_e('Container environment detected (Docker/Local by Flywheel). This setting is locked.', SEWN_WS_TEXT_DOMAIN); ?>
+                <?php esc_html_e('Container environment detected. This setting is locked.', SEWN_WS_TEXT_DOMAIN); ?>
             </p>
         <?php else : ?>
             <p class="description">
-                <?php esc_html_e('Enable this when running in a containerized environment (e.g., Docker, Local by Flywheel).', SEWN_WS_TEXT_DOMAIN); ?>
+                <?php esc_html_e('Enable this when running in a containerized environment.', SEWN_WS_TEXT_DOMAIN); ?>
             </p>
         <?php endif;
     }
@@ -327,7 +348,7 @@ class Settings_Page {
      * SSL certificate path callback
      */
     public function ssl_cert_path_callback() {
-        $value = isset($this->options['ssl_cert_path']) ? $this->options['ssl_cert_path'] : '';
+        $value = Config::get('ssl_cert_path', '');
         ?>
         <input type="text" id="ssl_cert_path" name="sewn_ws_settings[ssl_cert_path]" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <button type="button" class="button button-secondary" id="detect-ssl-cert">
@@ -343,7 +364,7 @@ class Settings_Page {
      * SSL key path callback
      */
     public function ssl_key_path_callback() {
-        $value = isset($this->options['ssl_key_path']) ? $this->options['ssl_key_path'] : '';
+        $value = Config::get('ssl_key_path', '');
         ?>
         <input type="text" id="ssl_key_path" name="sewn_ws_settings[ssl_key_path]" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <button type="button" class="button button-secondary" id="detect-ssl-key">
@@ -357,7 +378,7 @@ class Settings_Page {
 
     public function render_local_mode_field($args) {
         $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || (isset($this->options['local_mode']) && $this->options['local_mode']) ? ' checked="checked"' : '';
+        $checked = $args['disabled'] || Config::get('local_mode', false) ? ' checked="checked"' : '';
         ?>
         <label>
             <input type="checkbox" id="local_mode" name="sewn_ws_settings[local_mode]" value="1"<?php echo $disabled . $checked; ?>>
@@ -388,30 +409,22 @@ class Settings_Page {
      * AJAX callback to toggle debug mode
      */
     public static function ajax_toggle_debug() {
-        error_log('AJAX toggle_debug called');
-        
         if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'sewn_ws_admin')) {
-            error_log('Debug toggle failed: Invalid nonce');
             wp_send_json_error('Invalid nonce');
             return;
         }
 
         if (!isset($_POST['enabled'])) {
-            error_log('Debug toggle failed: Missing enabled parameter');
             wp_send_json_error('Missing enabled parameter');
             return;
         }
 
         $enabled = filter_var($_POST['enabled'], FILTER_VALIDATE_BOOLEAN);
-        error_log('Setting debug mode to: ' . ($enabled ? 'enabled' : 'disabled'));
         
-        $result = update_option('sewn_ws_debug_enabled', $enabled);
-        error_log('Update option result: ' . ($result ? 'success' : 'failed'));
-        
-        if ($result) {
-            wp_send_json_success(array('enabled' => $enabled));
+        if (Config::set('debug', $enabled)) {
+            wp_send_json_success(['enabled' => $enabled]);
         } else {
-            wp_send_json_error('Failed to update option');
+            wp_send_json_error('Failed to update debug mode');
         }
     }
 }

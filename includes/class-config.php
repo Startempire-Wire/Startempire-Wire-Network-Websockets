@@ -2,8 +2,8 @@
 /**
  * Configuration Management Class
  *
- * Handles all configuration management for the WebSocket server including
- * environment settings, server configuration, and runtime options.
+ * Provides centralized configuration management for the WebSocket server including
+ * core settings, module settings, environment configuration, and server settings.
  *
  * @package           Startempire_Wire_Network_Websockets
  * @subpackage        Includes
@@ -16,7 +16,7 @@ namespace SEWN\WebSockets;
 if (!defined('ABSPATH')) exit;
 
 /**
- * Configuration management class
+ * Configuration management class with backwards compatibility
  */
 class Config {
     /**
@@ -36,33 +36,170 @@ class Config {
     ];
 
     /**
-     * Get a configuration value
+     * Legacy option name mapping
+     *
+     * @var array
+     */
+    private static $legacy_map = [
+        'discord' => [
+            'bot_token' => 'sewn_ws_discord_bot_token',
+            'guild_id' => 'sewn_ws_discord_guild_id',
+            'webhook_url' => 'sewn_ws_discord_webhook',
+            'streaming_enabled' => 'sewn_ws_discord_streaming',
+            'role_sync_enabled' => 'sewn_ws_discord_role_sync',
+            'notification_channel' => 'sewn_ws_discord_notification_channel'
+        ]
+        // Add mappings for other modules as needed
+    ];
+
+    /**
+     * Get a configuration value with backwards compatibility
      *
      * @param string $key Configuration key
      * @param mixed $default Default value if not found
      * @return mixed Configuration value
      */
     public static function get($key, $default = null) {
+        // Try new format first
         $option_name = 'sewn_ws_' . $key;
         $value = get_option($option_name, null);
         
-        if ($value === null) {
-            return $default ?? self::$defaults[$key] ?? null;
+        if ($value !== null) {
+            return $value;
         }
         
-        return $value;
+        // Check if this is a legacy option
+        $legacy_value = self::get_legacy_option($key);
+        if ($legacy_value !== null) {
+            // Migrate to new format if found in legacy
+            self::set($key, $legacy_value);
+            return $legacy_value;
+        }
+        
+        return $default ?? self::$defaults[$key] ?? null;
     }
 
     /**
-     * Set a configuration value
+     * Get module-specific setting with backwards compatibility
      *
-     * @param string $key Configuration key
-     * @param mixed $value Configuration value
+     * @param string $module Module slug
+     * @param string $key Setting key
+     * @param mixed $default Default value
+     * @return mixed Setting value
+     */
+    public static function get_module_setting($module, $key, $default = null) {
+        // Try new format first
+        $value = get_option("sewn_ws_module_{$module}_{$key}", null);
+        
+        if ($value !== null) {
+            return $value;
+        }
+
+        // Check legacy format
+        if (isset(self::$legacy_map[$module][$key])) {
+            $legacy_value = get_option(self::$legacy_map[$module][$key], null);
+            if ($legacy_value !== null) {
+                // Migrate to new format
+                self::set_module_setting($module, $key, $legacy_value);
+                return $legacy_value;
+            }
+        }
+
+        return $default;
+    }
+
+    /**
+     * Set module-specific setting with legacy cleanup
+     *
+     * @param string $module Module slug
+     * @param string $key Setting key
+     * @param mixed $value Setting value
      * @return bool Whether the option was updated
      */
-    public static function set($key, $value) {
-        $option_name = 'sewn_ws_' . $key;
-        return update_option($option_name, $value);
+    public static function set_module_setting($module, $key, $value) {
+        $success = update_option("sewn_ws_module_{$module}_{$key}", $value);
+        
+        // If successful and legacy option exists, schedule cleanup
+        if ($success && isset(self::$legacy_map[$module][$key])) {
+            self::schedule_legacy_cleanup($module, $key);
+        }
+        
+        return $success;
+    }
+
+    /**
+     * Get a legacy option value
+     *
+     * @param string $key Option key
+     * @return mixed|null Option value or null if not found
+     */
+    private static function get_legacy_option($key) {
+        foreach (self::$legacy_map as $module => $mappings) {
+            if (isset($mappings[$key])) {
+                return get_option($mappings[$key], null);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Schedule legacy option cleanup
+     *
+     * @param string $module Module slug
+     * @param string $key Setting key
+     */
+    private static function schedule_legacy_cleanup($module, $key) {
+        if (!wp_next_scheduled('sewn_ws_legacy_cleanup')) {
+            wp_schedule_single_event(
+                time() + (30 * DAY_IN_SECONDS),
+                'sewn_ws_legacy_cleanup',
+                [$module, $key]
+            );
+        }
+    }
+
+    /**
+     * Migrate all legacy settings to new format
+     *
+     * @return array Migration results
+     */
+    public static function migrate_legacy_settings() {
+        $results = [];
+        
+        foreach (self::$legacy_map as $module => $mappings) {
+            $results[$module] = [];
+            
+            foreach ($mappings as $new_key => $legacy_key) {
+                $legacy_value = get_option($legacy_key, null);
+                
+                if ($legacy_value !== null) {
+                    $success = self::set_module_setting($module, $new_key, $legacy_value);
+                    $results[$module][$new_key] = $success;
+                }
+            }
+        }
+        
+        return $results;
+    }
+
+    /**
+     * Check if module has legacy settings
+     *
+     * @param string $module Module slug
+     * @return bool Whether module has legacy settings
+     */
+    public static function has_legacy_settings($module) {
+        if (!isset(self::$legacy_map[$module])) {
+            return false;
+        }
+
+        foreach (self::$legacy_map[$module] as $legacy_key) {
+            if (get_option($legacy_key, null) !== null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -114,16 +251,107 @@ class Config {
     }
 
     /**
-     * Initialize default configuration
+     * Get client-side configuration
+     *
+     * @return array Client-side configuration
+     */
+    public static function get_client_config() {
+        return [
+            'server' => self::get_server_config(),
+            'environment' => self::get_environment_config(),
+            'adminToken' => wp_create_nonce('sewn_ws_admin'),
+            'debug' => self::get('debug', false),
+            'namespaces' => [
+                'admin' => '/admin',
+                'message' => '/message',
+                'presence' => '/presence',
+                'status' => '/status'
+            ]
+        ];
+    }
+
+    /**
+     * Initialize with backwards compatibility support
      *
      * @return void
      */
     public static function init() {
+        // Register legacy cleanup hook
+        add_action('sewn_ws_legacy_cleanup', [__CLASS__, 'cleanup_legacy_option']);
+        
+        // Initialize defaults
         foreach (self::$defaults as $key => $value) {
             if (get_option('sewn_ws_' . $key) === false) {
                 self::set($key, $value);
             }
         }
+
+        // Check for legacy settings
+        if (get_option('sewn_ws_legacy_check', false) === false) {
+            self::migrate_legacy_settings();
+            update_option('sewn_ws_legacy_check', true);
+        }
+    }
+
+    /**
+     * Cleanup legacy option
+     *
+     * @param string $module Module slug
+     * @param string $key Setting key
+     */
+    public static function cleanup_legacy_option($module, $key) {
+        if (isset(self::$legacy_map[$module][$key])) {
+            delete_option(self::$legacy_map[$module][$key]);
+        }
+    }
+
+    /**
+     * Get module configuration schema
+     *
+     * @param string $module Module slug
+     * @return array Module configuration schema
+     */
+    public static function get_module_schema($module) {
+        $schema_file = SEWN_WS_PATH . "modules/{$module}/config-schema.json";
+        if (file_exists($schema_file)) {
+            return json_decode(file_get_contents($schema_file), true);
+        }
+        return [];
+    }
+
+    /**
+     * Validate module configuration
+     *
+     * @param string $module Module slug
+     * @param array $config Configuration to validate
+     * @return array Validation results
+     */
+    public static function validate_module_config($module, $config) {
+        $schema = self::get_module_schema($module);
+        $errors = [];
+        
+        foreach ($schema as $key => $rules) {
+            if (!isset($config[$key]) && isset($rules['required']) && $rules['required']) {
+                $errors[] = "Missing required field: {$key}";
+            }
+        }
+        
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors
+        ];
+    }
+
+    /**
+     * Set a configuration value
+     *
+     * @param string $key Configuration key
+     * @param mixed $value Configuration value
+     * @return bool Whether the option was updated
+     */
+    public static function set($key, $value) {
+        $option_name = 'sewn_ws_' . $key;
+        return update_option($option_name, $value);
     }
 }
 

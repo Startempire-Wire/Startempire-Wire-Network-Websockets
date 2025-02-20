@@ -13,6 +13,8 @@
 
 namespace SEWN\WebSockets\Admin;
 
+use SEWN\WebSockets\Config;
+
 // Security check
 if (!defined('ABSPATH')) {
     exit;
@@ -29,6 +31,14 @@ if (!$module || !$module instanceof \SEWN\WebSockets\Module_Base) {
 
 $meta = $module->metadata();
 
+// Check for legacy settings
+$has_legacy = Config::has_legacy_settings($module_slug);
+$migration_results = [];
+
+// Handle migration if requested
+if (isset($_POST['sewn_ws_migrate_legacy']) && check_admin_referer('sewn_ws_migrate_legacy')) {
+    $migration_results = Config::migrate_legacy_settings();
+}
 
 ?>
 <div class="wrap">
@@ -38,6 +48,45 @@ $meta = $module->metadata();
         <div class="notice notice-success is-dismissible">
             <p><?php _e('Settings saved successfully.', 'sewn-ws'); ?></p>
         </div>
+    <?php endif; ?>
+
+    <?php if ($has_legacy): ?>
+    <div class="notice notice-warning">
+        <p>
+            <?php _e('Legacy settings detected for this module. These settings will be automatically migrated when saved.', 'sewn-ws'); ?>
+        </p>
+        <form method="post" action="">
+            <?php wp_nonce_field('sewn_ws_migrate_legacy'); ?>
+            <input type="hidden" name="sewn_ws_migrate_legacy" value="1">
+            <p>
+                <button type="submit" class="button button-secondary">
+                    <?php _e('Migrate Settings Now', 'sewn-ws'); ?>
+                </button>
+            </p>
+        </form>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($migration_results)): ?>
+    <div class="notice notice-info">
+        <p><?php _e('Migration Results:', 'sewn-ws'); ?></p>
+        <ul>
+            <?php foreach ($migration_results as $mod => $results): ?>
+                <?php foreach ($results as $key => $success): ?>
+                    <li>
+                        <?php 
+                        echo sprintf(
+                            '%s: %s - %s',
+                            esc_html($mod),
+                            esc_html($key),
+                            $success ? __('Success', 'sewn-ws') : __('Failed', 'sewn-ws')
+                        ); 
+                        ?>
+                    </li>
+                <?php endforeach; ?>
+            <?php endforeach; ?>
+        </ul>
+    </div>
     <?php endif; ?>
 
     <div class="sewn-module-settings">
@@ -54,9 +103,16 @@ $meta = $module->metadata();
 
         <form method="post" action="options.php" class="module-settings-form">
             <?php 
-            settings_fields('sewn_ws_module_' . $module_slug);
-            do_settings_sections('sewn_ws_module_' . $module_slug); 
-            submit_button(__('Save Changes', 'sewn-ws'));
+            $option_group = 'sewn_ws_module_' . $module_slug;
+            settings_fields($option_group);
+            
+            // Get admin UI configuration
+            $admin_ui = $module->admin_ui();
+            
+            // Output sections and fields
+            do_settings_sections($option_group);
+            
+            submit_button(__('Save Changes', 'sewn-ws')); 
             ?>
         </form>
     </div>
@@ -105,4 +161,25 @@ $meta = $module->metadata();
 .module-settings-form .form-table {
     margin-top: 1rem;
 }
+
+.notice ul {
+    list-style: disc;
+    margin-left: 2em;
+    margin-bottom: 1em;
+}
+
+.notice form {
+    margin-top: 1em;
+}
 </style>
+
+<script>
+jQuery(document).ready(function($) {
+    // Add confirmation for migration
+    $('form[name="sewn_ws_migrate_legacy"]').on('submit', function(e) {
+        if (!confirm('<?php esc_attr_e('Are you sure you want to migrate legacy settings? This process cannot be undone.', 'sewn-ws'); ?>')) {
+            e.preventDefault();
+        }
+    });
+});
+</script>

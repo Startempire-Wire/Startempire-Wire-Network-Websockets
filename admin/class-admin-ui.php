@@ -45,8 +45,6 @@ class Admin_UI {
         // Initialize core dependencies
         if (class_exists('\SEWN\WebSockets\Module_Registry')) {
             $this->registry = Module_Registry::get_instance();
-            $this->registry->discover_modules();
-            $this->registry->init_modules();
         } else {
             error_log('[SEWN] Module_Registry not available');
         }

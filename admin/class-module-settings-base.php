@@ -6,34 +6,251 @@
 namespace SEWN\WebSockets\Admin;
 
 use SEWN\WebSockets\Module_Base;
+use SEWN\WebSockets\Config;
 
 class Module_Settings_Base {
     protected $module;
     protected $settings;
+    protected $config;
+    protected $view_path;
 
     public function __construct(Module_Base $module) {
         $this->module = $module;
         $this->settings = $module->admin_ui();
+        $this->view_path = plugin_dir_path(__FILE__) . 'views/';
+        
+        // Initialize Config using static methods directly
+        $this->config = null; // We'll use Config::get_module_setting directly
+    }
+
+    /**
+     * Get module slug safely
+     *
+     * @return string
+     */
+    protected function get_module_slug() {
+        if (!$this->module instanceof Module_Base) {
+            return '';
+        }
+        
+        return $this->module->get_module_slug();
+    }
+
+    /**
+     * Load and render a view template
+     *
+     * @param string $template Template name without .php
+     * @param array $data Data to pass to template
+     * @return void
+     */
+    protected function render_view($template, $data = []) {
+        $template_path = $this->view_path . $template . '.php';
+        
+        if (!file_exists($template_path)) {
+            error_log("[SEWN] View template not found: {$template}");
+            return;
+        }
+
+        // Extract data to make it available in template
+        if (!empty($data)) {
+            extract($data);
+        }
+
+        include $template_path;
+    }
+
+    /**
+     * Get module setting with Config class integration
+     *
+     * @param string $key Setting key
+     * @param mixed $default Default value
+     * @return mixed
+     */
+    protected function get_setting($key, $default = null) {
+        $module_slug = $this->get_module_slug();
+        if (empty($module_slug)) {
+            return $default;
+        }
+        return Config::get_module_setting($module_slug, $key, $default);
+    }
+
+    /**
+     * Save module setting with Config class integration
+     *
+     * @param string $key Setting key
+     * @param mixed $value Setting value
+     * @return bool
+     */
+    protected function save_setting($key, $value) {
+        $module_slug = $this->get_module_slug();
+        if (empty($module_slug)) {
+            return false;
+        }
+        return Config::set_module_setting($module_slug, $key, $value);
+    }
+
+    /**
+     * Register module settings with WordPress
+     *
+     * @return void
+     */
+    public function register_settings() {
+        $module_slug = $this->get_module_slug();
+        $option_group = "sewn_ws_module_{$module_slug}";
+        
+        // Get settings array from module's admin_ui configuration
+        $admin_ui = $this->settings;
+        if (empty($admin_ui['settings']) || !is_array($admin_ui['settings'])) {
+            error_log("[SEWN] No settings defined for module {$module_slug}");
+            return;
+        }
+
+        foreach ($admin_ui['settings'] as $setting) {
+            // Validate setting structure
+            if (empty($setting['name'])) {
+                error_log("[SEWN] Warning: Setting missing required 'name' field in module {$module_slug}");
+                continue;
+            }
+            
+            $setting_id = $setting['name'];
+            
+            register_setting(
+                $option_group,
+                $setting_id,
+                [
+                    'type' => $setting['type'] ?? 'string',
+                    'sanitize_callback' => $setting['sanitize'] ?? [$this, 'sanitize_setting'],
+                    'default' => $this->get_setting($setting_id, $setting['default'] ?? null)
+                ]
+            );
+
+            // Register setting section if not already registered
+            $section_id = $setting['section'] ?? 'general';
+            $this->register_setting_section($option_group, $section_id, $admin_ui['sections'] ?? []);
+            
+            // Add field to appropriate section
+            add_settings_field(
+                $setting_id,
+                $setting['label'],
+                [$this, 'render_field'],
+                $option_group,
+                $section_id,
+                $setting
+            );
+        }
+    }
+
+    protected function register_setting_section($option_group, $section_id, $sections) {
+        static $registered_sections = [];
+        
+        // Skip if already registered
+        if (isset($registered_sections[$option_group][$section_id])) {
+            return;
+        }
+        
+        // Find section config
+        $section_config = array_filter($sections, function($s) use ($section_id) {
+            return $s['id'] === $section_id;
+        });
+        $section_config = reset($section_config);
+        
+        // Register section
+        add_settings_section(
+            $section_id,
+            $section_config['title'] ?? __('General Settings', 'sewn-ws'),
+            $section_config['callback'] ?? null,
+            $option_group
+        );
+        
+        $registered_sections[$option_group][$section_id] = true;
+    }
+
+    public function render_field($setting) {
+        $type = $setting['type'] ?? 'text';
+        $name = $setting['name'];
+        $value = get_option($name, $setting['default'] ?? '');
+        
+        switch ($type) {
+            case 'password':
+                printf(
+                    '<input type="password" id="%1$s" name="%1$s" value="%2$s" class="regular-text">',
+                    esc_attr($name),
+                    esc_attr($value)
+                );
+                break;
+                
+            case 'checkbox':
+                printf(
+                    '<input type="checkbox" id="%1$s" name="%1$s" value="1" %2$s>',
+                    esc_attr($name),
+                    checked($value, '1', false)
+                );
+                break;
+                
+            case 'textarea':
+                printf(
+                    '<textarea id="%1$s" name="%1$s" class="large-text" rows="5">%2$s</textarea>',
+                    esc_attr($name),
+                    esc_textarea($value)
+                );
+                break;
+                
+            case 'select':
+                if (!empty($setting['options'])) {
+                    printf('<select id="%1$s" name="%1$s">', esc_attr($name));
+                    foreach ($setting['options'] as $option_value => $option_label) {
+                        printf(
+                            '<option value="%1$s" %2$s>%3$s</option>',
+                            esc_attr($option_value),
+                            selected($value, $option_value, false),
+                            esc_html($option_label)
+                        );
+                    }
+                    echo '</select>';
+                }
+                break;
+                
+            default:
+                printf(
+                    '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text">',
+                    esc_attr($name),
+                    esc_attr($value)
+                );
+        }
+        
+        if (!empty($setting['description'])) {
+            printf(
+                '<p class="description">%s</p>',
+                esc_html($setting['description'])
+            );
+        }
+    }
+
+    /**
+     * Standard setting sanitization
+     *
+     * @param mixed $value Value to sanitize
+     * @return mixed
+     */
+    protected function sanitize_setting($value) {
+        if (is_bool($value)) {
+            return $value;
+        }
+        
+        if (is_numeric($value)) {
+            return absint($value);
+        }
+        
+        return sanitize_text_field($value);
     }
 
     public function render() {
         $module_data = $this->module->metadata();
-        ?>
-        <div class="wrap sewn-ws-module-settings">
-            <h1><?php echo esc_html($this->settings['menu_title'] ?? __('Module Settings', 'sewn-ws')); ?></h1>
-            
-            <?php $this->render_module_info($module_data); ?>
-
-            <form method="post" action="options.php">
-                <?php 
-                settings_fields('sewn_ws_module_' . $this->module->get_module_slug());
-                $this->render_settings_sections();
-                submit_button(); 
-                ?>
-            </form>
-        </div>
-        <?php
-        $this->render_styles();
+        $this->render_view('module-settings-wrapper', [
+            'module_data' => $module_data,
+            'settings' => $this->settings,
+            'module_slug' => $this->get_module_slug()
+        ]);
     }
 
     protected function render_module_info($module_data) {
@@ -244,5 +461,37 @@ class Module_Settings_Base {
         }
         </style>
         <?php
+    }
+
+    /**
+     * Handle settings validation
+     *
+     * @param array $settings Settings to validate
+     * @return array Validation results
+     */
+    protected function validate_settings($settings) {
+        $errors = [];
+        $module_slug = $this->get_module_slug();
+
+        foreach ($this->settings['settings'] as $setting) {
+            $key = $setting['name'] ?? '';
+            if (empty($key)) continue;
+
+            if (!empty($setting['required']) && empty($settings[$key])) {
+                $errors[] = sprintf(__('Setting %s is required', 'sewn-ws'), $setting['label']);
+            }
+
+            if (!empty($setting['validate']) && is_callable($setting['validate'])) {
+                $result = call_user_func($setting['validate'], $settings[$key]);
+                if ($result !== true) {
+                    $errors[] = $result;
+                }
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors
+        ];
     }
 } 

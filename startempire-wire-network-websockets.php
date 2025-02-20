@@ -114,6 +114,43 @@ require_once __DIR__ . '/modules/wirebot/class-wirebot-module.php';
 require_once __DIR__ . '/modules/discord/class-discord-module.php';
 require_once __DIR__ . '/modules/startempire/class-startempire-module.php';
 
+// Initialize Module Registry early
+$registry = Module_Registry::get_instance();
+
+// Load module protocols
+require_once __DIR__ . '/modules/wirebot/class-wirebot-protocol.php';
+require_once __DIR__ . '/modules/discord/class-discord-protocol.php';
+require_once __DIR__ . '/modules/startempire/class-startempire-protocol.php';
+
+// Load module classes
+require_once __DIR__ . '/modules/wirebot/class-wirebot-module.php';
+require_once __DIR__ . '/modules/discord/class-discord-module.php';
+require_once __DIR__ . '/modules/startempire/class-startempire-module.php';
+
+// Register modules immediately
+$discord = new \SEWN\WebSockets\Modules\Discord\Discord_Module();
+$startempire = new \SEWN\WebSockets\Modules\Startempire\Startempire_Module();
+$wirebot = new \SEWN\WebSockets\Modules\Wirebot\Wirebot_Module();
+
+$registry->register($discord);
+$registry->register($startempire);
+$registry->register($wirebot);
+
+error_log('[SEWN] Registered modules: ' . print_r($registry->get_modules(), true));
+
+// Initialize modules after core
+add_action('sewn_ws_after_core_init', function() use ($registry) {
+    error_log('[SEWN] Starting module initialization');
+    
+    // Initialize module admin with existing registry
+    new Module_Admin($registry);
+    
+    // Initialize modules
+    $registry->init_modules();
+    
+    error_log('[SEWN] Completed module initialization');
+});
+
 // Add activation hook immediately after namespace declaration
 register_activation_hook(__FILE__, function() {
     // Clear any existing menu cache
@@ -124,32 +161,10 @@ register_activation_hook(__FILE__, function() {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Add at the very top of the plugin file
-try {
-    // All existing plugin code
-} catch(\Throwable $e) {
-    add_action('admin_notices', function() use ($e) {
-        echo '<div class="notice notice-error"><p>';
-        echo 'WebSocket Error: ' . esc_html($e->getMessage());
-        echo '</p></div>';
-    });
-    error_log('[SEWN] Error: ' . $e->getMessage());
-    return;
-}
-
-// Check for Local's unique network interface
-$ifconfig = shell_exec('ifconfig') ?? '';
-if (strpos($ifconfig, 'utun0') !== false) {
-    define('SEWN_WS_IS_LOCAL', true);
-}
-
-// Load core components
+// Initialize core components
 require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-process-manager.php';
 require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-sewn-ws-dashboard.php';
 require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-rest-api.php';
-
-// Add at the top of your main plugin file
-require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-process-manager.php';
 
 // Add after namespace declarations
 require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-node-check.php';
@@ -301,22 +316,6 @@ add_action('init', function() {
 });
 
 require_once __DIR__ . '/includes/class-module-registry.php';
-
-// Initialize modules after core
-add_action('sewn_ws_after_core_init', function() {
-    $registry = new Module_Registry();
-    
-    // Register core modules
-    $registry->register(new Modules\Discord\Discord_Module());
-    $registry->register(new Modules\Startempire\Startempire_Module());
-    $registry->register(new Modules\Wirebot\Wirebot_Module());
-    
-    // Initialize module admin
-    new Module_Admin($registry);
-    
-    // Late initialization
-    $registry->init_modules();
-});
 
 add_action('admin_init', function() {
     if (is_admin()) {

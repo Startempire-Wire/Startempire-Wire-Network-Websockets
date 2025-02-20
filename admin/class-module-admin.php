@@ -14,13 +14,21 @@ namespace SEWN\WebSockets\Admin;
 
 use SEWN\WebSockets\Module_Base;
 use SEWN\WebSockets\Module_Registry;
+use SEWN\WebSockets\Config;
 
+/**
+ * Module administration handler
+ */
 class Module_Admin {
     private $registry;
     private $current_screen;
+    private $settings_handler;
+    private $view_path;
 
     public function __construct(Module_Registry $registry) {
         $this->registry = $registry;
+        $this->view_path = plugin_dir_path(__FILE__) . 'views/';
+        
         add_action('admin_init', [$this, 'handle_module_actions']);
         add_action('admin_init', [$this, 'register_module_settings']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
@@ -46,108 +54,184 @@ class Module_Admin {
         return in_array($this->current_screen->id, $valid_screens);
     }
 
+    /**
+     * Handle module actions with legacy support
+     */
     public function handle_module_actions() {
         if (!isset($_POST['sewn_module_action']) || !check_admin_referer('sewn_module_control')) {
+            error_log('[SEWN] Module action aborted: Missing action or invalid nonce');
             return;
         }
 
         $module_slug = sanitize_key($_POST['module_slug']);
+        error_log("[SEWN] Processing module action for: {$module_slug}");
+        
         $module = $this->registry->get_module($module_slug);
         
         if (!$module instanceof Module_Base) {
+            error_log("[SEWN] Invalid module instance for slug: {$module_slug}");
             return;
         }
 
-        $option_name = "sewn_module_{$module_slug}_active";
-        
         switch ($_POST['sewn_module_action']) {
             case 'activate':
-                // Use autoload=no for better performance
-                $this->update_module_status($module_slug, true);
-                if (method_exists($module, 'init')) {
-                    $module->init();
+                error_log("[SEWN] Attempting to activate module: {$module_slug}");
+                
+                try {
+                    // Check for legacy settings before activation
+                    if (Config::has_legacy_settings($module_slug)) {
+                        error_log("[SEWN] Found legacy settings for module: {$module_slug}");
+                        // Migrate legacy settings
+                        $migration_results = Config::migrate_legacy_settings();
+                        
+                        // Log migration results
+                        error_log(sprintf(
+                            '[SEWN] Migrated legacy settings for module %s: %s',
+                            $module_slug,
+                            wp_json_encode($migration_results)
+                        ));
+                    }
+                    
+                    // Check dependencies but don't block activation
+                    $has_warnings = false;
+                    if (method_exists($module, 'check_dependencies')) {
+                        $dependency_check = $module->check_dependencies();
+                        if ($dependency_check !== true) {
+                            error_log("[SEWN] Module has dependency warnings: " . wp_json_encode($dependency_check));
+                            
+                            // Only block if explicitly not allowed to activate
+                            if (isset($dependency_check['can_activate']) && $dependency_check['can_activate'] === false) {
+                                throw new \Exception("Cannot activate: " . wp_json_encode($dependency_check));
+                            }
+                            
+                            $has_warnings = true;
+                            // Store warnings for display
+                            set_transient('sewn_module_warnings_' . $module_slug, $dependency_check['warnings'], 30);
+                        }
+                    }
+                    
+                    // Use Config class for activation
+                    $activation_success = Config::set_module_setting($module_slug, 'active', true);
+                    if (!$activation_success) {
+                        error_log("[SEWN] Failed to set module active status: {$module_slug}");
+                        throw new \Exception('Failed to set module active status');
+                    }
+                    
+                    // Initialize the module
+                    if (method_exists($module, 'init')) {
+                        error_log("[SEWN] Initializing module: {$module_slug}");
+                        $module->init();
+                    }
+                    
+                    error_log("[SEWN] Successfully activated module: {$module_slug}");
+                    
+                    // Set transient for admin notice
+                    set_transient('sewn_module_activated', [
+                        'module' => $module_slug,
+                        'has_warnings' => $has_warnings
+                    ], 30);
+                    
+                } catch (\Exception $e) {
+                    error_log("[SEWN] Module activation failed: " . $e->getMessage());
+                    // Set transient for error notice
+                    set_transient('sewn_module_activation_error', [
+                        'module' => $module_slug,
+                        'error' => $e->getMessage()
+                    ], 30);
+                    
+                    // Attempt to cleanup failed activation
+                    Config::set_module_setting($module_slug, 'active', false);
                 }
                 break;
                 
             case 'deactivate':
-                $this->update_module_status($module_slug, false);
+                error_log("[SEWN] Deactivating module: {$module_slug}");
+                try {
+                    // Call deactivate method if it exists
+                    if (method_exists($module, 'deactivate')) {
+                        $module->deactivate();
+                    }
+                    
+                    Config::set_module_setting($module_slug, 'active', false);
+                    error_log("[SEWN] Successfully deactivated module: {$module_slug}");
+                    
+                } catch (\Exception $e) {
+                    error_log("[SEWN] Module deactivation failed: " . $e->getMessage());
+                }
                 break;
         }
 
         // Clear module status cache
         wp_cache_delete('sewn_ws_active_modules', 'sewn_ws');
+        
+        // Clear individual module cache
+        wp_cache_delete("sewn_module_{$module_slug}_active", 'sewn_ws');
     }
 
     /**
-     * Optimized module status update
-     *
-     * @param string $module_slug
-     * @param bool $status
+     * Register module settings with legacy support
      */
-    private function update_module_status($module_slug, $status) {
-        global $wpdb;
-        
-        $option_name = "sewn_module_{$module_slug}_active";
-        
-        // First try to update existing option
-        $result = $wpdb->update(
-            $wpdb->options,
-            [
-                'option_value' => $status ? '1' : '',
-                'autoload' => 'no'  // Set autoload=no for better performance
-            ],
-            ['option_name' => $option_name],
-            ['%s', '%s'],
-            ['%s']
-        );
-        
-        // If option doesn't exist, insert it
-        if ($result === false) {
-            $wpdb->insert(
-                $wpdb->options,
-                [
-                    'option_name' => $option_name,
-                    'option_value' => $status ? '1' : '',
-                    'autoload' => 'no'
-                ],
-                ['%s', '%s', '%s']
-            );
+    public function register_module_settings() {
+        foreach ($this->registry->get_modules() as $module) {
+            if (!method_exists($module, 'admin_ui')) {
+                continue;
+            }
+
+            // Create settings instance for this module
+            $this->settings_handler = new \SEWN\WebSockets\Admin\Module_Settings_Base($module);
+            $this->settings_handler->register_settings();
         }
-        
-        // Update cache
-        wp_cache_set($option_name, $status, 'sewn_ws', HOUR_IN_SECONDS);
     }
 
     /**
-     * Check if module is active with caching
+     * Load and render a view template
      *
-     * @param string $module_slug
-     * @return bool
+     * @param string $template Template name without .php
+     * @param array $data Data to pass to template
+     * @return void
      */
-    private function is_module_active($module_slug) {
-        $cache_key = "sewn_module_{$module_slug}_active";
-        $cached = wp_cache_get($cache_key, 'sewn_ws');
+    protected function render_view($template, $data = []) {
+        $template_path = $this->view_path . $template . '.php';
         
-        if ($cached !== false) {
-            return (bool)$cached;
+        if (!file_exists($template_path)) {
+            error_log("[SEWN] View template not found: {$template}");
+            return;
         }
-        
-        $status = (bool)get_option($cache_key, false);
-        wp_cache_set($cache_key, $status, 'sewn_ws', HOUR_IN_SECONDS);
-        
-        return $status;
+
+        // Extract data to make it available in template
+        if (!empty($data)) {
+            extract($data);
+        }
+
+        include $template_path;
     }
 
     public function render_modules() {
-        include_once dirname(__FILE__) . '/views/module-settings.php';
+        $modules = $this->registry->get_modules();
+        $module_errors = [];
+        
+        if ($this->should_show_module_errors()) {
+            foreach ($modules as $module) {
+                $module_slug = $module->get_module_slug();
+                if ($this->is_module_active($module_slug)) {
+                    $module_errors[$module_slug] = $this->check_module_dependencies($module);
+                }
+            }
+        }
+        
+        $this->render_view('modules-list', [
+            'modules' => $modules,
+            'module_errors' => $module_errors,
+            'registry' => $this->registry
+        ]);
     }
 
     public function render_settings() {
-        include_once dirname(__FILE__) . '/views/settings.php';
+        $this->render_view('settings');
     }
 
     public function render_dashboard() {
-        include_once dirname(__FILE__) . '/views/dashboard.php';
+        $this->render_view('dashboard');
     }
 
     public function register_module_pages() {
@@ -171,84 +255,6 @@ class Module_Admin {
                 $menu_slug,
                 [$this, 'render_module_settings_page']
             );
-        }
-    }
-
-    public function register_module_settings() {
-        foreach ($this->registry->get_modules() as $module) {
-            if (!method_exists($module, 'admin_ui')) {
-                continue;
-            }
-
-            $module_slug = $module->get_module_slug();
-            $option_group = 'sewn_ws_module_' . $module_slug;
-
-            // Register base settings
-            $base_settings = [
-                'debug', 'log_level', 'access_level',
-                'cache_enabled', 'cache_ttl',
-                'rate_limit_enabled', 'rate_limit_requests', 'rate_limit_window'
-            ];
-
-            foreach ($base_settings as $setting) {
-                register_setting(
-                    $option_group,
-                    "sewn_ws_module_{$module_slug}_{$setting}",
-                    [
-                        'type' => 'string',
-                        'sanitize_callback' => [$this, 'sanitize_setting']
-                    ]
-                );
-            }
-
-            // Add base settings sections and fields
-            $this->add_standard_base_settings($module_slug, $option_group);
-
-            // Get module-specific settings
-            $ui = $module->admin_ui();
-
-            // Register and add module-specific settings
-            if (!empty($ui['sections'])) {
-                foreach ($ui['sections'] as $section) {
-                    // Register the section
-                    add_settings_section(
-                        $section['id'],
-                        $section['title'],
-                        $section['callback'] ?? null,
-                        $option_group . '_module_settings'
-                    );
-                }
-            }
-
-            if (!empty($ui['settings'])) {
-                foreach ($ui['settings'] as $setting) {
-                    // Register the setting
-                    register_setting(
-                        $option_group,
-                        $setting['name'],
-                        [
-                            'type' => 'string',
-                            'sanitize_callback' => $setting['sanitize'] ?? [$this, 'sanitize_setting']
-                        ]
-                    );
-
-                    // Add the settings field
-                    add_settings_field(
-                        $setting['name'],
-                        $setting['label'],
-                        [$this, 'render_setting_field'],
-                        $option_group . '_module_settings',
-                        $setting['section'],
-                        [
-                            'type' => $setting['type'],
-                            'name' => $setting['name'],
-                            'description' => $setting['description'],
-                            'options' => $setting['options'] ?? [],
-                            'depends_on' => $setting['depends_on'] ?? null
-                        ]
-                    );
-                }
-            }
         }
     }
 
@@ -483,84 +489,6 @@ class Module_Admin {
         echo '<p>' . esc_html__('Set rate limits to prevent abuse.', 'sewn-ws') . '</p>';
     }
 
-    public function render_setting_field($args) {
-        // Extract all needed values from args
-        $type = $args['type'] ?? 'text';
-        $name = $args['name'] ?? '';
-        $description = $args['description'] ?? '';
-        $options = $args['options'] ?? [];
-        $depends_on = $args['depends_on'] ?? '';
-        
-        // Get the current value
-        $value = get_option($name);
-        
-        // Add dependency attribute if needed
-        $dependency_attr = $depends_on ? sprintf('data-depends-on="%s"', esc_attr($depends_on)) : '';
-        
-        switch ($type) {
-            case 'checkbox':
-                printf(
-                    '<label><input type="checkbox" name="%s" value="1" %s %s> %s</label>',
-                    esc_attr($name),
-                    checked($value, '1', false),
-                    $dependency_attr,
-                    esc_html($description)
-                );
-                break;
-                
-            case 'select':
-                printf('<select name="%s" %s>', esc_attr($name), $dependency_attr);
-                foreach ($options as $option_value => $option_label) {
-                    printf(
-                        '<option value="%s" %s>%s</option>',
-                        esc_attr($option_value),
-                        selected($value, $option_value, false),
-                        esc_html($option_label)
-                    );
-                }
-                echo '</select>';
-                if ($description) {
-                    echo '<p class="description">' . esc_html($description) . '</p>';
-                }
-                break;
-                
-            case 'number':
-                printf(
-                    '<input type="number" name="%s" value="%s" %s>',
-                    esc_attr($name),
-                    esc_attr($value),
-                    $dependency_attr
-                );
-                if ($description) {
-                    echo '<p class="description">' . esc_html($description) . '</p>';
-                }
-                break;
-                
-            case 'password':
-                printf(
-                    '<input type="password" name="%s" value="%s" class="regular-text" %s>',
-                    esc_attr($name),
-                    esc_attr($value),
-                    $dependency_attr
-                );
-                if ($description) {
-                    echo '<p class="description">' . esc_html($description) . '</p>';
-                }
-                break;
-                
-            default:
-                printf(
-                    '<input type="text" name="%s" value="%s" class="regular-text" %s>',
-                    esc_attr($name),
-                    esc_attr($value),
-                    $dependency_attr
-                );
-                if ($description) {
-                    echo '<p class="description">' . esc_html($description) . '</p>';
-                }
-        }
-    }
-
     public function handle_stats_request() {
         check_ajax_referer('sewn_ws_nonce', 'nonce');
         
@@ -615,11 +543,9 @@ class Module_Admin {
     }
 
     public function render_modules_page() {
-        $module_registry = \SEWN\WebSockets\Module_Registry::get_instance();
-        $modules = $module_registry->get_modules();
+        $modules = $this->registry->get_modules();
         $module_errors = [];
         
-        // Only process dependency checks for active modules and only on modules page
         if ($this->should_show_module_errors()) {
             foreach ($modules as $module) {
                 $module_slug = $module->get_module_slug();
@@ -629,8 +555,11 @@ class Module_Admin {
             }
         }
         
-        // Pass errors to template
-        include plugin_dir_path(__FILE__) . 'views/modules-list.php';
+        $this->render_view('modules-list', [
+            'modules' => $modules,
+            'module_errors' => $module_errors,
+            'registry' => $this->registry
+        ]);
     }
 
     private function check_module_dependencies($module) {
@@ -644,146 +573,20 @@ class Module_Admin {
         return is_array($dependency_errors) ? $dependency_errors : [];
     }
 
+    /**
+     * Render module settings page
+     */
     public function render_module_settings_page() {
         $module_slug = $this->get_current_module_slug();
         $module = $this->registry->get_module($module_slug);
         
-        if (!$module || !$module instanceof \SEWN\WebSockets\Module_Base) {
+        if (!$module || !$module instanceof Module_Base) {
             wp_die(__('Invalid module or module not loaded', 'sewn-ws'));
         }
 
-        $option_group = 'sewn_ws_module_' . $module_slug;
-        $meta = $module->metadata();
-        ?>
-        <div class="wrap">
-            <h1><?php echo esc_html($meta['name']); ?> <?php _e('Settings', 'sewn-ws'); ?></h1>
-
-            <?php settings_errors(); ?>
-
-            <div class="sewn-ws-tabs">
-                <nav class="nav-tab-wrapper">
-                    <a href="#core-settings" class="nav-tab nav-tab-active"><?php _e('Core Settings', 'sewn-ws'); ?></a>
-                    <a href="#performance" class="nav-tab"><?php _e('Performance', 'sewn-ws'); ?></a>
-                    <a href="#module-settings" class="nav-tab"><?php _e('Module Settings', 'sewn-ws'); ?></a>
-                </nav>
-
-                <form method="post" action="options.php">
-                    <?php settings_fields($option_group); ?>
-                    
-                    <div id="core-settings" class="sewn-ws-tab-content active">
-                        <div class="sewn-ws-settings-grid">
-                            <div class="sewn-ws-settings-column">
-                                <?php do_settings_sections($option_group . '_core_left'); ?>
-                            </div>
-                            <div class="sewn-ws-settings-column">
-                                <?php do_settings_sections($option_group . '_core_right'); ?>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="performance" class="sewn-ws-tab-content">
-                        <div class="sewn-ws-settings-grid">
-                            <div class="sewn-ws-settings-column">
-                                <?php do_settings_sections($option_group . '_performance_left'); ?>
-                            </div>
-                            <div class="sewn-ws-settings-column">
-                                <?php do_settings_sections($option_group . '_performance_right'); ?>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="module-settings" class="sewn-ws-tab-content">
-                        <?php 
-                        $ui = $module->admin_ui();
-                        if (!empty($ui['sections'])) {
-                            foreach ($ui['sections'] as $section) {
-                                do_settings_sections($option_group . '_' . $section['id']);
-                            }
-                        } else {
-                            echo '<div class="notice notice-info inline"><p>';
-                            _e('This module does not have any custom settings.', 'sewn-ws');
-                            echo '</p></div>';
-                        }
-                        ?>
-                    </div>
-
-                    <?php submit_button(); ?>
-                </form>
-            </div>
-        </div>
-
-        <style>
-            .sewn-ws-tabs {
-                margin-top: 20px;
-            }
-            .sewn-ws-tab-content {
-                display: none;
-                padding: 20px;
-                background: #fff;
-                border: 1px solid #ccc;
-                border-top: none;
-            }
-            .sewn-ws-tab-content.active {
-                display: block;
-            }
-            .sewn-ws-settings-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 30px;
-            }
-            .sewn-ws-settings-column {
-                min-width: 0;
-            }
-            .module-status {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                margin-bottom: 15px;
-                padding: 10px;
-                background: #f8f9fa;
-                border-radius: 4px;
-            }
-            .status-indicator {
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-            }
-            .module-status.active .status-indicator {
-                background: #00a32a;
-            }
-            .module-status.inactive .status-indicator {
-                background: #cc1818;
-            }
-            .notice.inline {
-                margin: 0;
-                padding: 10px;
-            }
-        </style>
-
-        <script>
-        jQuery(document).ready(function($) {
-            // Tab switching
-            $('.sewn-ws-tabs .nav-tab').on('click', function(e) {
-                e.preventDefault();
-                var target = $(this).attr('href');
-                
-                // Update tabs
-                $('.sewn-ws-tabs .nav-tab').removeClass('nav-tab-active');
-                $(this).addClass('nav-tab-active');
-                
-                // Update content
-                $('.sewn-ws-tab-content').removeClass('active');
-                $(target).addClass('active');
-            });
-
-            // Show/hide dependent fields
-            $('input[type="checkbox"]').on('change', function() {
-                var dependentFields = $('[data-depends-on="' + $(this).attr('name') + '"]');
-                dependentFields.closest('tr').toggle(this.checked);
-            }).trigger('change');
-        });
-        </script>
-        <?php
+        // Create settings instance for this module
+        $this->settings_handler = new \SEWN\WebSockets\Admin\Module_Settings_Base($module);
+        $this->settings_handler->render();
     }
 
     private function get_current_module_slug() {
@@ -817,5 +620,25 @@ class Module_Admin {
             </span>
         </div>
         <?php
+    }
+
+    /**
+     * Check if module is active with caching
+     *
+     * @param string $module_slug
+     * @return bool
+     */
+    private function is_module_active($module_slug) {
+        $cache_key = "sewn_module_{$module_slug}_active";
+        $cached = wp_cache_get($cache_key, 'sewn_ws');
+        
+        if ($cached !== false) {
+            return (bool)$cached;
+        }
+        
+        $status = (bool)get_option($cache_key, false);
+        wp_cache_set($cache_key, $status, 'sewn_ws', HOUR_IN_SECONDS);
+        
+        return $status;
     }
 }
