@@ -50,7 +50,7 @@ class Websockets_Admin {
             $this->modules = new Module_Admin(Module_Registry::get_instance());
         }
         
-        $this->settings = new Settings_Page();
+        $this->settings = Settings_Page::get_instance();
     }
 
     public function enqueue_assets($hook) {

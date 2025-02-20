@@ -22,6 +22,11 @@ use SEWN\WebSockets\Config;
  * Handles the plugin settings page in WordPress admin
  */
 class Settings_Page {
+    /**
+     * Singleton instance
+     *
+     * @var Settings_Page
+     */
     private static $instance = null;
 
     /**
@@ -45,6 +50,18 @@ class Settings_Page {
      */
     private $options;
 
+    /**
+     * Hook suffix for the settings page
+     *
+     * @var string
+     */
+    private $page_hook;
+
+    /**
+     * Get singleton instance
+     *
+     * @return Settings_Page
+     */
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -55,384 +72,308 @@ class Settings_Page {
     /**
      * Constructor
      */
-    public function __construct() {
+    private function __construct() {
         $this->logger = Error_Logger::get_instance();
         $this->monitor = Environment_Monitor::get_instance();
         $this->options = get_option(SEWN_WS_SETTINGS_GROUP, []);
 
-        add_action('admin_init', [$this, 'register_settings']);
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
+        $this->init();
     }
 
-    
-
-    
-
     /**
-     * Enqueue admin scripts and styles
+     * Initialize the settings page
      */
-    public function enqueue_admin_scripts($hook) {
-        if ('settings_page_websocket-server-settings' !== $hook) {
-            return;
-        }
+    private function init() {
+        // Register settings on admin_init
+        add_action('admin_init', array($this, 'register_settings'));
+        
+        // Initialize AJAX handlers
+        Settings_Ajax::init();
 
-        wp_enqueue_style(
-            'sewn-ws-admin',
-            plugin_dir_url(__FILE__) . 'css/admin.css',
-            array(),
-            '1.0.0'
-        );
-
-        wp_enqueue_style(
-            'sewn-ws-debug-panel',
-            plugin_dir_url(__FILE__) . 'css/debug-panel.css',
-            array(),
-            '1.0.0'
-        );
-
-        wp_enqueue_script(
-            'sewn-ws-admin',
-            plugin_dir_url(__FILE__) . 'js/admin.js',
-            array('jquery'),
-            '1.0.0',
-            true
-        );
-
-        wp_enqueue_script(
-            'sewn-ws-debug-panel',
-            plugin_dir_url(__FILE__) . 'js/debug-panel.js',
-            array('jquery'),
-            '1.0.0',
-            true
-        );
-
-        wp_localize_script(
-            'sewn-ws-admin',
-            'sewnWsAdmin',
-            array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('sewn_ws_admin'),
-                'i18n' => array(
-                    'checking' => __('Checking environment...', SEWN_WS_TEXT_DOMAIN),
-                    'success' => __('Environment check completed', SEWN_WS_TEXT_DOMAIN),
-                    'error' => __('Failed to check environment', SEWN_WS_TEXT_DOMAIN),
-                    'confirmClearLogs' => __('Are you sure you want to clear all logs?', SEWN_WS_TEXT_DOMAIN),
-                ),
-            )
-        );
+        // Register assets
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
     }
 
-    
-
     /**
-     * Register and add settings
+     * Register settings and sections
      */
     public function register_settings() {
-        // Main settings group
-        register_setting(
-            SEWN_WS_SETTINGS_GROUP,
-            SEWN_WS_SETTINGS_GROUP,
-            [$this, 'sanitize_settings']
-        );
+        // Register settings
+        $this->register_general_settings();
+        $this->register_environment_settings();
+        $this->register_ssl_settings();
+        $this->register_debug_settings();
 
-        // Server configuration section
+        // Add settings sections
+        $this->add_settings_sections();
+    }
+
+    /**
+     * Register general settings
+     */
+    private function register_general_settings() {
+        register_setting('sewn_ws_settings', 'sewn_ws_port', array(
+            'type' => 'integer',
+            'sanitize_callback' => array($this, 'validate_port'),
+            'default' => SEWN_WS_DEFAULT_PORT
+        ));
+
+        register_setting('sewn_ws_settings', 'sewn_ws_host', array(
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => 'localhost'
+        ));
+
+        register_setting('sewn_ws_settings', SEWN_WS_OPTION_RATE_LIMIT, array(
+            'type' => 'integer',
+            'sanitize_callback' => array($this, 'validate_rate_limit'),
+            'default' => 60
+        ));
+    }
+
+    /**
+     * Register environment settings
+     */
+    private function register_environment_settings() {
+        register_setting('sewn_ws_settings', SEWN_WS_OPTION_DEV_MODE, array(
+            'type' => 'boolean',
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => false
+        ));
+
+        register_setting('sewn_ws_settings', 'sewn_ws_env_local_mode', array(
+            'type' => 'boolean',
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => false
+        ));
+
+        register_setting('sewn_ws_settings', 'sewn_ws_env_container_mode', array(
+            'type' => 'boolean',
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => false
+        ));
+    }
+
+    /**
+     * Register SSL settings
+     */
+    private function register_ssl_settings() {
+        register_setting('sewn_ws_settings', SEWN_WS_OPTION_SSL_CERT, array(
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'validate_file_path'),
+            'default' => ''
+        ));
+
+        register_setting('sewn_ws_settings', SEWN_WS_OPTION_SSL_KEY, array(
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'validate_file_path'),
+            'default' => ''
+        ));
+    }
+
+    /**
+     * Register debug settings
+     */
+    private function register_debug_settings() {
+        register_setting('sewn_ws_settings', 'sewn_ws_debug_enabled', array(
+            'type' => 'boolean',
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => false
+        ));
+    }
+
+    /**
+     * Add settings sections
+     */
+    private function add_settings_sections() {
+        // General section
         add_settings_section(
-            'server_config',
-            __('Server Configuration', SEWN_WS_TEXT_DOMAIN),
+            'sewn_ws_general',
+            __('General Settings', 'sewn-ws'),
             null,
-            SEWN_WS_SETTINGS_GROUP
+            'sewn_ws_settings'
         );
 
-        // Add port setting
-        add_settings_field(
-            'ws_port',
-            __('WebSocket Port', SEWN_WS_TEXT_DOMAIN),
-            [$this, 'render_port_field'],
-            SEWN_WS_SETTINGS_GROUP,
-            'server_config',
-            ['label_for' => 'sewn_ws_port']
-        );
-
-        // Environment settings section
+        // Environment section
         add_settings_section(
-            'environment_config',
-            __('Environment Settings', SEWN_WS_TEXT_DOMAIN),
-            [$this, 'render_environment_section'],
-            SEWN_WS_SETTINGS_GROUP
+            'sewn_ws_environment',
+            __('Environment Settings', 'sewn-ws'),
+            array($this, 'render_environment_section'),
+            'sewn_ws_settings'
         );
 
-        // Add environment fields
-        $this->add_environment_fields();
-    }
-
-    private function add_environment_fields() {
-        $env_status = $this->monitor->get_environment_status();
-        
-        add_settings_field(
-            'local_mode',
-            __('Local Environment', SEWN_WS_TEXT_DOMAIN),
-            [$this, 'render_local_mode_field'],
-            SEWN_WS_SETTINGS_GROUP,
-            'environment_config',
-            [
-                'disabled' => $env_status['is_local'],
-                'auto_detected' => $env_status['is_local']
-            ]
+        // SSL section
+        add_settings_section(
+            'sewn_ws_ssl',
+            __('SSL Configuration', 'sewn-ws'),
+            array($this, 'render_ssl_section'),
+            'sewn_ws_settings'
         );
 
-        // Add SSL fields only if local mode is enabled
-        if ($env_status['is_local'] || get_option('sewn_ws_local_mode', false)) {
-            $this->add_ssl_fields();
-        }
-    }
-
-    private static function add_ssl_fields() {
-        add_settings_field(
-            'ssl_cert_path',
-            __('SSL Certificate Path', 'sewn-ws'),
-            [self::class, 'render_text_field'],
-            'sewn_ws_settings',
-            'sewn_ws_environment_section',
-            [
-                'label_for' => 'ssl_cert_path',
-                'description' => __('Path to SSL certificate file (PEM format)', 'sewn-ws')
-            ]
+        // Debug section
+        add_settings_section(
+            'sewn_ws_debug',
+            __('Debug Settings', 'sewn-ws'),
+            null,
+            'sewn_ws_settings'
         );
-
-        add_settings_field(
-            'ssl_key_path',
-            __('SSL Private Key Path', 'sewn-ws'),
-            [self::class, 'render_text_field'],
-            'sewn_ws_settings',
-            'sewn_ws_environment_section',
-            [
-                'label_for' => 'ssl_key_path', 
-                'description' => __('Path to SSL private key file', 'sewn-ws')
-            ]
-        );
-
-        add_settings_field(
-            'ssl_ca_bundle',
-            __('CA Bundle Path', 'sewn-ws'),
-            [self::class, 'render_text_field'],
-            'sewn_ws_settings',
-            'sewn_ws_environment_section',
-            [
-                'label_for' => 'ssl_ca_bundle',
-                'description' => __('Path to CA bundle file (if required)', 'sewn-ws')
-            ]
-        );
-    }
-
-    public function sanitize_settings($input) {
-        $this->logger->log('Sanitizing settings input', ['input' => $input]);
-        
-        $sanitized = [];
-        
-        // Sanitize port
-        if (isset($input['port'])) {
-            $port = absint($input['port']);
-            $sanitized['port'] = ($port >= 1024 && $port <= 65535) ? $port : SEWN_WS_DEFAULT_PORT;
-            Config::set('port', $sanitized['port']);
-        }
-
-        // Sanitize environment settings
-        if (isset($input['local_mode'])) {
-            $sanitized['local_mode'] = (bool) $input['local_mode'];
-            Config::set('local_mode', $sanitized['local_mode']);
-        }
-
-        if (isset($input['container_mode'])) {
-            $sanitized['container_mode'] = (bool) $input['container_mode'];
-            Config::set('container_mode', $sanitized['container_mode']);
-        }
-
-        // Sanitize SSL settings
-        if (isset($input['ssl_cert_path'])) {
-            $sanitized['ssl_cert_path'] = sanitize_text_field($input['ssl_cert_path']);
-            Config::set('ssl_cert_path', $sanitized['ssl_cert_path']);
-        }
-
-        if (isset($input['ssl_key_path'])) {
-            $sanitized['ssl_key_path'] = sanitize_text_field($input['ssl_key_path']);
-            Config::set('ssl_key_path', $sanitized['ssl_key_path']);
-        }
-
-        return $sanitized;
-    }
-
-    public function render_port_field() {
-        $port = Config::get('port', SEWN_WS_DEFAULT_PORT);
-        echo "<input name='sewn_ws_port' value='$port'>";
     }
 
     /**
-     * Render local environment section description
+     * Render environment section description
      */
-    public function render_environment_section($args) {
-        ?>
-        <p class="description">
-            <?php _e('Configure your local development environment settings below. Some settings may be automatically detected and locked.', SEWN_WS_TEXT_DOMAIN); ?>
-        </p>
-        <?php if (get_option('sewn_ws_local_mode', false)): ?>
-            <div class="notice notice-info inline">
-                <p>
-                    <?php _e('Local Environment Mode is enabled. The server will use container-aware networking and SSL settings.', SEWN_WS_TEXT_DOMAIN); ?>
-                </p>
-            </div>
-        <?php endif; ?>
-        <?php
+    public function render_environment_section() {
+        echo '<p>' . __('Configure environment-specific settings for local development and containerized environments.', 'sewn-ws') . '</p>';
     }
 
     /**
-     * Get the settings option array and print one of its values
+     * Render SSL section description
      */
-    public function local_mode_callback($args) {
-        $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || Config::get('local_mode', false) ? ' checked="checked"' : '';
-        ?>
-        <label>
-            <input type="checkbox" id="local_mode" name="sewn_ws_settings[local_mode]" value="1"<?php echo $disabled . $checked; ?>>
-            <?php esc_html_e('Enable Local Environment Mode', SEWN_WS_TEXT_DOMAIN); ?>
-        </label>
-        <?php if ($args['auto_detected']) : ?>
-            <p class="description">
-                <?php esc_html_e('Local environment automatically detected. This setting is locked.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php else : ?>
-            <p class="description">
-                <?php esc_html_e('Enable this for local development environments.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php endif;
+    public function render_ssl_section() {
+        echo '<p>' . __('Configure SSL certificates for secure WebSocket connections.', 'sewn-ws') . '</p>';
     }
 
     /**
-     * Container mode callback
+     * Enqueue admin assets
      */
-    public function container_mode_callback($args) {
-        $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || Config::get('container_mode', false) ? ' checked="checked"' : '';
-        ?>
-        <label>
-            <input type="checkbox" id="container_mode" name="sewn_ws_settings[container_mode]" value="1"<?php echo $disabled . $checked; ?>>
-            <?php esc_html_e('Enable Container Mode', SEWN_WS_TEXT_DOMAIN); ?>
-        </label>
-        <?php if ($args['auto_detected']) : ?>
-            <p class="description">
-                <?php esc_html_e('Container environment detected. This setting is locked.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php else : ?>
-            <p class="description">
-                <?php esc_html_e('Enable this when running in a containerized environment.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php endif;
+    public function enqueue_assets($hook) {
+        if ($hook !== $this->page_hook) {
+            return;
+        }
+
+        // Enqueue main settings styles and scripts
+        wp_enqueue_style(
+            'sewn-ws-settings',
+            plugins_url('css/settings.css', dirname(__FILE__)),
+            array(),
+            SEWN_WS_VERSION
+        );
+
+        wp_enqueue_script(
+            'sewn-ws-settings',
+            plugins_url('js/settings.js', dirname(__FILE__)),
+            array('jquery'),
+            SEWN_WS_VERSION,
+            true
+        );
+
+        // Localize script
+        wp_localize_script('sewn-ws-settings', 'sewnWsAdmin', array(
+            'nonce' => wp_create_nonce('sewn_ws_admin'),
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'i18n' => array(
+                'checking' => __('Checking environment...', 'sewn-ws'),
+                'success' => __('Environment check completed', 'sewn-ws'),
+                'error' => __('Failed to check environment', 'sewn-ws'),
+                'confirmClearLogs' => __('Are you sure you want to clear all logs?', 'sewn-ws'),
+            ),
+        ));
     }
 
     /**
-     * Local site URL callback
+     * Render the settings page
      */
-    public function local_site_url_callback() {
-        $value = isset($this->options['local_site_url']) ? $this->options['local_site_url'] : '';
+    public function render_settings_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        require_once plugin_dir_path(dirname(__FILE__)) . 'admin/views/settings.php';
+    }
+
+    /**
+     * Validate port number
+     */
+    public function validate_port($value) {
+        $port = absint($value);
+        if ($port < 1024 || $port > 65535) {
+            add_settings_error(
+                'sewn_ws_port',
+                'invalid_port',
+                __('Port must be between 1024 and 65535', 'sewn-ws')
+            );
+            return SEWN_WS_DEFAULT_PORT;
+        }
+        return $port;
+    }
+
+    /**
+     * Validate rate limit
+     */
+    public function validate_rate_limit($value) {
+        $rate = absint($value);
+        if ($rate < 1) {
+            add_settings_error(
+                SEWN_WS_OPTION_RATE_LIMIT,
+                'invalid_rate',
+                __('Rate limit must be greater than 0', 'sewn-ws')
+            );
+            return 60;
+        }
+        return $rate;
+    }
+
+    /**
+     * Validate file path
+     */
+    public function validate_file_path($value) {
         if (empty($value)) {
-            $value = get_site_url();
+            return '';
         }
-        ?>
-        <input type="url" id="local_site_url" name="sewn_ws_settings[local_site_url]" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <p class="description">
-            <?php esc_html_e('The URL of your local development site.', SEWN_WS_TEXT_DOMAIN); ?>
-        </p>
-        <?php
-    }
 
-    /**
-     * SSL certificate path callback
-     */
-    public function ssl_cert_path_callback() {
-        $value = Config::get('ssl_cert_path', '');
-        ?>
-        <input type="text" id="ssl_cert_path" name="sewn_ws_settings[ssl_cert_path]" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <button type="button" class="button button-secondary" id="detect-ssl-cert">
-            <?php esc_html_e('Detect Certificate', SEWN_WS_TEXT_DOMAIN); ?>
-        </button>
-        <p class="description">
-            <?php esc_html_e('Path to your SSL certificate file (.crt or .pem).', SEWN_WS_TEXT_DOMAIN); ?>
-        </p>
-        <?php
-    }
-
-    /**
-     * SSL key path callback
-     */
-    public function ssl_key_path_callback() {
-        $value = Config::get('ssl_key_path', '');
-        ?>
-        <input type="text" id="ssl_key_path" name="sewn_ws_settings[ssl_key_path]" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <button type="button" class="button button-secondary" id="detect-ssl-key">
-            <?php esc_html_e('Detect Key', SEWN_WS_TEXT_DOMAIN); ?>
-        </button>
-        <p class="description">
-            <?php esc_html_e('Path to your SSL private key file (.key).', SEWN_WS_TEXT_DOMAIN); ?>
-        </p>
-        <?php
-    }
-
-    public function render_local_mode_field($args) {
-        $disabled = $args['disabled'] ? ' disabled="disabled"' : '';
-        $checked = $args['disabled'] || Config::get('local_mode', false) ? ' checked="checked"' : '';
-        ?>
-        <label>
-            <input type="checkbox" id="local_mode" name="sewn_ws_settings[local_mode]" value="1"<?php echo $disabled . $checked; ?>>
-            <?php esc_html_e('Enable Local Environment Mode', SEWN_WS_TEXT_DOMAIN); ?>
-        </label>
-        <?php if ($args['auto_detected']) : ?>
-            <p class="description">
-                <?php esc_html_e('Local environment automatically detected. This setting is locked.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php else : ?>
-            <p class="description">
-                <?php esc_html_e('Enable this for local development environments.', SEWN_WS_TEXT_DOMAIN); ?>
-            </p>
-        <?php endif;
-    }
-
-    public function render_ssl_fields() {
-        $env_status = $this->monitor->get_environment_status();
-        
-        // Add SSL fields only if local mode is enabled
-        if ($env_status['is_local'] || get_option('sewn_ws_local_mode', false)) {
-            $this->ssl_cert_path_callback();
-            $this->ssl_key_path_callback();
+        $path = sanitize_text_field($value);
+        if (!file_exists($path)) {
+            add_settings_error(
+                'sewn_ws_ssl',
+                'invalid_path',
+                __('File does not exist', 'sewn-ws')
+            );
+            return '';
         }
+
+        if (!is_readable($path)) {
+            add_settings_error(
+                'sewn_ws_ssl',
+                'not_readable',
+                __('File is not readable', 'sewn-ws')
+            );
+            return '';
+        }
+
+        return $path;
     }
 
     /**
-     * AJAX callback to toggle debug mode
+     * Handle AJAX debug toggle
      */
     public static function ajax_toggle_debug() {
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'sewn_ws_admin')) {
-            wp_send_json_error('Invalid nonce');
-            return;
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
         }
 
-        if (!isset($_POST['enabled'])) {
-            wp_send_json_error('Missing enabled parameter');
-            return;
-        }
+        check_ajax_referer('sewn_ws_admin', 'nonce');
 
-        $enabled = filter_var($_POST['enabled'], FILTER_VALIDATE_BOOLEAN);
-        
-        if (Config::set('debug', $enabled)) {
-            wp_send_json_success(['enabled' => $enabled]);
-        } else {
-            wp_send_json_error('Failed to update debug mode');
-        }
+        $enabled = isset($_POST['enabled']) ? rest_sanitize_boolean($_POST['enabled']) : false;
+        update_option('sewn_ws_debug_enabled', $enabled);
+
+        wp_send_json_success(array(
+            'enabled' => $enabled
+        ));
     }
-}
 
-// After the class definition, register the AJAX action
-if (is_admin()) {
-    add_action('wp_ajax_sewn_ws_toggle_debug', array('SEWN\WebSockets\Admin\Settings_Page', 'ajax_toggle_debug'));
+    /**
+     * Prevent cloning of the instance
+     */
+    private function __clone() {}
+
+    /**
+     * Prevent unserializing of the instance
+     */
+    private function __wakeup() {}
 }
 
 // Initialize the settings page
-Settings_Page::get_instance();
+add_action('plugins_loaded', array('SEWN\WebSockets\Admin\Settings_Page', 'get_instance'));
+
+// Register AJAX actions
+add_action('wp_ajax_sewn_ws_toggle_debug', array('SEWN\WebSockets\Admin\Settings_Page', 'ajax_toggle_debug'));

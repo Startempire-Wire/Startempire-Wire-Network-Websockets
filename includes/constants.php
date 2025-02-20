@@ -122,4 +122,14 @@ define('SEWN_WS_IS_LOCAL', (
 !defined('SEWN_WS_CONFIG_VERSION') && define('SEWN_WS_CONFIG_VERSION', '1.0.0');
 !defined('SEWN_WS_CONFIG_INITIALIZED') && define('SEWN_WS_CONFIG_INITIALIZED', false);
 
+// Development and Environment Settings
+!defined('SEWN_WS_OPTION_DEV_MODE') && define('SEWN_WS_OPTION_DEV_MODE', 'sewn_ws_dev_mode');
+!defined('SEWN_WS_OPTION_RATE_LIMIT') && define('SEWN_WS_OPTION_RATE_LIMIT', 'sewn_ws_rate_limit');
+!defined('SEWN_WS_OPTION_ENVIRONMENT') && define('SEWN_WS_OPTION_ENVIRONMENT', 'sewn_ws_environment');
+!defined('SEWN_WS_OPTION_LOCAL_SITE_URL') && define('SEWN_WS_OPTION_LOCAL_SITE_URL', 'sewn_ws_local_site_url');
+
+// SSL Configuration Options
+!defined('SEWN_WS_OPTION_SSL_CERT') && define('SEWN_WS_OPTION_SSL_CERT', 'sewn_ws_ssl_cert');
+!defined('SEWN_WS_OPTION_SSL_KEY') && define('SEWN_WS_OPTION_SSL_KEY', 'sewn_ws_ssl_key');
+
 // End of file 
