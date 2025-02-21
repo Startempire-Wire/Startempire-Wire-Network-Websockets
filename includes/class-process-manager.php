@@ -59,13 +59,30 @@ class Process_Manager {
      */
     private function __construct() {
         // Initialize properties
-        $this->pid_file = SEWN_WS_PLUGIN_DIR . 'tmp/server.pid';
-        $this->log_file = SEWN_WS_PLUGIN_DIR . 'logs/server.log';
-        $this->server_script = SEWN_WS_PLUGIN_DIR . 'node-server/server.js';
+        $this->pid_file = \SEWN_WS_PLUGIN_DIR . 'tmp/server.pid';
+        $this->log_file = \SEWN_WS_PLUGIN_DIR . 'logs/server.log';
+        $this->server_script = \SEWN_WS_PLUGIN_DIR . 'node-server/server.js';
 
-        // Ensure directories exist
-        wp_mkdir_p(dirname($this->pid_file));
-        wp_mkdir_p(dirname($this->log_file));
+        // Ensure required directories exist with proper permissions
+        $dirs = [
+            \SEWN_WS_PLUGIN_DIR . 'tmp',
+            \SEWN_WS_PLUGIN_DIR . 'logs',
+            \SEWN_WS_PLUGIN_DIR . 'node-server'
+        ];
+
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                wp_mkdir_p($dir);
+                // Set directory permissions to 755
+                chmod($dir, 0755);
+            }
+        }
+
+        // Ensure log file exists and is writable
+        if (!file_exists($this->log_file)) {
+            touch($this->log_file);
+            chmod($this->log_file, 0644);
+        }
     }
 
     /**
@@ -91,12 +108,12 @@ class Process_Manager {
     }
 
     private function get_server_port() {
-        $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
-        error_log(sprintf('[SEWN WebSocket] Port configuration: %s (Default: %s)', $port, SEWN_WS_DEFAULT_PORT));
+        $port = get_option('sewn_ws_port', \SEWN_WS_DEFAULT_PORT);
+        error_log(sprintf('[SEWN WebSocket] Port configuration: %s (Default: %s)', $port, \SEWN_WS_DEFAULT_PORT));
         $port = absint($port);
         if ($port < 1024 || $port > 65535) {
-            error_log(sprintf('[SEWN WebSocket] Invalid port %d, using default port %d', $port, SEWN_WS_DEFAULT_PORT));
-            return SEWN_WS_DEFAULT_PORT;
+            error_log(sprintf('[SEWN WebSocket] Invalid port %d, using default port %d', $port, \SEWN_WS_DEFAULT_PORT));
+            return \SEWN_WS_DEFAULT_PORT;
         }
         return $port;
     }
@@ -115,8 +132,8 @@ class Process_Manager {
 
         // Create required directories
         $dirs = [
-            dirname(SEWN_WS_SERVER_PID_FILE),
-            dirname(SEWN_WS_SERVER_LOG_FILE)
+            dirname(\SEWN_WS_SERVER_PID_FILE),
+            dirname(\SEWN_WS_SERVER_LOG_FILE)
         ];
 
         foreach ($dirs as $dir) {
@@ -126,12 +143,12 @@ class Process_Manager {
         }
 
         // Start server process
-        $node_script = SEWN_WS_NODE_SERVER . 'server.js';
+        $node_script = \SEWN_WS_NODE_SERVER . 'server.js';
         $command = sprintf(
             'node %s > %s 2>&1 & echo $! > %s',
             escapeshellarg($node_script),
-            escapeshellarg(SEWN_WS_SERVER_LOG_FILE),
-            escapeshellarg(SEWN_WS_SERVER_PID_FILE)
+            escapeshellarg(\SEWN_WS_SERVER_LOG_FILE),
+            escapeshellarg(\SEWN_WS_SERVER_PID_FILE)
         );
 
         exec($command, $output, $return_var);
@@ -142,7 +159,7 @@ class Process_Manager {
         }
 
         // Update server status
-        update_option(SEWN_WS_OPTION_SERVER_STATUS, SEWN_WS_SERVER_STATUS_RUNNING);
+        update_option(\SEWN_WS_OPTION_SERVER_STATUS, \SEWN_WS_SERVER_STATUS_RUNNING);
 
         return true;
     }
@@ -218,7 +235,7 @@ class Process_Manager {
             'connections' => count(self::get_active_connections())
         ];
         // Keep last 100 points
-        $history = array_slice($history, -SEWN_WS_HISTORY_MAX_POINTS);
+        $history = array_slice($history, -\SEWN_WS_HISTORY_MAX_POINTS);
         update_option('sewn_ws_connection_history', $history);
         
         // Save memory history
@@ -228,11 +245,11 @@ class Process_Manager {
             'usage' => $stats['memory_usage'] ?? 0
         ];
         // Keep last 100 points
-        $memory_history = array_slice($memory_history, -SEWN_WS_HISTORY_MAX_POINTS);
+        $memory_history = array_slice($memory_history, -\SEWN_WS_HISTORY_MAX_POINTS);
         update_option('sewn_ws_memory_history', $memory_history);
         
         // Save server history
-        $server_history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $server_history = get_option(\SEWN_WS_SERVER_HISTORY_OPTION, []);
         $server_history[] = [
             'time' => time(),
             'action' => 'stop',
@@ -241,11 +258,11 @@ class Process_Manager {
             'connections' => count(self::get_active_connections())
         ];
         // Keep last 100 points
-        $server_history = array_slice($server_history, -SEWN_WS_HISTORY_MAX_POINTS);
-        update_option(SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
+        $server_history = array_slice($server_history, -\SEWN_WS_HISTORY_MAX_POINTS);
+        update_option(\SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
         
         // Save last known stats
-        update_option(SEWN_WS_LAST_STATS_OPTION, [
+        update_option(\SEWN_WS_LAST_STATS_OPTION, [
             'time' => time(),
             'memory' => $stats['memory_usage'] ?? 0,
             'uptime' => $stats['uptime'],
@@ -267,15 +284,15 @@ class Process_Manager {
      * Record server start in history
      */
     private function record_server_start() {
-        $server_history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $server_history = get_option(\SEWN_WS_SERVER_HISTORY_OPTION, []);
         $server_history[] = [
             'time' => time(),
             'action' => 'start',
             'pid' => file_exists($this->pid_file) ? (int)file_get_contents($this->pid_file) : null,
-            'port' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT)
+            'port' => get_option('sewn_ws_port', \SEWN_WS_DEFAULT_PORT)
         ];
-        $server_history = array_slice($server_history, -SEWN_WS_HISTORY_MAX_POINTS);
-        update_option(SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
+        $server_history = array_slice($server_history, -\SEWN_WS_HISTORY_MAX_POINTS);
+        update_option(\SEWN_WS_SERVER_HISTORY_OPTION, $server_history);
     }
 
     /**
@@ -335,7 +352,7 @@ class Process_Manager {
         
         // Try to get stats from stats file
         $stats = [];
-        $stats_file = SEWN_WS_PATH . 'tmp/stats.json';
+        $stats_file = \SEWN_WS_PATH . 'tmp/stats.json';
         if (file_exists($stats_file)) {
             $stats_content = file_get_contents($stats_file);
             if ($stats_content) {
@@ -424,7 +441,7 @@ class Process_Manager {
             }
             
             // 5. Default options - Use constants
-            update_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);  // Changed from 8080
+            update_option('sewn_ws_port', \SEWN_WS_DEFAULT_PORT);  // Changed from 8080
             update_option('sewn_ws_tls_enabled', false);
             update_option('sewn_ws_rate_limits', [
                 'free' => 10,
@@ -435,9 +452,9 @@ class Process_Manager {
 
             // Create required directories with proper permissions
             $dirs = [
-                SEWN_WS_PATH . 'logs',
-                SEWN_WS_PATH . 'tmp',
-                dirname(SEWN_WS_SERVER_CONFIG_FILE)
+                \SEWN_WS_PATH . 'logs',
+                \SEWN_WS_PATH . 'tmp',
+                dirname(\SEWN_WS_SERVER_CONFIG_FILE)
             ];
 
             foreach ($dirs as $dir) {
@@ -480,7 +497,7 @@ class Process_Manager {
 
     private static function create_default_config() {
         $config = [
-            'port' => get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT),  // Use constant
+            'port' => get_option('sewn_ws_port', \SEWN_WS_DEFAULT_PORT),  // Use constant
             'tls' => [
                 'enabled' => false,
                 'cert' => '',
@@ -492,7 +509,7 @@ class Process_Manager {
             ]
         ];
         
-        file_put_contents(SEWN_WS_NODE_SERVER . 'config.json', json_encode($config));
+        file_put_contents(\SEWN_WS_NODE_SERVER . 'config.json', json_encode($config));
     }
 
     public static function get_message_throughput() {
@@ -544,8 +561,8 @@ class Process_Manager {
      * @return array Server history
      */
     public static function get_server_history() {
-        $history = get_option(SEWN_WS_SERVER_HISTORY_OPTION, []);
-        $retention = time() - (SEWN_WS_HISTORY_RETENTION_DAYS * 86400);
+        $history = get_option(\SEWN_WS_SERVER_HISTORY_OPTION, []);
+        $retention = time() - (\SEWN_WS_HISTORY_RETENTION_DAYS * 86400);
         
         // Filter out old entries
         $history = array_filter($history, function($entry) use ($retention) {
@@ -561,7 +578,7 @@ class Process_Manager {
      * @return array Last known stats
      */
     public static function get_last_stats() {
-        return get_option(SEWN_WS_LAST_STATS_OPTION, [
+        return get_option(\SEWN_WS_LAST_STATS_OPTION, [
             'time' => 0,
             'memory' => 0,
             'uptime' => 0,
@@ -628,7 +645,7 @@ class Process_Manager {
      * @return bool True if server is running
      */
     private function is_server_running() {
-        $pid_file = SEWN_WS_PATH . 'node-server/server.pid';
+        $pid_file = \SEWN_WS_PATH . 'node-server/server.pid';
         
         if (!file_exists($pid_file)) {
             return false;
@@ -654,7 +671,7 @@ class Process_Manager {
             wp_send_json_error('Unauthorized');
         }
 
-        $stats_file = SEWN_WS_PATH . 'tmp/stats.json';
+        $stats_file = \SEWN_WS_PATH . 'tmp/stats.json';
         $stats = [];
 
         if (file_exists($stats_file)) {
@@ -671,7 +688,7 @@ class Process_Manager {
      * Detect if a server is already running (including external processes)
      */
     public function detect_running_server() {
-        $port = get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT);
+        $port = get_option(\SEWN_WS_OPTION_PORT, \SEWN_WS_DEFAULT_PORT);
         
         // First check if port is in use
         $sock = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
@@ -712,66 +729,118 @@ class Process_Manager {
     }
 
     /**
-     * Update process status and details
+     * Update process status
+     * 
+     * @param int $pid Process ID
+     * @return bool True if status was updated, false otherwise
      */
-    private function update_process_status($pid) {
-        // Update PID file
-        file_put_contents($this->pid_file, $pid);
-        
-        // Get process stats
-        $stats = $this->get_process_stats($pid);
-        
-        // Update WordPress options
-        update_option('sewn_ws_node_status', 'running');
-        update_option('sewn_ws_node_details', [
-            'pid' => $pid,
-            'uptime' => $stats['uptime'],
-            'memory' => $stats['memory'],
-            'connections' => $stats['connections'],
-            'last_update' => time(),
-            'external_start' => true
-        ]);
+    public function update_process_status($pid) {
+        if (!$pid) {
+            return false;
+        }
+
+        try {
+            $stats = [
+                'pid' => $pid,
+                'running' => true,
+                'uptime' => 0,
+                'memory' => 0
+            ];
+
+            // Update stats file
+            $stats_file = \SEWN_WS_PATH . 'tmp/stats.json';
+            file_put_contents($stats_file, json_encode($stats));
+
+            // Update PID file
+            $this->pid_file = \SEWN_WS_PLUGIN_DIR . 'tmp/server.pid';
+            file_put_contents($this->pid_file, $pid);
+
+            return true;
+        } catch (Exception $e) {
+            error_log('Failed to update process status: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
-     * Get detailed process statistics
+     * Start the WebSocket server process
+     * 
+     * @return bool|int Process ID if successful, false otherwise
      */
-    private function get_process_stats($pid) {
-        $stats = [
-            'uptime' => 0,
-            'memory' => 0,
-            'connections' => 0
+    public function start_process($command = '') {
+        // Check if we're in a local development environment
+        $site_url = get_site_url();
+        $is_local_dev = (
+            strpos($site_url, '.local') !== false || 
+            strpos($site_url, '.test') !== false || 
+            parse_url($site_url, PHP_URL_HOST) === 'localhost'
+        );
+
+        // Set environment variables for the Node process
+        $env = [
+            'WP_PLUGIN_DIR' => \SEWN_WS_PLUGIN_DIR,
+            'WP_CONTENT_DIR' => WP_CONTENT_DIR,
+            'WP_SITE_URL' => $site_url,
+            'WP_LOCAL_DEV' => $is_local_dev ? 'true' : 'false',
+            'NODE_ENV' => $is_local_dev ? 'development' : 'production'
         ];
-        
-        if (PHP_OS_FAMILY === 'Windows') {
-            // Windows stats collection
-            exec("wmic process where ProcessId=$pid get WorkingSetSize", $memory);
-            $stats['memory'] = isset($memory[1]) ? (int)$memory[1] : 0;
+
+        // Build the command if not provided
+        if (empty($command)) {
+            $node_path = get_option(\SEWN_WS_OPTION_NODE_PATH, 'node');
+            $port = get_option('sewn_ws_port', \SEWN_WS_DEFAULT_PORT);
+            $server_script = \SEWN_WS_PLUGIN_DIR . 'node-server/server.js';
+
+            $command = sprintf(
+                '%s %s --port=%d --plugin-dir=%s --wp-content-dir=%s 2>&1',
+                escapeshellcmd($node_path),
+                escapeshellarg($server_script),
+                intval($port),
+                escapeshellarg(\SEWN_WS_PLUGIN_DIR),
+                escapeshellarg(WP_CONTENT_DIR)
+            );
+        }
+
+        // Start the process
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w']
+        ];
+
+        $process = proc_open($command, $descriptors, $pipes, \SEWN_WS_PLUGIN_DIR, $env);
+
+        if (is_resource($process)) {
+            // Close input pipe
+            fclose($pipes[0]);
+
+            // Read output and error streams
+            $output = stream_get_contents($pipes[1]);
+            $error = stream_get_contents($pipes[2]);
+
+            // Close remaining pipes
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+
+            // Get process information
+            $status = proc_get_status($process);
             
-            exec("wmic process where ProcessId=$pid get CreationDate", $created);
-            if (isset($created[1])) {
-                $stats['uptime'] = time() - strtotime($created[1]);
+            if ($status['running']) {
+                $pid = $status['pid'];
+                
+                // Update process status
+                $this->update_process_status($pid);
+                
+                return $pid;
             }
-        } else {
-            // Unix stats collection
-            exec("ps -o etimes= -p $pid", $uptime);
-            $stats['uptime'] = isset($uptime[0]) ? (int)$uptime[0] : 0;
-            
-            exec("ps -o rss= -p $pid", $memory);
-            $stats['memory'] = isset($memory[0]) ? (int)$memory[0] * 1024 : 0;
+
+            // Log error if process failed to start
+            if ($error) {
+                error_log('WebSocket server failed to start: ' . $error);
+            }
         }
-        
-        // Get active connections
-        $port = get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT);
-        if (PHP_OS_FAMILY === 'Windows') {
-            exec("netstat -an | findstr :$port | findstr ESTABLISHED", $connections);
-            $stats['connections'] = count($connections);
-        } else {
-            exec("netstat -an | grep :$port | grep ESTABLISHED | wc -l", $connections);
-            $stats['connections'] = (int)trim($connections[0]);
-        }
-        
-        return $stats;
+
+        return false;
     }
 
     /**
@@ -786,6 +855,43 @@ class Process_Manager {
         
         $pid = intval(file_get_contents($this->pid_file));
         return $pid > 0 ? $pid : null;
+    }
+
+    /**
+     * Kill a specific process
+     * 
+     * @param int $pid Process ID to kill
+     * @return bool True if process was killed successfully
+     */
+    public function kill_process($pid) {
+        if (PHP_OS_FAMILY === 'Windows') {
+            exec("taskkill /F /PID $pid 2>&1", $output, $return_var);
+        } else {
+            exec("kill -9 $pid 2>&1", $output, $return_var);
+        }
+
+        if ($return_var === 0) {
+            if (file_exists($this->pid_file)) {
+                unlink($this->pid_file);
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Kill the current process
+     * 
+     * @return bool True if process was killed successfully
+     */
+    public function kill_current_process() {
+        if (!file_exists($this->pid_file)) {
+            return true;
+        }
+
+        $pid = (int)file_get_contents($this->pid_file);
+        return $this->kill_process($pid);
     }
 }
 

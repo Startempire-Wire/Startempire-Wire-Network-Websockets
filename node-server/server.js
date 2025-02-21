@@ -17,7 +17,18 @@ const winston = require('winston');
 const Redis = require('redis');
 const { networkInterfaces } = require('os');
 const { ensureDirectoryExists } = require('./utils');
-const config = require('./config');
+
+// Determine if we're in local development
+const isLocalDev = process.env.NODE_ENV === 'development' ||
+    process.env.WP_LOCAL_DEV === 'true' ||
+    (process.env.WP_HOST && (
+        process.env.WP_HOST.includes('.local') ||
+        process.env.WP_HOST.includes('.test') ||
+        ['localhost', '127.0.0.1'].includes(process.env.WP_HOST)
+    ));
+
+// Load appropriate config
+const config = isLocalDev ? require('./config.local') : require('./config');
 
 // Load environment variables first
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -334,91 +345,35 @@ async function initializeServer() {
         // Initialize Redis if configured
         await initializeRedis();
 
-        // Create Express app instance
+        // Create Express app
         app = express();
 
-        // Create HTTP/HTTPS server instance
-        server = process.env.WP_SSL === 'true' && process.env.WP_SSL_KEY && process.env.WP_SSL_CERT
-            ? https.createServer({
-                key: fs.readFileSync(process.env.WP_SSL_KEY),
-                cert: fs.readFileSync(process.env.WP_SSL_CERT)
-            }, app)
-            : http.createServer(app);
-
-        // Try to bind to a port with retries
-        let currentPort = port;
-        let attempts = 0;
-        const maxRetries = 10;
-
-        while (attempts < maxRetries) {
-            try {
-                // Check if port is available
-                const isAvailable = await isPortAvailable(currentPort);
-                if (!isAvailable) {
-                    logger.warn(`Port ${currentPort} is in use, trying next port...`);
-                    currentPort++;
-                    attempts++;
-                    continue;
-                }
-
-                // Try to bind the server
-                await new Promise((resolve, reject) => {
-                    const bindTimeout = setTimeout(() => {
-                        server.removeAllListeners();
-                        reject(new Error('Port binding timeout'));
-                    }, 5000);
-
-                    server.once('error', (err) => {
-                        clearTimeout(bindTimeout);
-                        reject(err);
-                    });
-
-                    server.once('listening', () => {
-                        clearTimeout(bindTimeout);
-                        resolve();
-                    });
-
-                    server.listen(currentPort, host);
-                });
-
-                logger.info(`Server bound successfully to port ${currentPort}`);
-                break;
-            } catch (err) {
-                logger.warn(`Failed to bind to port ${currentPort}:`, err.message);
-                if (err.code === 'EADDRINUSE') {
-                    currentPort++;
-                    attempts++;
-                    continue;
-                }
-                throw err;
-            }
+        // Setup CORS if configured
+        if (config.cors) {
+            const cors = require('cors');
+            app.use(cors(config.cors));
         }
 
-        if (attempts >= maxRetries) {
-            throw new Error(`Failed to find available port after ${maxRetries} attempts`);
+        // Create HTTP/HTTPS server based on config
+        if (config.environment.ssl.enabled && !config.environment.isLocal) {
+            const sslOptions = {
+                key: fs.readFileSync(config.environment.ssl.key),
+                cert: fs.readFileSync(config.environment.ssl.cert)
+            };
+            server = https.createServer(sslOptions, app);
+            logger.info('Created HTTPS server with SSL');
+        } else {
+            server = http.createServer(app);
+            logger.info('Created HTTP server' + (config.environment.isLocal ? ' (local development)' : ''));
         }
 
-        // Write PID file
-        await fsPromises.writeFile(pidFile, JSON.stringify({
-            pid: process.pid,
-            port: currentPort,
-            host: host,
-            startTime: Date.now()
-        }));
-
-        // Initialize Socket.IO with the server
+        // Initialize Socket.IO with CORS settings
         io = new Server(server, {
-            transports: ['websocket', 'polling'],
-            pingTimeout: 60000,
-            pingInterval: 25000,
-            cors: {
-                origin: process.env.WP_SITE_URL || "*",
-                methods: ["GET", "POST", "OPTIONS"],
-                credentials: true
+            cors: config.cors || {
+                origin: "*",
+                methods: ["GET", "POST"]
             },
-            path: process.env.WP_PROXY_PATH || '/socket.io',
-            allowEIO3: true,
-            connectTimeout: 45000
+            transports: ['websocket', 'polling']
         });
 
         // Initialize managers

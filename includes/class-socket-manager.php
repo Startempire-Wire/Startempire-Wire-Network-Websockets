@@ -17,6 +17,10 @@ if (!defined('SEWN_WS_PLUGIN_DIR')) {
     define('SEWN_WS_PLUGIN_DIR', plugin_dir_path(dirname(__FILE__)));
 }
 
+if (!defined('SEWN_WS_PLUGIN_URL')) {
+    define('SEWN_WS_PLUGIN_URL', plugin_dir_url(dirname(__FILE__)));
+}
+
 if (!defined('SEWN_WS_OPTION_NODE_PATH')) {
     define('SEWN_WS_OPTION_NODE_PATH', 'sewn_ws_node_path');
 }
@@ -56,11 +60,86 @@ class Socket_Manager {
         
         add_action('admin_post_sewn_ws_start_server', [$instance, 'handle_start_server']);
         add_action('admin_post_sewn_ws_stop_server', [$instance, 'handle_stop_server']);
+        add_action('admin_enqueue_scripts', [$instance, 'enqueue_admin_scripts']);
         
         // Initialize server status
         if (get_option(SEWN_WS_OPTION_SERVER_STATUS) === false) {
             update_option(SEWN_WS_OPTION_SERVER_STATUS, SEWN_WS_SERVER_STATUS_STOPPED);
         }
+    }
+
+    /**
+     * Enqueue admin scripts and initialize configuration
+     */
+    public function enqueue_admin_scripts($hook) {
+        if (strpos($hook, 'sewn-websockets') === false) {
+            return;
+        }
+
+        // Enqueue Socket.IO client
+        wp_enqueue_script(
+            'socket.io-client',
+            'https://cdn.socket.io/4.5.4/socket.io.min.js',
+            [],
+            '4.5.4',
+            true
+        );
+
+        // Enqueue admin script
+        wp_enqueue_script(
+            'sewn-ws-admin',
+            SEWN_WS_PLUGIN_URL . 'admin/js/admin.js',
+            ['jquery', 'socket.io-client'],
+            SEWN_WS_VERSION,
+            true
+        );
+
+        // Get server configuration
+        $port = get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT);
+        $is_ssl = is_ssl();
+        $host = parse_url(get_site_url(), PHP_URL_HOST);
+        
+        // Check if we're in a local development environment
+        $is_local_dev = (
+            strpos($host, '.local') !== false || 
+            strpos($host, '.test') !== false || 
+            in_array($host, ['localhost', '127.0.0.1'])
+        );
+
+        // For local development, use WS even with HTTPS
+        $ws_protocol = ($is_ssl && !$is_local_dev) ? 'wss' : 'ws';
+
+        // Initialize configuration
+        $config = [
+            'url' => sprintf(
+                '%s://%s:%d',
+                $ws_protocol,
+                $host,
+                $port
+            ),
+            'isLocalDev' => $is_local_dev,
+            'pageProtocol' => $is_ssl ? 'https:' : 'http:',
+            'wsProtocol' => $ws_protocol . ':',
+            'token' => wp_create_nonce('sewn_ws_socket_auth'),
+            'debug' => defined('WP_DEBUG') && WP_DEBUG,
+            'maxReconnectAttempts' => 5,
+            'reconnectDelay' => 1000,
+            'timeout' => 5000
+        ];
+
+        // Localize script
+        wp_localize_script('sewn-ws-admin', 'SEWN_WS_CONFIG', $config);
+        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('sewn_ws_admin'),
+            'i18n' => [
+                'connecting' => __('Connecting...', 'sewn-ws'),
+                'connected' => __('Connected', 'sewn-ws'),
+                'disconnected' => __('Disconnected', 'sewn-ws'),
+                'error' => __('Error', 'sewn-ws'),
+                'retry' => __('Retrying...', 'sewn-ws')
+            ]
+        ]);
     }
 
     /**
@@ -186,14 +265,14 @@ class Socket_Manager {
             $pid = $process_manager->detect_running_server();
             
             if ($pid) {
-                return $process_manager->stop_process($pid);
+                return $process_manager->kill_process($pid);
             }
             
             return false;
         }
         
         // Stop managed process
-        return $process_manager->stop_current_process();
+        return $process_manager->kill_current_process();
     }
 
     /**

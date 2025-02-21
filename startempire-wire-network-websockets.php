@@ -183,7 +183,7 @@ if(SEWN_WS_DEBUG) {
 
 // Initialize Process Manager early
 add_action('init', function() {
-    $process_manager = new Process_Manager();
+    $process_manager = Process_Manager::get_instance();
     $process_manager->init();
 }, 5); // Priority 5 to run before default priority
 

@@ -4,6 +4,8 @@ jQuery(document).ready(function ($) {
     let socketInitialized = false;
     let pollInterval = 1000;
     const maxPollInterval = 5000;
+    let socketReconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
 
     // Environment check handler
     $('#check-environment').on('click', function () {
@@ -273,21 +275,152 @@ jQuery(document).ready(function ($) {
         });
     })(jQuery);
 
+    function verifySocketIOLoaded() {
+        if (typeof io === 'undefined') {
+            console.error('[SEWN WebSocket] Socket.IO client not loaded. Please check your network connection or contact support.');
+            $('#socket-status')
+                .text('Socket.IO Not Loaded')
+                .removeClass('status-ok')
+                .addClass('status-error');
+            return false;
+        }
+        return true;
+    }
+
+    function verifyConfig() {
+        if (!window.SEWN_WS_CONFIG) {
+            console.error('[SEWN WebSocket] Configuration not found. Please refresh the page or contact support.');
+            return false;
+        }
+        return true;
+    }
+
+    function getWebSocketUrl() {
+        if (!window.SEWN_WS_CONFIG || !window.SEWN_WS_CONFIG.url) {
+            console.error('[SEWN WebSocket] Invalid configuration: Missing WebSocket URL');
+            return null;
+        }
+
+        try {
+            const url = new URL(window.SEWN_WS_CONFIG.url);
+            // Automatically switch protocol based on page protocol
+            url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return url.toString();
+        } catch (e) {
+            console.error('[SEWN WebSocket] Invalid WebSocket URL:', e);
+            return null;
+        }
+    }
+
+    function initializeSocketMonitoring() {
+        if (!verifySocketIOLoaded() || !verifyConfig()) {
+            return;
+        }
+
+        const wsUrl = getWebSocketUrl();
+        if (!wsUrl) {
+            return;
+        }
+
+        try {
+            const socket = io(wsUrl, {
+                path: '/socket.io',
+                transports: ['websocket'],
+                reconnectionAttempts: maxReconnectAttempts,
+                reconnectionDelay: 1000,
+                timeout: 5000,
+                auth: {
+                    token: window.SEWN_WS_CONFIG.token
+                }
+            });
+
+            // Connection event handlers
+            socket.on('connect', function () {
+                console.log('[SEWN WebSocket] Admin socket connected');
+                socketInitialized = true;
+                socketReconnectAttempts = 0;
+                $('#socket-status')
+                    .text('Connected')
+                    .removeClass('status-error')
+                    .addClass('status-ok');
+            });
+
+            socket.on('connect_error', function (error) {
+                console.warn('[SEWN WebSocket] Connection error:', error.message);
+                socketReconnectAttempts++;
+
+                const statusMessage = socketReconnectAttempts >= maxReconnectAttempts
+                    ? 'Connection Failed (Max Retries)'
+                    : `Connection Error (Attempt ${socketReconnectAttempts}/${maxReconnectAttempts})`;
+
+                $('#socket-status')
+                    .text(statusMessage)
+                    .removeClass('status-ok')
+                    .addClass('status-error');
+
+                if (socketReconnectAttempts >= maxReconnectAttempts) {
+                    console.error('[SEWN WebSocket] Max reconnection attempts reached. Please check your configuration.');
+                    socket.close();
+                }
+            });
+
+            socket.on('disconnect', function (reason) {
+                console.log('[SEWN WebSocket] Disconnected:', reason);
+                $('#socket-status')
+                    .text('Disconnected: ' + reason)
+                    .removeClass('status-ok')
+                    .addClass('status-error');
+            });
+
+            socket.on('error', function (error) {
+                console.error('[SEWN WebSocket] Socket error:', error);
+                $('#socket-status')
+                    .text('Error: ' + (error.message || 'Unknown error'))
+                    .removeClass('status-ok')
+                    .addClass('status-error');
+            });
+
+            // Server stats handler
+            socket.on('server_stats', function (stats) {
+                try {
+                    updateServerUI(stats, false);
+                } catch (e) {
+                    console.error('[SEWN WebSocket] Error updating UI:', e);
+                }
+            });
+
+            // Handle window unload
+            window.addEventListener('beforeunload', function () {
+                if (socket.connected) {
+                    socket.close();
+                }
+            });
+
+        } catch (e) {
+            console.error('[SEWN WebSocket] Error initializing socket:', e);
+            $('#socket-status')
+                .text('Initialization Error')
+                .removeClass('status-ok')
+                .addClass('status-error');
+        }
+    }
+
     function checkServerStatus() {
         $.post(ajaxurl, {
             action: 'sewn_ws_check_server_status',
             nonce: sewn_ws_admin.nonce
         }).done(function (response) {
-            if (response.status === 'running') {
-                updateServerUI(response.details, response.external);
-                if (!socketInitialized) {
+            if (response.success && response.data) {
+                updateServerUI(response.data.details || {}, response.data.external || false);
+                if (!socketInitialized && response.data.running) {
                     initializeSocketMonitoring();
                 }
             } else {
+                console.warn('[SEWN WebSocket] Invalid server status response:', response);
                 updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
             }
         }).fail(function (error) {
-            console.error('Server status check failed:', error);
+            console.error('[SEWN WebSocket] Server status check failed:', error);
             updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
         });
     }
@@ -340,50 +473,6 @@ jQuery(document).ready(function ($) {
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
 
         return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
-    }
-
-    function initializeSocketMonitoring() {
-        if (typeof io === 'undefined') {
-            console.error('Socket.IO client not loaded');
-            return;
-        }
-
-        const socket = io(window.SEWN_WS_CONFIG.url, {
-            path: '/socket.io',
-            transports: ['websocket'],
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 5000,
-            auth: {
-                token: window.SEWN_WS_CONFIG.token
-            }
-        });
-
-        socket.on('connect', function () {
-            console.log('Admin socket connected');
-            socketInitialized = true;
-            $('#socket-status').text('Connected')
-                .removeClass('status-error')
-                .addClass('status-ok');
-        });
-
-        socket.on('connect_error', function (error) {
-            console.warn('Socket connection error:', error);
-            $('#socket-status').text('Connection Error')
-                .removeClass('status-ok')
-                .addClass('status-error');
-        });
-
-        socket.on('disconnect', function () {
-            console.log('Admin socket disconnected');
-            $('#socket-status').text('Disconnected')
-                .removeClass('status-ok')
-                .addClass('status-error');
-        });
-
-        socket.on('server_stats', function (stats) {
-            updateServerUI(stats, false);
-        });
     }
 
     function setupPolling() {

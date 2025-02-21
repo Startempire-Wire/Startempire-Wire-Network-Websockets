@@ -6,15 +6,14 @@
  * Purpose: Centralizes plugin-wide constant definitions and configuration values. Ensures consistent access to critical paths and settings across all plugin components.
  */
 
-// namespace SEWN\WebSockets; <-- COMMENT THIS OUT
-
 defined('ABSPATH') || exit;
 
-// Define constants
+// Define constants in global namespace
 define('SEWN_WS_PATH', plugin_dir_path(__FILE__));
+define('SEWN_WS_PLUGIN_DIR', plugin_dir_path(dirname(__FILE__)) . DIRECTORY_SEPARATOR);
 define('SEWN_WS_URL', plugin_dir_url(__FILE__));
 define('SEWN_WS_NS', __NAMESPACE__);
-define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR);
+define('SEWN_WS_NODE_SERVER', SEWN_WS_PLUGIN_DIR . 'node-server' . DIRECTORY_SEPARATOR);
 
 // Text domains and internationalization
 !defined('SEWN_WS_TEXT_DOMAIN') && define('SEWN_WS_TEXT_DOMAIN', 'sewn-ws');
@@ -81,9 +80,9 @@ if (defined('SEWN_WS_ENV_DEFAULT_PORT') && !(defined('DOING_AJAX') && DOING_AJAX
 
 // Server Control Constants
 !defined('SEWN_WS_SERVER_CONTROL_PATH') && define('SEWN_WS_SERVER_CONTROL_PATH', SEWN_WS_PATH . 'tmp/');
-!defined('SEWN_WS_SERVER_PID_FILE') && define('SEWN_WS_SERVER_PID_FILE', SEWN_WS_SERVER_CONTROL_PATH . 'server.pid');
-!defined('SEWN_WS_SERVER_LOG_FILE') && define('SEWN_WS_SERVER_LOG_FILE', SEWN_WS_PATH . 'logs/server.log');
-!defined('SEWN_WS_SERVER_CONFIG_FILE') && define('SEWN_WS_SERVER_CONFIG_FILE', SEWN_WS_NODE_SERVER . 'config.json');
+!defined('SEWN_WS_SERVER_PID_FILE') && define('SEWN_WS_SERVER_PID_FILE', SEWN_WS_PLUGIN_DIR . 'tmp/server.pid');
+!defined('SEWN_WS_SERVER_LOG_FILE') && define('SEWN_WS_SERVER_LOG_FILE', SEWN_WS_PLUGIN_DIR . 'logs/server.log');
+!defined('SEWN_WS_SERVER_CONFIG_FILE') && define('SEWN_WS_SERVER_CONFIG_FILE', SEWN_WS_PLUGIN_DIR . 'node-server/config.json');
 !defined('SEWN_WS_SERVER_STATUS_CHECK_ACTION') && define('SEWN_WS_SERVER_STATUS_CHECK_ACTION', 'sewn_ws_check_server_status');
 
 // WebSocket Stats Constants
@@ -114,7 +113,7 @@ define('SEWN_WS_IS_LOCAL', (
 
 // History and Stats Constants
 !defined('SEWN_WS_HISTORY_MAX_POINTS') && define('SEWN_WS_HISTORY_MAX_POINTS', 100);
-!defined('SEWN_WS_HISTORY_RETENTION_DAYS') && define('SEWN_WS_HISTORY_RETENTION_DAYS', 7);
+!defined('SEWN_WS_HISTORY_RETENTION_DAYS') && define('SEWN_WS_HISTORY_RETENTION_DAYS', 30);
 !defined('SEWN_WS_SERVER_HISTORY_OPTION') && define('SEWN_WS_SERVER_HISTORY_OPTION', 'sewn_ws_server_history');
 !defined('SEWN_WS_STATS_HISTORY_OPTION') && define('SEWN_WS_STATS_HISTORY_OPTION', 'sewn_ws_stats_history');
 !defined('SEWN_WS_LAST_STATS_OPTION') && define('SEWN_WS_LAST_STATS_OPTION', 'sewn_ws_last_stats');
