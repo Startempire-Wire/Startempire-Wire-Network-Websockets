@@ -39,10 +39,24 @@ $status_class = $node_status['running'] ? 'running' :
 $status_text = $node_status['running'] ? '✓ Operational' : 
     (isset($node_status['status']) && $node_status['status'] === 'uninitialized' ? 'Uninitialized' : '✗ Stopped');
 
-// Get configuration
-$server_config = Config::get_server_config();
-$env_config = Config::get_environment_config();
-$client_config = Config::get_client_config();
+// Get configuration from WordPress constants
+$server_config = [
+    'port' => SEWN_WS_DEFAULT_PORT,
+    'environment' => [
+        'is_local' => SEWN_WS_IS_LOCAL,
+        'ssl_enabled' => get_option(SEWN_WS_OPTION_SSL_CERT) && get_option(SEWN_WS_OPTION_SSL_KEY),
+        'debug_enabled' => defined('WP_DEBUG') && WP_DEBUG
+    ],
+    'server' => [
+        'status' => get_option(SEWN_WS_OPTION_SERVER_STATUS, SEWN_WS_SERVER_STATUS_UNINITIALIZED),
+        'connection_timeout' => 45000,
+        'reconnection_attempts' => 3
+    ],
+    'stats' => [
+        'update_interval' => SEWN_WS_STATS_UPDATE_INTERVAL,
+        'max_history_points' => SEWN_WS_HISTORY_MAX_POINTS
+    ]
+];
 
 ?>
 
@@ -1028,8 +1042,8 @@ $client_config = Config::get_client_config();
 
 <script>
 jQuery(document).ready(function($) {
-    // Add Socket.IO configuration
-    window.SEWN_WS_CONFIG = <?php echo json_encode($client_config); ?>;
+    // Add Socket.IO configuration using WordPress constants
+    window.SEWN_WS_CONFIG = <?php echo json_encode($server_config); ?>;
 
     // Initialize Socket.IO monitoring
     function initializeSocketMonitoring() {

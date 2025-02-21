@@ -1,0 +1,33 @@
+{
+  "channels": {
+    "message": {
+      "subscribers": 0,
+      "messages": 0
+    },
+    "presence": {
+      "subscribers": 0,
+      "messages": 0
+    },
+    "status": {
+      "subscribers": 0,
+      "messages": 0
+    }
+  },
+  "tiers": {
+    "free": {
+      "connections": 0,
+      "bandwidth": 0
+    },
+    "api": {
+      "connections": 0,
+      "bandwidth": 0
+    },
+    "admin": {
+      "connections": 0,
+      "bandwidth": 0
+    }
+  },
+  "namespaces": {},
+  "shutdown_time": 1740130025775,
+  "shutdown_reason": "normal"
+}

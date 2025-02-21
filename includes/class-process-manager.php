@@ -84,97 +84,49 @@ class Process_Manager {
     }
 
     /**
-     * Start the Node.js server
+     * Start the WebSocket server
      *
-     * @return array Status of server start attempt
+     * @return bool True if server started successfully
      */
-    public function start_server() {
-        if ($this->is_running()) {
-            error_log('[SEWN WebSocket] Start server called but server is already running');
-            return [
-                'success' => false,
-                'message' => 'Server is already running'
-            ];
+    public static function start_server() {
+        // Generate WordPress constants for Node.js
+        if (!Config::generate_node_constants()) {
+            error_log('Failed to generate WordPress constants for Node.js server');
+            return false;
         }
 
-        // Clean up any stale files
-        $this->cleanup_stale_files();
-
-        // Get and validate port configuration
-        $port = $this->get_server_port();
-        error_log(sprintf('[SEWN WebSocket] Starting server with port: %d', $port));
-
-        // Check if port is available
-        if (!$this->is_port_available($port)) {
-            $error_message = sprintf('Port %d is already in use. Please configure a different port in settings.', $port);
-            error_log('[SEWN WebSocket] ' . $error_message);
-            return [
-                'success' => false,
-                'message' => $error_message
-            ];
-        }
-
-        // Set up environment variables for Node process with detailed logging
-        $env = [
-            'WP_PLUGIN_DIR' => SEWN_WS_PATH,
-            'WP_PORT' => (string)$port,
-            'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false',
-            'WP_PID_FILE' => $this->pid_file,
-            'WP_LOG_FILE' => $this->log_file,
-            'WP_STATS_FILE' => SEWN_WS_PATH . 'tmp/stats.json',
-            'NODE_ENV' => defined('WP_DEBUG') && WP_DEBUG ? 'development' : 'production'
+        // Create required directories
+        $dirs = [
+            dirname(SEWN_WS_SERVER_PID_FILE),
+            dirname(SEWN_WS_SERVER_LOG_FILE)
         ];
 
-        error_log('[SEWN WebSocket] Environment configuration:');
-        error_log(print_r($env, true));
-
-        // Build environment string
-        $env_string = '';
-        foreach ($env as $key => $value) {
-            $env_string .= sprintf('%s=%s ', escapeshellarg($key), escapeshellarg($value));
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+            }
         }
 
-        // Build command with proper path handling and logging
+        // Start server process
+        $node_script = SEWN_WS_NODE_SERVER . 'server.js';
         $command = sprintf(
-            'cd %s && %s %s %s > %s 2>&1 & echo $!',
-            escapeshellarg(SEWN_WS_NODE_SERVER),
-            $env_string,
-            escapeshellcmd($this->get_node_path()),
-            escapeshellarg('server.js'),
-            escapeshellarg($this->log_file)
+            'node %s > %s 2>&1 & echo $! > %s',
+            escapeshellarg($node_script),
+            escapeshellarg(SEWN_WS_SERVER_LOG_FILE),
+            escapeshellarg(SEWN_WS_SERVER_PID_FILE)
         );
-
-        error_log('[SEWN WebSocket] Executing command: ' . $command);
 
         exec($command, $output, $return_var);
 
         if ($return_var !== 0) {
-            return [
-                'success' => false,
-                'message' => 'Failed to start server'
-            ];
+            error_log('Failed to start WebSocket server: ' . implode("\n", $output));
+            return false;
         }
 
-        // Wait briefly and verify process is still running
-        sleep(1);
-        if (!$this->is_running()) {
-            // Read the last few lines of the log for error details
-            $error_log = $this->get_log_tail(5);
-            return [
-                'success' => false,
-                'message' => 'Server failed to start. Check error log.',
-                'error_details' => $error_log
-            ];
-        }
+        // Update server status
+        update_option(SEWN_WS_OPTION_SERVER_STATUS, SEWN_WS_SERVER_STATUS_RUNNING);
 
-        // Record server start in history
-        $this->record_server_start();
-
-        return [
-            'success' => true,
-            'message' => 'Server started successfully',
-            'pid' => file_get_contents($this->pid_file)
-        ];
+        return true;
     }
 
     /**

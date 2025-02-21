@@ -1,0 +1,14 @@
+{
+  "uptime": 26,
+  "memory": {
+    "heapUsed": "15.38MB",
+    "external": 2.15,
+    "rss": 50.25
+  },
+  "connections": 0,
+  "messages": {
+    "in": 0,
+    "out": 0,
+    "errors": 0
+  }
+}

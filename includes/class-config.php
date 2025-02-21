@@ -353,6 +353,32 @@ class Config {
         $option_name = 'sewn_ws_' . $key;
         return update_option($option_name, $value);
     }
+
+    /**
+     * Generate WordPress constants JSON for Node.js server
+     *
+     * @return bool True if file was written successfully
+     */
+    public static function generate_node_constants() {
+        $constants = [
+            'SEWN_WS_DEFAULT_PORT' => SEWN_WS_DEFAULT_PORT,
+            'SEWN_WS_SERVER_CONTROL_PATH' => SEWN_WS_SERVER_CONTROL_PATH,
+            'SEWN_WS_SERVER_PID_FILE' => SEWN_WS_SERVER_PID_FILE,
+            'SEWN_WS_SERVER_LOG_FILE' => SEWN_WS_SERVER_LOG_FILE,
+            'SEWN_WS_NODE_SERVER' => SEWN_WS_NODE_SERVER,
+            'SEWN_WS_ENV_DEBUG_ENABLED' => defined('WP_DEBUG') && WP_DEBUG,
+            'SEWN_WS_STATS_UPDATE_INTERVAL' => SEWN_WS_STATS_UPDATE_INTERVAL,
+            'SEWN_WS_HISTORY_MAX_POINTS' => SEWN_WS_HISTORY_MAX_POINTS,
+            'SEWN_WS_IS_LOCAL' => SEWN_WS_IS_LOCAL
+        ];
+
+        $json_file = SEWN_WS_NODE_SERVER . 'wp-constants.json';
+        
+        return file_put_contents(
+            $json_file,
+            json_encode($constants, JSON_PRETTY_PRINT)
+        ) !== false;
+    }
 }
 
 // Initialize configuration on plugin load

@@ -288,4 +288,52 @@ class Server_Controller {
         error_log("Channel stats request received");
         wp_send_json_success(['status' => 'ok']);
     }
+
+    private function get_port() {
+        return get_option('sewn_ws_port', 49200);
+    }
+
+    private function get_host() {
+        return get_option('sewn_ws_host', 'localhost');
+    }
+
+    private function get_stats_file() {
+        return $this->get_server_path('stats.json');
+    }
+
+    private function get_pid_file() {
+        return $this->get_server_path('server.pid');
+    }
+
+    private function get_log_file() {
+        return $this->get_server_path('server.log');
+    }
+
+    private function get_server_path($file) {
+        return plugin_dir_path(dirname(__FILE__)) . 'node-server/' . $file;
+    }
+
+    private function get_server_env() {
+        $env = [
+            'WP_PORT' => $this->get_port(),
+            'WP_HOST' => $this->get_host(),
+            'WP_DEBUG' => defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false',
+            'NODE_ENV' => defined('WP_DEBUG') && WP_DEBUG ? 'development' : 'production',
+            'WP_PLUGIN_DIR' => plugin_dir_path(dirname(__FILE__)),
+            'WP_STATS_FILE' => $this->get_stats_file(),
+            'WP_PID_FILE' => $this->get_pid_file(),
+            'WP_LOG_FILE' => $this->get_log_file(),
+            'WP_PROXY_PATH' => '/websocket',
+            'WP_JWT_SECRET' => defined('SECURE_AUTH_KEY') ? SECURE_AUTH_KEY : wp_salt('auth'),
+            'WP_SITE_URL' => get_site_url()
+        ];
+
+        // Only add Redis URL if configured
+        $redis_url = get_option('sewn_ws_redis_url', false);
+        if ($redis_url) {
+            $env['REDIS_URL'] = $redis_url;
+        }
+
+        return $env;
+    }
 } 

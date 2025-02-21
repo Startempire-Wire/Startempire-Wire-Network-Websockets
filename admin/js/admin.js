@@ -269,70 +269,92 @@ jQuery(document).ready(function ($) {
         });
     })(jQuery);
 
-    // Initialize WebSocket test client with proper Socket.IO protocol handling
-    function initializeTestSocket(wsUrl) {
-        const socket = io(wsUrl, {
-            path: '/socket.io',
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 3,
-            timeout: 45000,
-            auth: {
-                token: sewnWsAdmin.adminToken // Admin token from PHP
+    // Initialize WebSocket connection with admin authentication
+    async function initializeAdminSocket() {
+        try {
+            // Get admin token from WordPress
+            const response = await fetch(sewn_ws_admin.ajax_url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    action: 'sewn_ws_authenticate',
+                    _ajax_nonce: sewn_ws_admin.nonce
+                })
+            });
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error('Failed to get authentication token');
             }
-        });
 
-        // Handle connection phases
-        socket.on('connect_error', (error) => {
-            logMessage(`Connection error: ${error.message}`, 'system');
-            updateConnectionStatus('disconnected', 'Connection Failed');
-        });
+            // Initialize Socket.IO connection with admin token
+            const socket = io(sewn_ws_admin.site_protocol + '://' + window.location.hostname + ':' + sewn_ws_admin.port, {
+                path: '/socket.io',
+                auth: {
+                    token: data.data.token
+                }
+            });
 
-        socket.on('connect', () => {
-            // Send explicit connect packet for namespace
-            socket.emit('connect');
-            logMessage('Socket.IO connection established, sending CONNECT packet...', 'system');
-        });
+            // Connect to admin namespace
+            const adminSocket = socket.of('/admin');
 
-        socket.on('connect_confirmed', (data) => {
-            updateConnectionStatus('connected', 'Connected');
-            logMessage(`Connection confirmed - Socket ID: ${data.socketId}`, 'system');
-            $('.connection-details').show();
-            $('.disconnect-test, .message-input input, .send-message').prop('disabled', false);
-            startLatencyCheck(socket);
-        });
+            // Handle connection events
+            adminSocket.on('connect', () => {
+                console.log('Connected to admin namespace');
+                updateServerStatus('running');
+            });
 
-        socket.on('disconnect', (reason) => {
-            updateConnectionStatus('disconnected', `Disconnected: ${reason}`);
-            logMessage(`Disconnected: ${reason}`, 'system');
-            $('.disconnect-test, .message-input input, .send-message').prop('disabled', true);
-            stopLatencyCheck();
-        });
+            adminSocket.on('disconnect', () => {
+                console.log('Disconnected from admin namespace');
+                updateServerStatus('stopped');
+            });
 
-        socket.on('server_shutdown', (data) => {
-            logMessage(`Server shutting down: ${data.reason}`, 'system');
-            socket.close();
-        });
+            adminSocket.on('error', (error) => {
+                console.error('Admin socket error:', error);
+                updateServerStatus('error');
+            });
 
-        return socket;
+            // Store socket reference
+            window.adminSocket = adminSocket;
+
+            return adminSocket;
+        } catch (error) {
+            console.error('Failed to initialize admin socket:', error);
+            updateServerStatus('error');
+            throw error;
+        }
     }
 
-    // Update the test connection handler
-    $('.test-connection').on('click', function () {
-        const button = $(this);
-        button.prop('disabled', true);
+    // Update UI based on server status
+    function updateServerStatus(status) {
+        const statusElement = document.getElementById('server-status');
+        if (!statusElement) return;
 
-        const siteUrl = window.location.hostname;
-        const isSecure = window.location.protocol === 'https:';
-        const port = sewnWsAdmin.serverPort || (isSecure ? '443' : '80');
-        const wsUrl = `${isSecure ? 'wss:' : 'ws:'}//${siteUrl}:${port}`;
+        const statusMap = {
+            running: {
+                text: 'Running',
+                class: 'status-running'
+            },
+            stopped: {
+                text: 'Stopped',
+                class: 'status-stopped'
+            },
+            error: {
+                text: 'Error',
+                class: 'status-error'
+            }
+        };
 
-        try {
-            testSocket = initializeTestSocket(wsUrl);
-            $('.connection-url').text(wsUrl);
-        } catch (error) {
-            logMessage(`Failed to initialize connection: ${error.message}`, 'system');
-            button.prop('disabled', false);
-        }
+        const statusInfo = statusMap[status] || statusMap.error;
+        statusElement.textContent = statusInfo.text;
+        statusElement.className = 'server-status ' + statusInfo.class;
+    }
+
+    // Initialize when document is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeAdminSocket().catch(console.error);
     });
 }); 

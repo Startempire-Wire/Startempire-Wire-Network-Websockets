@@ -8,39 +8,65 @@ const express = require('express');
 const { Server } = require('socket.io');
 const http = require('http');
 const https = require('https');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const winston = require('winston');
 const Redis = require('redis');
 const { networkInterfaces } = require('os');
+const { ensureDirectoryExists } = require('./utils');
+const config = require('./config');
 
-// Initialize logger first with more detailed logging
+// Load environment variables first
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+// Global variables
+const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200;
+const host = process.env.WP_HOST || 'localhost';
+const baseDir = process.env.WP_PLUGIN_DIR || path.join(__dirname, '..');
+const logFile = process.env.WP_LOG_FILE || path.join(baseDir, 'logs', 'server.log');
+const statsFile = process.env.WP_STATS_FILE || path.join(baseDir, 'tmp', 'stats.json');
+const pidFile = process.env.WP_PID_FILE || path.join(baseDir, 'tmp', 'server.pid');
+
+// Global objects
+let io;
+let server;
+let redisClient = null;
+let adminNamespace;
+let authManager;
+let connectionManager;
+let app = express(); // Initialize Express app globally
+let metrics = {
+    startTime: Date.now(),
+    messagesIn: 0,
+    messagesOut: 0,
+    errors: 0,
+    connections: 0,
+    messageRateIn: 0,
+    messageRateOut: 0
+};
+let namespaces = {};
+
+// Initialize logger
 const logger = winston.createLogger({
-    level: 'debug', // Change to debug level
+    level: config.environment.debug ? 'debug' : 'info',
     format: winston.format.combine(
         winston.format.timestamp(),
-        winston.format.printf(({ level, message, timestamp, ...metadata }) => {
-            let msg = `${timestamp} [${level}]: ${message}`;
-            if (Object.keys(metadata).length > 0) {
-                msg += ` ${JSON.stringify(metadata)}`;
-            }
-            return msg;
-        })
+        winston.format.json()
     ),
     transports: [
-        new winston.transports.Console({
-            format: winston.format.colorize({ all: true })
-        }),
-        new winston.transports.File({
-            filename: 'server.log',
-            maxsize: 5242880, // 5MB
-            maxFiles: 5,
-            tailable: true
-        })
+        new winston.transports.File({ filename: config.paths.logs })
     ]
 });
+
+// Add console transport in debug mode
+if (config.environment.debug) {
+    logger.add(new winston.transports.Console({
+        format: winston.format.simple()
+    }));
+}
 
 // Store process information immediately
 const processInfo = {
@@ -94,64 +120,292 @@ const serverState = {
     restartAttempts: 0
 };
 
+// Initialize stats object
+let stats = {
+    channels: {
+        message: { subscribers: 0, messages: 0 },
+        presence: { subscribers: 0, messages: 0 },
+        status: { subscribers: 0, messages: 0 }
+    },
+    tiers: {
+        free: { connections: 0, bandwidth: 0 },
+        api: { connections: 0, bandwidth: 0 },
+        admin: { connections: 0, bandwidth: 0 }
+    },
+    namespaces: {}
+};
+
+// Initialize Redis client
+async function initializeRedis() {
+    if (process.env.REDIS_URL) {
+        try {
+            redisClient = Redis.createClient({
+                url: process.env.REDIS_URL,
+                retry_strategy: function (options) {
+                    if (options.total_retry_time > 1000 * 60 * 60) {
+                        logger.error('Redis retry time exhausted');
+                        return null;
+                    }
+                    return Math.min(options.attempt * 100, 3000);
+                }
+            });
+
+            redisClient.on('error', (err) => {
+                logger.error('Redis Client Error:', err);
+            });
+
+            redisClient.on('connect', () => {
+                logger.info('Redis Client Connected');
+            });
+
+            redisClient.on('reconnecting', () => {
+                logger.info('Redis Client Reconnecting');
+            });
+
+            await redisClient.connect();
+            return true;
+        } catch (error) {
+            logger.error('Redis initialization failed:', error);
+            redisClient = null;
+            return false;
+        }
+    }
+    logger.info('Redis URL not configured, skipping Redis initialization');
+    return false;
+}
+
+// Verify admin token function
+async function verifyAdminToken(token) {
+    try {
+        const validation = await authManager.validateToken(token);
+        if (validation.source === 'wordpress' && validation.capabilities.includes('all')) {
+            return true;
+        }
+        throw new Error('Not authorized as admin');
+    } catch (error) {
+        throw new Error('Admin token verification failed: ' + error.message);
+    }
+}
+
+// Authentication helper functions
+async function isWordPressAdmin(token) {
+    try {
+        const decoded = jwt.verify(token, process.env.WP_JWT_SECRET);
+        return decoded.isAdmin === true;
+    } catch (error) {
+        logger.warn('WordPress admin token verification failed:', error.message);
+        return false;
+    }
+}
+
+async function isValidApiKey(token) {
+    try {
+        // Check if token matches API key pattern
+        if (!token.match(/^sewn_ws_[a-zA-Z0-9]{32}$/)) {
+            return false;
+        }
+
+        // Verify with Redis if available
+        if (redisClient) {
+            const apiKey = await redisClient.get(`api_key:${token}`);
+            return !!apiKey;
+        }
+
+        // Fallback to environment check
+        return token === process.env.WP_API_KEY;
+    } catch (error) {
+        logger.warn('API key verification failed:', error.message);
+        return false;
+    }
+}
+
+async function verifyRingLeaderToken(token) {
+    try {
+        const decoded = jwt.verify(token, process.env.WP_JWT_SECRET);
+        if (!decoded.tier) {
+            throw new Error('No tier specified in token');
+        }
+        return {
+            tier: decoded.tier,
+            userId: decoded.wp_user,
+            capabilities: decoded.capabilities || []
+        };
+    } catch (error) {
+        logger.warn('Ring Leader token verification failed:', error.message);
+        return null;
+    }
+}
+
+// Function to check if a port is available
+async function isPortAvailable(port) {
+    return new Promise((resolve) => {
+        const tester = require('net').createServer()
+            .once('error', (err) => {
+                if (err.code === 'EADDRINUSE') {
+                    resolve(false);
+                } else {
+                    resolve(false);
+                }
+            })
+            .once('listening', () => {
+                tester.once('close', () => resolve(true)).close();
+            })
+            .listen(port);
+
+        // Add a timeout to prevent hanging
+        setTimeout(() => {
+            tester.removeAllListeners();
+            tester.close();
+            resolve(false);
+        }, 1000);
+    });
+}
+
+// Function to try binding to a port with retries
+async function tryBindPort(server, startPort, maxRetries = 10) {
+    let currentPort = startPort;
+    let attempts = 0;
+
+    while (attempts < maxRetries) {
+        try {
+            // Check if port is available
+            const isAvailable = await isPortAvailable(currentPort);
+            if (!isAvailable) {
+                logger.warn(`Port ${currentPort} is in use, trying next port...`);
+                currentPort++;
+                attempts++;
+                continue;
+            }
+
+            // Try to bind the server
+            await new Promise((resolve, reject) => {
+                const bindTimeout = setTimeout(() => {
+                    server.removeAllListeners();
+                    reject(new Error('Port binding timeout'));
+                }, 5000);
+
+                server.once('error', (err) => {
+                    clearTimeout(bindTimeout);
+                    reject(err);
+                });
+
+                server.once('listening', () => {
+                    clearTimeout(bindTimeout);
+                    resolve();
+                });
+
+                server.listen(currentPort, host);
+            });
+
+            logger.info(`Successfully bound to port ${currentPort}`);
+            return { success: true, port: currentPort };
+        } catch (err) {
+            logger.warn(`Failed to bind to port ${currentPort}:`, err.message);
+            if (err.code === 'EADDRINUSE') {
+                currentPort++;
+                attempts++;
+                continue;
+            }
+            throw err;
+        }
+    }
+
+    throw new Error(`Failed to find available port after ${maxRetries} attempts`);
+}
+
 // Main server initialization
 async function initializeServer() {
     try {
-        // Load environment variables
-        dotenv.config();
-
         logger.info('Starting server initialization...', {
             nodeVersion: process.version,
             platform: process.platform,
-            pid: process.pid,
-            nodePath: process.execPath
+            pid: process.pid
         });
-
-        // Get and validate port
-        const port = process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200;
-        logger.info('Server configuration:', {
-            port,
-            env: process.env.NODE_ENV,
-            debug: process.env.WP_DEBUG === 'true'
-        });
-
-        if (port < 1024 || port > 65535) {
-            throw new Error(`Invalid port number: ${port}. Must be between 1024 and 65535.`);
-        }
-
-        // Set up paths
-        const baseDir = process.env.WP_PLUGIN_DIR || path.join(__dirname);
-        const statsFile = process.env.WP_STATS_FILE || path.join(baseDir, 'tmp/stats.json');
-        const pidFile = process.env.WP_PID_FILE || path.join(baseDir, 'server.pid');
-        const logFile = process.env.WP_LOG_FILE || path.join(baseDir, 'server.log');
 
         // Ensure directories exist
         await Promise.all([
-            ensureDirectoryExists(statsFile),
-            ensureDirectoryExists(pidFile),
-            ensureDirectoryExists(logFile)
+            ensureDirectoryExists(path.dirname(statsFile)),
+            ensureDirectoryExists(path.dirname(pidFile)),
+            ensureDirectoryExists(path.dirname(logFile))
         ]);
 
-        // Initialize stats
-        const Stats = require('./lib/stats');
-        const stats = new Stats({ statsFile, debug: process.argv.includes('--debug=true') });
-        await stats.writeStats();
+        // Initialize Redis if configured
+        await initializeRedis();
 
-        // Create Express app
-        const app = express();
+        // Create Express app instance
+        app = express();
 
-        // Create server with proper SSL if enabled
-        const server = process.env.WP_SSL === 'true' && process.env.WP_SSL_KEY && process.env.WP_SSL_CERT
+        // Create HTTP/HTTPS server instance
+        server = process.env.WP_SSL === 'true' && process.env.WP_SSL_KEY && process.env.WP_SSL_CERT
             ? https.createServer({
-                key: await fs.readFile(process.env.WP_SSL_KEY),
-                cert: await fs.readFile(process.env.WP_SSL_CERT),
-                requestCert: false,
-                rejectUnauthorized: false
+                key: fs.readFileSync(process.env.WP_SSL_KEY),
+                cert: fs.readFileSync(process.env.WP_SSL_CERT)
             }, app)
             : http.createServer(app);
 
-        // Initialize Socket.IO with proper configuration
-        const io = new Server(server, {
+        // Try to bind to a port with retries
+        let currentPort = port;
+        let attempts = 0;
+        const maxRetries = 10;
+
+        while (attempts < maxRetries) {
+            try {
+                // Check if port is available
+                const isAvailable = await isPortAvailable(currentPort);
+                if (!isAvailable) {
+                    logger.warn(`Port ${currentPort} is in use, trying next port...`);
+                    currentPort++;
+                    attempts++;
+                    continue;
+                }
+
+                // Try to bind the server
+                await new Promise((resolve, reject) => {
+                    const bindTimeout = setTimeout(() => {
+                        server.removeAllListeners();
+                        reject(new Error('Port binding timeout'));
+                    }, 5000);
+
+                    server.once('error', (err) => {
+                        clearTimeout(bindTimeout);
+                        reject(err);
+                    });
+
+                    server.once('listening', () => {
+                        clearTimeout(bindTimeout);
+                        resolve();
+                    });
+
+                    server.listen(currentPort, host);
+                });
+
+                logger.info(`Server bound successfully to port ${currentPort}`);
+                break;
+            } catch (err) {
+                logger.warn(`Failed to bind to port ${currentPort}:`, err.message);
+                if (err.code === 'EADDRINUSE') {
+                    currentPort++;
+                    attempts++;
+                    continue;
+                }
+                throw err;
+            }
+        }
+
+        if (attempts >= maxRetries) {
+            throw new Error(`Failed to find available port after ${maxRetries} attempts`);
+        }
+
+        // Write PID file
+        await fsPromises.writeFile(pidFile, JSON.stringify({
+            pid: process.pid,
+            port: currentPort,
+            host: host,
+            startTime: Date.now()
+        }));
+
+        // Initialize Socket.IO with the server
+        io = new Server(server, {
             transports: ['websocket', 'polling'],
             pingTimeout: 60000,
             pingInterval: 25000,
@@ -162,211 +416,67 @@ async function initializeServer() {
             },
             path: process.env.WP_PROXY_PATH || '/socket.io',
             allowEIO3: true,
-            connectTimeout: 45000, // Give clients enough time to establish connection
-            // Add explicit namespace configuration
-            namespaces: {
-                '/': {
-                    connectTimeout: 45000
-                },
-                '/admin': {
-                    connectTimeout: 45000
-                },
-                '/message': {
-                    connectTimeout: 45000
-                },
-                '/presence': {
-                    connectTimeout: 45000
-                },
-                '/status': {
-                    connectTimeout: 45000
-                }
-            }
+            connectTimeout: 45000
         });
 
-        // Write PID file with full process info
-        await fs.writeFile(pidFile, JSON.stringify({
-            pid: processInfo.pid,
-            nodePath: processInfo.nodePath,
-            scriptPath: processInfo.scriptPath,
-            startTime: processInfo.startTime
-        }, null, 2));
+        // Initialize managers
+        const ConnectionManager = require('./lib/connection-manager');
+        const AuthManager = require('./lib/auth-manager');
+        connectionManager = new ConnectionManager(io);
+        authManager = new AuthManager(io, connectionManager);
 
-        // Update server state
-        serverState.isRunning = true;
-        serverState.startTime = Date.now();
+        // Set up admin namespace
+        adminNamespace = io.of('/admin');
+        namespaces.admin = adminNamespace;
 
-        // Start monitoring
-        startServerMonitoring();
-
-        // Start server
-        await new Promise((resolve, reject) => {
-            const startTimeout = setTimeout(() => {
-                reject(new Error('Server start timeout after 30 seconds'));
-            }, 30000);
-
-            server.listen(port, async () => {
-                clearTimeout(startTimeout);
-                logger.info(`Server listening on port ${port}`, {
-                    pid: process.pid,
-                    uptime: process.uptime()
-                });
-
-                // Verify server is actually listening
-                try {
-                    const response = await fetch(`http://localhost:${port}/health`);
-                    if (!response.ok) {
-                        throw new Error(`Health check failed: ${response.status}`);
-                    }
-                    const health = await response.json();
-                    logger.info('Server health check passed', health);
-                    resolve();
-                } catch (error) {
-                    reject(new Error(`Server health check failed: ${error.message}`));
-                }
-            });
-
-            server.on('error', (error) => {
-                clearTimeout(startTimeout);
-                serverState.errors.push({
-                    time: Date.now(),
-                    type: 'server_error',
-                    error: error.message
-                });
-                reject(error);
-            });
-        });
-
-        // Initialize stats processor and admin
-        const StatsProcessor = require('./lib/stats-processor');
-        const statsProcessor = new StatsProcessor(io, stats);
-
-        const AdminStats = require('./lib/admin-stats');
-        const adminStats = new AdminStats(io, stats);
-
-        // Enhanced namespace connection handling
-        const namespaces = {
-            admin: io.of('/admin'),
-            message: io.of('/message'),
-            presence: io.of('/presence'),
-            status: io.of('/status')
-        };
-
-        // Add proper connection handling for each namespace
-        Object.entries(namespaces).forEach(([name, namespace]) => {
-            namespace.use(async (socket, next) => {
-                try {
-                    // Log connection attempt
-                    logger.info(`Connection attempt to /${name} namespace`, {
-                        socketId: socket.id,
-                        handshake: socket.handshake
-                    });
-
-                    // Wait for explicit CONNECT packet
-                    const connectTimeout = setTimeout(() => {
-                        logger.warn(`Connect timeout for socket ${socket.id} in /${name}`);
-                        next(new Error('Connect timeout'));
-                    }, 45000);
-
-                    socket.once('connect', () => {
-                        clearTimeout(connectTimeout);
-                        logger.info(`Received CONNECT packet for ${socket.id} in /${name}`);
-                        next();
-                    });
-
-                    // Handle authentication if needed
-                    if (name === 'admin') {
-                        if (!socket.handshake.auth?.token) {
-                            throw new Error('Authentication required for admin namespace');
-                        }
-                        // Verify admin token
-                        await verifyAdminToken(socket.handshake.auth.token);
-                    }
-
-                    // Track connection in stats
-                    stats.namespaces[name] = stats.namespaces[name] || {
-                        connections: 0,
-                        messages: 0
-                    };
-                    stats.namespaces[name].connections++;
-
-                } catch (error) {
-                    logger.error(`Namespace /${name} connection error:`, error);
-                    next(new Error(`Connection rejected: ${error.message}`));
-                }
-            });
-
-            // Handle successful connections
-            namespace.on('connection', (socket) => {
-                logger.info(`Client connected to /${name} namespace`, { socketId: socket.id });
-
-                // Send connection acknowledgment
-                socket.emit('connect_confirmed', {
-                    socketId: socket.id,
-                    namespace: name,
-                    timestamp: Date.now()
-                });
-
-                // Handle disconnection
-                socket.on('disconnect', (reason) => {
-                    logger.info(`Client disconnected from /${name} namespace`, {
-                        socketId: socket.id,
-                        reason
-                    });
-                    stats.namespaces[name].connections--;
-                    updateStats();
-                });
-
-                // Handle explicit connection close
-                socket.on('end', () => {
-                    logger.info(`Client explicitly closed connection in /${name}`, {
-                        socketId: socket.id
-                    });
-                    socket.disconnect(true);
-                });
-            });
-        });
-
-        // Set up cleanup handlers
-        const cleanup = async () => {
-            logger.info('Starting cleanup...');
+        // Set up admin namespace authentication
+        adminNamespace.use(async (socket, next) => {
             try {
-                await stats.save();
-                await stats.close();
-                if (await fs.access(pidFile).then(() => true).catch(() => false)) {
-                    await fs.unlink(pidFile);
+                const token = socket.handshake.auth.token;
+                if (!token) {
+                    return next(new Error('Authentication token required'));
                 }
-                logger.info('Cleanup completed successfully');
+
+                const isValid = await verifyAdminToken(token);
+                if (!isValid) {
+                    return next(new Error('Invalid admin token'));
+                }
+
+                next();
             } catch (error) {
-                logger.error('Error during cleanup:', error);
+                next(new Error('Authentication failed'));
             }
-            process.exit(0);
-        };
+        });
 
-        process.on('SIGTERM', cleanup);
-        process.on('SIGINT', cleanup);
+        // Set up connection logging
+        io.on('connection', (socket) => {
+            logger.info(`Client connected: ${socket.id}`);
 
-        // Set up signal handlers after successful start
-        setupSignalHandlers();
+            socket.on('disconnect', () => {
+                logger.info(`Client disconnected: ${socket.id}`);
+            });
+        });
 
-        return { server, io, stats };
+        // Start stats emission after server is initialized
+        setInterval(emitStats, 1000);
+
+        return server;
     } catch (error) {
-        serverState.isRunning = false;
-        serverState.errors.push({
-            time: Date.now(),
-            type: 'initialization_error',
-            error: error.message
-        });
-        logger.error('Server initialization failed:', {
-            error: error.message,
-            stack: error.stack
-        });
+        logger.error('Server initialization failed:', error);
         throw error;
     }
 }
 
-// Start server
-initializeServer().catch(error => {
+// Start server with error handling
+initializeServer().catch(async (error) => {
     logger.error('Fatal error during server initialization:', error);
+
+    try {
+        await cleanup('initialization_error');
+    } catch (cleanupError) {
+        logger.error('Error during cleanup:', cleanupError);
+    }
+
     process.exit(1);
 });
 
@@ -426,131 +536,61 @@ const authenticateJWT = async (socket, next) => {
     }
 };
 
-// Message channel namespace
-const messageNamespace = io.of('/message');
-messageNamespace.use(authenticateJWT); // Apply JWT auth
-messageNamespace.on('connection', socket => {
-    logger.info(`User connected to /message: ${socket.user ? socket.user.userId : 'unknown'}`);
-    stats.channels.message.subscribers++;
-    emitChannelStats('message');
-    stats.tiers[socket.user.tier].connections++;
-    stats.tiers[socket.user.tier].bandwidth += socket.bytesReceived;
-
-    socket.on('message', (message) => {
-        metrics.messagesIn++;
-        logger.info('Received message:', message, 'from user:', socket.user ? socket.user.userId : 'unknown');
-        stats.channels.message.messages++;
-        emitChannelStats('message');
-        messageNamespace.emit('message', { ...message, senderId: socket.user.userId, timestamp: Date.now() }); // Broadcast to all in /message
-        metrics.messagesOut++;
-    });
-
-    socket.on('disconnect', () => {
-        stats.channels.message.subscribers--;
-        emitChannelStats('message');
-        logger.info(`User disconnected from /message: ${socket.user ? socket.user.userId : 'unknown'}`);
-    });
-});
-
-// Presence channel namespace
-const presenceNamespace = io.of('/presence');
-presenceNamespace.use(authenticateJWT); // Apply JWT auth
-presenceNamespace.on('connection', socket => {
-    logger.info(`User connected to /presence: ${socket.user ? socket.user.userId : 'unknown'}`);
-    stats.channels.presence.subscribers++;
-    emitChannelStats('presence');
-
-    socket.on('join', (data) => {
-        logger.info('User joined presence:', data, 'user:', socket.user ? socket.user.userId : 'unknown');
-        presenceNamespace.emit('user_join', { userId: socket.user.userId, ...data });
-    });
-
-    socket.on('leave', (data) => {
-        logger.info('User left presence:', data, 'user:', socket.user ? socket.user.userId : 'unknown');
-        presenceNamespace.emit('user_leave', { userId: socket.user.userId, ...data });
-    });
-
-    socket.on('disconnect', () => {
-        stats.channels.presence.subscribers--;
-        emitChannelStats('presence');
-        logger.info(`User disconnected from /presence: ${socket.user ? socket.user.userId : 'unknown'}`);
-    });
-});
-
-// Status channel namespace
-const statusNamespace = io.of('/status');
-statusNamespace.use(authenticateJWT); // Apply JWT auth
-statusNamespace.on('connection', socket => {
-    logger.info(`User connected to /status: ${socket.user ? socket.user.userId : 'unknown'}`);
-    stats.channels.status.subscribers++;
-    emitChannelStats('status');
-
-    socket.on('update', (data) => {
-        logger.info('Status update received:', data, 'user:', socket.user ? socket.user.userId : 'unknown');
-        statusNamespace.emit('status_update', { userId: socket.user.userId, ...data });
-    });
-
-    socket.on('disconnect', () => {
-        stats.channels.status.subscribers--;
-        emitChannelStats('status');
-        logger.info(`User disconnected from /status: ${socket.user ? socket.user.userId : 'unknown'}`);
-    });
-});
-
-// Update emitStats function to use metrics safely
+// Function to safely emit stats
 function emitStats() {
     try {
-        const currentStats = {
-            ...stats,
-            status: 'running',
-            connections: io?.engine?.clientsCount || 0,
-            rooms: Array.from(io?.sockets?.adapter?.rooms?.keys() || []),
-            uptime: process.uptime(),
-            memory: process.memoryUsage(),
-            timestamp: Date.now(),
-            message_rate: {
-                in: metrics.messageRates.in || 0,
-                out: metrics.messageRates.out || 0
+        const now = Date.now();
+        const uptime = Math.floor((now - metrics.startTime) / 1000); // Uptime in seconds
+        const memoryUsage = process.memoryUsage();
+        const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100; // MB with 2 decimal places
+
+        const stats = {
+            uptime,
+            memory: {
+                heapUsed: `${heapUsed}MB`,
+                external: Math.round(memoryUsage.external / 1024 / 1024 * 100) / 100,
+                rss: Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100
+            },
+            connections: metrics.connections,
+            messages: {
+                in: metrics.messagesIn,
+                out: metrics.messagesOut,
+                errors: metrics.errors,
+                rateIn: metrics.messageRateIn,
+                rateOut: metrics.messageRateOut
             }
         };
 
-        // Calculate memory usage in MB
-        currentStats.memory_formatted = {
-            heapUsed: Math.round((currentStats.memory.heapUsed / 1024 / 1024) * 100) / 100,
-            heapTotal: Math.round((currentStats.memory.heapTotal / 1024 / 1024) * 100) / 100,
-            rss: Math.round((currentStats.memory.rss / 1024 / 1024) * 100) / 100
-        };
-
-        // Calculate message rates safely
-        const timeDiff = Math.max((Date.now() - metrics.lastUpdate) / 1000, 1); // Ensure minimum 1 second
-        metrics.messageRates.in = Math.round(metrics.messagesIn / timeDiff);
-        metrics.messageRates.out = Math.round(metrics.messagesOut / timeDiff);
-
-        // Reset counters after calculating rates
-        metrics.resetCounters();
-
-        // Add system load (Unix-like systems only)
-        try {
-            currentStats.load = require('os').loadavg();
-        } catch (e) {
-            currentStats.load = [0, 0, 0];
+        // Write stats to file if statsFile is defined
+        if (statsFile) {
+            try {
+                // Ensure the directory exists
+                const statsDir = path.dirname(statsFile);
+                if (!fs.existsSync(statsDir)) {
+                    fs.mkdirSync(statsDir, { recursive: true });
+                }
+                fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
+            } catch (err) {
+                logger.error('Error writing stats file:', err);
+            }
         }
 
-        // Emit to admin namespace if available
+        // Emit to admin namespace if it exists
         if (adminNamespace) {
-            adminNamespace.emit('stats_update', currentStats);
+            try {
+                adminNamespace.emit('stats', stats);
+            } catch (err) {
+                logger.error('Error emitting stats:', err);
+            }
         }
 
-        // Update stats file
-        updateStats(currentStats);
-    } catch (error) {
-        logger.error('Error in emitStats:', error);
-        // Don't throw the error, just log it
-        // We want the stats emission to continue even if there's an error
+        logger.debug('Stats updated:', stats);
+    } catch (err) {
+        logger.error('Error in emitStats:', err);
     }
 }
 
-// Update stats more frequently (every second)
+// Update stats every second
 setInterval(emitStats, 1000);
 
 // Enhanced channel stats emission
@@ -575,153 +615,6 @@ function reportError(error, context = {}) {
     adminNamespace.emit('error_report', errorReport);
     logger.error('Error occurred:', errorReport);
 }
-
-// Add real-time connection tracking
-io.on('connection', (socket) => {
-    console.log('Client connected');
-
-    // Handle ping messages for latency testing
-    socket.on('ping', () => {
-        socket.emit('pong');
-    });
-
-    // Handle chat messages
-    socket.on('message', (data) => {
-        // Broadcast to all other clients
-        socket.broadcast.emit('message', data);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Client disconnected');
-    });
-
-    // Existing connection logging
-    logEvent('connection', { socketId: socket.id });
-
-    // Server status events
-    socket.on('get_status', (callback) => {
-        const status = {
-            running: true,
-            connections: io.engine.clientsCount,
-            uptime: process.uptime(),
-            rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
-                roomId,
-                memberCount: members.size
-            }))
-        };
-        callback(status);
-    });
-
-    // Server stats events
-    socket.on('get_stats', (callback) => {
-        const stats = {
-            timestamp: Date.now(),
-            connections: io.engine.clientsCount,
-            rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
-                roomId,
-                memberCount: members.size
-            }))
-        };
-        callback(stats);
-    });
-
-    // Room management events
-    socket.on('join_room', (roomId, callback) => {
-        try {
-            socket.join(roomId);
-            if (!io.sockets.adapter.rooms.has(roomId)) {
-                io.sockets.adapter.rooms.set(roomId, new Set());
-            }
-            io.sockets.adapter.rooms.get(roomId).add(socket.id);
-            logEvent('room_join', { socketId: socket.id, roomId });
-
-            // Notify room members
-            io.to(roomId).emit('room_update', {
-                roomId,
-                memberCount: io.sockets.adapter.rooms.get(roomId).size
-            });
-
-            callback({ success: true });
-        } catch (error) {
-            callback({ success: false, error: error.message });
-        }
-    });
-
-    socket.on('leave_room', (roomId, callback) => {
-        try {
-            socket.leave(roomId);
-            io.sockets.adapter.rooms.get(roomId)?.delete(socket.id);
-            logEvent('room_leave', { socketId: socket.id, roomId });
-
-            // Notify room members
-            io.to(roomId).emit('room_update', {
-                roomId,
-                memberCount: io.sockets.adapter.rooms.get(roomId)?.size || 0
-            });
-
-            callback({ success: true });
-        } catch (error) {
-            callback({ success: false, error: error.message });
-        }
-    });
-
-    // Admin events (requires admin privileges)
-    socket.on('server_control', async (action, callback) => {
-        if (!socket.user?.isAdmin) {
-            callback({ success: false, error: 'Unauthorized' });
-            return;
-        }
-
-        try {
-            switch (action) {
-                case 'restart':
-                    logEvent('server_restart', { user: socket.user.id });
-                    callback({ success: true, message: 'Server restarting' });
-                    process.exit(0); // PM2 will restart
-                    break;
-
-                case 'stop':
-                    logEvent('server_stop', { user: socket.user.id });
-                    callback({ success: true, message: 'Server stopping' });
-                    io.close(() => process.exit(0));
-                    break;
-
-                default:
-                    callback({ success: false, error: 'Invalid action' });
-            }
-        } catch (error) {
-            callback({ success: false, error: error.message });
-        }
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-        // Clean up room memberships
-        io.sockets.adapter.rooms.forEach((members, roomId) => {
-            if (members.delete(socket.id)) {
-                // Notify room members of departure
-                io.to(roomId).emit('room_update', {
-                    roomId,
-                    memberCount: members.size
-                });
-            }
-        });
-        logEvent('disconnect', { socketId: socket.id });
-    });
-
-    // Track connection duration
-    const connectionStart = Date.now();
-
-    socket.on('disconnect', () => {
-        const duration = Date.now() - connectionStart;
-        const connectionStats = {
-            duration,
-            socketId: socket.id,
-            timestamp: Date.now()
-        };
-        adminNamespace.emit('connection_ended', connectionStats);
-    });
-});
 
 // Add port checking
 const checkPort = (port) => new Promise((resolve, reject) => {
@@ -793,7 +686,7 @@ async function verifyProcess(pid) {
         } else {
             // Linux/Unix systems
             try {
-                const cmdline = await fs.readFile(`/proc/${pid}/cmdline`, 'utf8');
+                const cmdline = await fsPromises.readFile(`/proc/${pid}/cmdline`, 'utf8');
                 const parts = cmdline.split('\0').filter(Boolean); // Remove empty strings
                 const nodeBin = parts[0];
                 const scriptPath = parts[parts.length - 1];
@@ -833,71 +726,6 @@ async function verifyProcess(pid) {
         throw error;
     }
 }
-
-// Enhanced environment configuration with Local by Flywheel support
-const getEnvironmentConfig = () => {
-    // Load environment variables
-    dotenv.config();
-
-    // Default configuration
-    const config = {
-        port: process.env.WP_PORT ? parseInt(process.env.WP_PORT) : 49200,
-        host: process.env.WP_HOST || '0.0.0.0', // Listen on all interfaces by default
-        ssl: {
-            enabled: process.env.WP_SSL === 'true',
-            key: process.env.WP_SSL_KEY,
-            cert: process.env.WP_SSL_CERT
-        },
-        containerMode: process.env.WP_CONTAINER_MODE === 'true',
-        baseDir: process.env.WP_PLUGIN_DIR || path.join(__dirname),
-        debug: process.argv.includes('--debug=true')
-    };
-
-    // Detect Local by Flywheel environment
-    if (process.env.LOCAL_SITE_URL) {
-        config.containerMode = true;
-        config.localSiteUrl = process.env.LOCAL_SITE_URL;
-
-        // Parse Local site URL for SSL detection
-        if (config.localSiteUrl.startsWith('https')) {
-            config.ssl.enabled = true;
-            // Use Local's SSL certificates if available
-            if (!config.ssl.key && process.env.LOCAL_SSL_KEY) {
-                config.ssl.key = process.env.LOCAL_SSL_KEY;
-                config.ssl.cert = process.env.LOCAL_SSL_CERT;
-            }
-        }
-    }
-
-    // Container IP detection
-    if (config.containerMode) {
-        try {
-            // Try to get container IP
-            const nets = networkInterfaces();
-            const results = {};
-
-            for (const name of Object.keys(nets)) {
-                for (const net of nets[name]) {
-                    // Skip internal and non-IPv4 addresses
-                    if (net.family === 'IPv4' && !net.internal) {
-                        results[name] = net.address;
-                    }
-                }
-            }
-
-            // Use first available non-internal IPv4 address
-            const containerIp = Object.values(results)[0];
-            if (containerIp) {
-                config.host = containerIp;
-                logger.info(`Detected container IP: ${containerIp}`);
-            }
-        } catch (error) {
-            logger.warn('Failed to detect container IP:', error);
-        }
-    }
-
-    return config;
-};
 
 // Add proxy configuration detection and setup
 const setupProxySupport = (app) => {
@@ -1014,7 +842,7 @@ const setupDebugTools = (app, config) => {
 };
 
 // Modify initServer to include proxy support and debug tools
-const initServer = async (config) => {
+const initServer = async () => {
     // Create Express app
     const app = express();
 
@@ -1026,16 +854,19 @@ const initServer = async (config) => {
 
     // Create HTTP/HTTPS server based on SSL configuration
     let server;
-    if (config.ssl.enabled && config.ssl.key && config.ssl.cert) {
-        server = https.createServer(config.ssl, app);
+    if (config.environment.ssl_enabled && config.ssl?.key && config.ssl?.cert) {
+        server = https.createServer({
+            key: fs.readFileSync(config.ssl.key),
+            cert: fs.readFileSync(config.ssl.cert)
+        }, app);
         logger.info('Created HTTPS server with SSL');
     } else {
         server = http.createServer(app);
         logger.info('Created HTTP server');
     }
 
-    // Enhanced Socket.IO configuration for proxy compatibility
-    const io = new Server(server, {
+    // Initialize Socket.IO with the server
+    io = new Server(server, {
         transports: ['websocket', 'polling'],
         pingTimeout: 60000,
         pingInterval: 25000,
@@ -1044,101 +875,37 @@ const initServer = async (config) => {
             methods: ["GET", "POST", "OPTIONS"],
             credentials: true
         },
-        path: '/socket.io/', // Explicit path for proxy compatibility
-        allowEIO3: true, // Enable Engine.IO v3 for better proxy support
-        handlePreflightRequest: (req, res) => {
-            res.writeHead(200, {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-                "Access-Control-Allow-Headers": "content-type",
-                "Access-Control-Allow-Credentials": "true"
-            });
-            res.end();
-        },
-        // Add Local by Flywheel specific settings
-        allowUpgrades: true,
-        transports: ['polling', 'websocket'],
-        upgradeTimeout: 10000,
-        pingInterval: 10000,
-        pingTimeout: 5000
+        path: '/socket.io',
+        allowEIO3: true,
+        connectTimeout: 45000
     });
 
-    // Add health check endpoint for container orchestration
-    app.get('/health', (req, res) => {
-        res.json({
-            status: 'healthy',
-            uptime: process.uptime(),
-            timestamp: Date.now(),
-            containerMode: config.containerMode,
-            ssl: config.ssl.enabled
-        });
-    });
+    // Initialize managers
+    const ConnectionManager = require('./lib/connection-manager');
+    const AuthManager = require('./lib/auth-manager');
+    connectionManager = new ConnectionManager(io);
+    authManager = new AuthManager(io, connectionManager);
 
-    // Add WebSocket test endpoint
-    app.get('/socket-test', (req, res) => {
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>WebSocket Test</title>
-                <script src="/socket.io/socket.io.js"></script>
-                <script>
-                    const socket = io({
-                        path: '/socket.io/',
-                        transports: ['websocket', 'polling'],
-                        secure: ${config.ssl.enabled},
-                        rejectUnauthorized: false
-                    });
-                    
-                    socket.on('connect', () => {
-                        document.getElementById('status').textContent = 'Connected';
-                        console.log('Connected to WebSocket server');
-                    });
-                    
-                    socket.on('disconnect', () => {
-                        document.getElementById('status').textContent = 'Disconnected';
-                        console.log('Disconnected from WebSocket server');
-                    });
-                    
-                    socket.on('error', (error) => {
-                        document.getElementById('status').textContent = 'Error: ' + error;
-                        console.error('WebSocket error:', error);
-                    });
-                </script>
-            </head>
-            <body>
-                <h1>WebSocket Test Page</h1>
-                <p>Status: <span id="status">Connecting...</span></p>
-                <p>Server Info:</p>
-                <pre>
-                    Host: ${config.host}
-                    Port: ${config.port}
-                    SSL: ${config.ssl.enabled}
-                    Container Mode: ${config.containerMode}
-                </pre>
-            </body>
-            </html>
-        `);
-    });
+    // Set up admin namespace
+    adminNamespace = io.of('/admin');
+    namespaces.admin = adminNamespace;
 
     return { app, server, io };
 };
 
-// Modify startServer to use new configuration
+// Modify startServer to use config directly
 const startServer = async () => {
     try {
-        console.log('Starting server initialization...');
-        await fs.appendFile(logFile, `Starting server initialization...\n`);
-
-        // Get environment configuration
-        const config = getEnvironmentConfig();
+        logger.info('Starting server initialization...', {
+            nodeVersion: process.version,
+            platform: process.platform,
+            pid: process.pid
+        });
 
         // Initialize server components
-        const { app, server, io } = await initServer(config);
+        const { app, server, io } = await initServer();
 
-        // Rest of the startup code...
-
-        // Modified server listen with host binding
+        // Start server
         return new Promise((resolve, reject) => {
             const serverStartTimeout = setTimeout(() => {
                 const error = new Error('Server start timeout after 10 seconds');
@@ -1149,10 +916,8 @@ const startServer = async () => {
             try {
                 server.listen(config.port, config.host, () => {
                     clearTimeout(serverStartTimeout);
-                    const protocol = config.ssl.enabled ? 'wss' : 'ws';
+                    const protocol = config.environment.ssl_enabled ? 'wss' : 'ws';
                     logger.info(`Server listening on ${protocol}://${config.host}:${config.port}`);
-
-                    // Write startup files...
                     resolve();
                 });
             } catch (error) {
@@ -1219,7 +984,7 @@ async function recoverFromError(error) {
         stats.status = 'error';
         stats.last_error = error.message;
         stats.error_time = Date.now();
-        await fs.writeFile(statsFile, JSON.stringify(stats, null, 2));
+        await fsPromises.writeFile(statsFile, JSON.stringify(stats, null, 2));
 
         // Check if we need to clean up files
         const processStatus = await verifyProcess(process.pid);
@@ -1293,7 +1058,7 @@ startServer().then(() => {
 async function cleanup(reason = 'normal') {
     if (serverShutdownInitiated) {
         logger.warn('Cleanup already in progress, skipping...');
-        return;
+        return { success: true, message: 'Cleanup already in progress' };
     }
 
     serverShutdownInitiated = true;
@@ -1301,27 +1066,85 @@ async function cleanup(reason = 'normal') {
     serverState.isRunning = false;
 
     logger.info(`Starting cleanup... (Reason: ${reason})`);
+    const errors = [];
 
     try {
         // Close namespace connections gracefully
         for (const [name, namespace] of Object.entries(namespaces)) {
-            const sockets = await namespace.fetchSockets();
-            logger.info(`Closing ${sockets.length} connections in /${name} namespace`);
+            try {
+                const sockets = await namespace.fetchSockets();
+                logger.info(`Closing ${sockets.length} connections in /${name} namespace`);
 
-            await Promise.all(sockets.map(socket =>
-                new Promise((resolve) => {
-                    socket.emit('server_shutdown', { reason });
-                    socket.disconnect(true);
-                    resolve();
-                })
-            ));
+                await Promise.all(sockets.map(socket =>
+                    new Promise((resolve) => {
+                        socket.emit('server_shutdown', { reason });
+                        socket.disconnect(true);
+                        resolve();
+                    })
+                ));
+            } catch (error) {
+                errors.push(`Error closing namespace ${name}: ${error.message}`);
+                logger.error(`Error closing namespace ${name}:`, error);
+            }
         }
 
-        // Rest of cleanup...
-        // ... existing cleanup code ...
+        // Close Redis connection if active
+        if (redisClient) {
+            try {
+                await redisClient.quit();
+                logger.info('Redis connection closed');
+            } catch (error) {
+                errors.push(`Error closing Redis: ${error.message}`);
+                logger.error('Error closing Redis:', error);
+            }
+        }
+
+        // Save final stats
+        try {
+            const finalStats = {
+                ...stats,
+                shutdown_time: Date.now(),
+                shutdown_reason: reason
+            };
+            await fsPromises.writeFile(statsFile, JSON.stringify(finalStats, null, 2));
+            logger.info('Final stats saved');
+        } catch (error) {
+            errors.push(`Error saving final stats: ${error.message}`);
+            logger.error('Error saving final stats:', error);
+        }
+
+        // Remove PID file
+        try {
+            if (await fsPromises.access(pidFile).then(() => true).catch(() => false)) {
+                await fsPromises.unlink(pidFile);
+                logger.info('PID file removed');
+            }
+        } catch (error) {
+            errors.push(`Error removing PID file: ${error.message}`);
+            logger.error('Error removing PID file:', error);
+        }
+
+        // Close server if still listening
+        if (server && server.listening) {
+            await new Promise((resolve) => {
+                server.close(() => {
+                    logger.info('Server closed');
+                    resolve();
+                });
+            });
+        }
+
+        logger.info('Cleanup completed' + (errors.length ? ' with errors' : ' successfully'));
+        return {
+            success: errors.length === 0,
+            errors: errors.length ? errors : undefined
+        };
     } catch (error) {
-        logger.error('Error during cleanup:', error);
-        throw error;
+        logger.error('Fatal error during cleanup:', error);
+        return {
+            success: false,
+            errors: [...errors, `Fatal error: ${error.message}`]
+        };
     }
 }
 
@@ -1340,7 +1163,7 @@ function logEvent(event, data) {
 async function updateAdminStatus(status) {
     try {
         const processStatus = await verifyProcess(processInfo.pid);
-        await fs.writeFile(
+        await fsPromises.writeFile(
             path.join(path.dirname(statsFile),
                 'status.json'),
             JSON.stringify({
@@ -1358,16 +1181,15 @@ async function updateAdminStatus(status) {
     }
 }
 
-// Add stats file writing for admin UI
+// Update stats file writing for admin UI
 function updateAdminStats() {
     fs.writeFileSync(statsFile, JSON.stringify({
         timestamp: Date.now(),
-        connections: io.engine.clientsCount,
-        rooms: Array.from(io.sockets.adapter.rooms.entries()).map(([roomId, members]) => ({
-            roomId,
-            memberCount: members.size
-        }))
-    }));
+        connections: io?.engine?.clientsCount || 0,
+        rooms: Array.from(io?.sockets?.adapter?.rooms?.keys() || []),
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
+    }, null, 2));
 }
 
 // Update stats periodically for admin UI
@@ -1416,7 +1238,7 @@ console.log(`Using port: ${port} (from ${process.env.WP_PORT ? 'environment' : '
 if (port < 1024 || port > 65535) {
     const error = `Invalid port number: ${port}. Must be between 1024 and 65535.`;
     console.error(error);
-    fs.appendFileSync(logFile, `${error}\n`);
+    fsPromises.appendFileSync(logFile, `${error}\n`);
     process.exit(1);
 }
 
