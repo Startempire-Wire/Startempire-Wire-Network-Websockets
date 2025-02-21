@@ -1,0 +1,15 @@
+{
+    "SEWN_WS_DEFAULT_PORT": 49200,
+    "SEWN_WS_SERVER_CONTROL_PATH": ".\/tmp",
+    "SEWN_WS_SERVER_PID_FILE": ".\/tmp\/server.pid",
+    "SEWN_WS_SERVER_LOG_FILE": ".\/logs\/server.log",
+    "SEWN_WS_NODE_SERVER": ".\/",
+    "SEWN_WS_ENV_DEBUG_ENABLED": true,
+    "SEWN_WS_STATS_UPDATE_INTERVAL": 10000,
+    "SEWN_WS_HISTORY_MAX_POINTS": 100,
+    "SEWN_WS_IS_LOCAL": true,
+    "SEWN_WS_ENV_CONTAINER_MODE": false,
+    "SEWN_WS_SSL_ENABLED": false,
+    "SEWN_WS_SSL_CERT": "",
+    "SEWN_WS_SSL_KEY": ""
+}

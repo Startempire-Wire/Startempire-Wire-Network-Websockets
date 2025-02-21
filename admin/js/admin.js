@@ -1,6 +1,10 @@
 jQuery(document).ready(function ($) {
     'use strict';
 
+    let socketInitialized = false;
+    let pollInterval = 1000;
+    const maxPollInterval = 5000;
+
     // Environment check handler
     $('#check-environment').on('click', function () {
         var $button = $(this);
@@ -269,92 +273,156 @@ jQuery(document).ready(function ($) {
         });
     })(jQuery);
 
-    // Initialize WebSocket connection with admin authentication
-    async function initializeAdminSocket() {
-        try {
-            // Get admin token from WordPress
-            const response = await fetch(sewn_ws_admin.ajax_url, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    action: 'sewn_ws_authenticate',
-                    _ajax_nonce: sewn_ws_admin.nonce
-                })
-            });
-
-            const data = await response.json();
-            if (!data.success) {
-                throw new Error('Failed to get authentication token');
-            }
-
-            // Initialize Socket.IO connection with admin token
-            const socket = io(sewn_ws_admin.site_protocol + '://' + window.location.hostname + ':' + sewn_ws_admin.port, {
-                path: '/socket.io',
-                auth: {
-                    token: data.data.token
+    function checkServerStatus() {
+        $.post(ajaxurl, {
+            action: 'sewn_ws_check_server_status',
+            nonce: sewn_ws_admin.nonce
+        }).done(function (response) {
+            if (response.status === 'running') {
+                updateServerUI(response.details, response.external);
+                if (!socketInitialized) {
+                    initializeSocketMonitoring();
                 }
-            });
+            } else {
+                updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
+            }
+        }).fail(function (error) {
+            console.error('Server status check failed:', error);
+            updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
+        });
+    }
 
-            // Connect to admin namespace
-            const adminSocket = socket.of('/admin');
+    function updateServerUI(details, isExternal) {
+        const statusEl = $('#server-status');
+        statusEl.text(isExternal ? 'Running (External)' : 'Running')
+            .removeClass('status-stopped status-error')
+            .addClass('status-running');
 
-            // Handle connection events
-            adminSocket.on('connect', () => {
-                console.log('Connected to admin namespace');
-                updateServerStatus('running');
-            });
+        $('#server-pid').text(details.pid || 'N/A');
+        $('#server-uptime').text(formatUptime(details.uptime));
+        $('#server-memory').text(formatMemory(details.memory));
+        $('#server-connections').text(details.connections || 0);
 
-            adminSocket.on('disconnect', () => {
-                console.log('Disconnected from admin namespace');
-                updateServerStatus('stopped');
-            });
+        $('#start-server').prop('disabled', true);
+        $('#stop-server').prop('disabled', false);
 
-            adminSocket.on('error', (error) => {
-                console.error('Admin socket error:', error);
-                updateServerStatus('error');
-            });
-
-            // Store socket reference
-            window.adminSocket = adminSocket;
-
-            return adminSocket;
-        } catch (error) {
-            console.error('Failed to initialize admin socket:', error);
-            updateServerStatus('error');
-            throw error;
+        // Update connection status if available
+        if (details.socket_status) {
+            $('#socket-status').text(details.socket_status)
+                .removeClass('status-error')
+                .addClass('status-ok');
         }
     }
 
-    // Update UI based on server status
-    function updateServerStatus(status) {
-        const statusElement = document.getElementById('server-status');
-        if (!statusElement) return;
+    function formatUptime(seconds) {
+        if (!seconds) return '0s';
 
-        const statusMap = {
-            running: {
-                text: 'Running',
-                class: 'status-running'
-            },
-            stopped: {
-                text: 'Stopped',
-                class: 'status-stopped'
-            },
-            error: {
-                text: 'Error',
-                class: 'status-error'
-            }
-        };
+        const days = Math.floor(seconds / 86400);
+        seconds %= 86400;
+        const hours = Math.floor(seconds / 3600);
+        seconds %= 3600;
+        const minutes = Math.floor(seconds / 60);
+        seconds %= 60;
 
-        const statusInfo = statusMap[status] || statusMap.error;
-        statusElement.textContent = statusInfo.text;
-        statusElement.className = 'server-status ' + statusInfo.class;
+        let uptime = '';
+        if (days) uptime += days + 'd ';
+        if (hours) uptime += hours + 'h ';
+        if (minutes) uptime += minutes + 'm ';
+        if (seconds) uptime += seconds + 's';
+
+        return uptime.trim();
     }
 
-    // Initialize when document is ready
-    document.addEventListener('DOMContentLoaded', () => {
-        initializeAdminSocket().catch(console.error);
+    function formatMemory(bytes) {
+        if (!bytes) return '0 B';
+
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+
+        return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+    }
+
+    function initializeSocketMonitoring() {
+        if (typeof io === 'undefined') {
+            console.error('Socket.IO client not loaded');
+            return;
+        }
+
+        const socket = io(window.SEWN_WS_CONFIG.url, {
+            path: '/socket.io',
+            transports: ['websocket'],
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            timeout: 5000,
+            auth: {
+                token: window.SEWN_WS_CONFIG.token
+            }
+        });
+
+        socket.on('connect', function () {
+            console.log('Admin socket connected');
+            socketInitialized = true;
+            $('#socket-status').text('Connected')
+                .removeClass('status-error')
+                .addClass('status-ok');
+        });
+
+        socket.on('connect_error', function (error) {
+            console.warn('Socket connection error:', error);
+            $('#socket-status').text('Connection Error')
+                .removeClass('status-ok')
+                .addClass('status-error');
+        });
+
+        socket.on('disconnect', function () {
+            console.log('Admin socket disconnected');
+            $('#socket-status').text('Disconnected')
+                .removeClass('status-ok')
+                .addClass('status-error');
+        });
+
+        socket.on('server_stats', function (stats) {
+            updateServerUI(stats, false);
+        });
+    }
+
+    function setupPolling() {
+        checkServerStatus();
+
+        if (pollInterval < maxPollInterval) {
+            pollInterval = Math.min(pollInterval * 1.5, maxPollInterval);
+        }
+
+        setTimeout(setupPolling, pollInterval);
+    }
+
+    // Initialize polling
+    setupPolling();
+
+    // Handle server control buttons
+    $('#start-server').on('click', function () {
+        $.post(ajaxurl, {
+            action: 'sewn_ws_start_server',
+            nonce: sewn_ws_admin.nonce
+        }).done(function (response) {
+            if (response.success) {
+                checkServerStatus();
+            } else {
+                alert('Failed to start server: ' + response.message);
+            }
+        });
+    });
+
+    $('#stop-server').on('click', function () {
+        $.post(ajaxurl, {
+            action: 'sewn_ws_stop_server',
+            nonce: sewn_ws_admin.nonce
+        }).done(function (response) {
+            if (response.success) {
+                checkServerStatus();
+            } else {
+                alert('Failed to stop server: ' + response.message);
+            }
+        });
     });
 }); 

@@ -58,7 +58,7 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PATH . 'node-server' . DIRECTORY_SEPARATOR
 !defined('SEWN_WS_ENV_DEFAULT_PORT') && define('SEWN_WS_ENV_DEFAULT_PORT', SEWN_WS_DEFAULT_PORT);
 
 // Add deprecation notice
-if (defined('SEWN_WS_ENV_DEFAULT_PORT')) {
+if (defined('SEWN_WS_ENV_DEFAULT_PORT') && !(defined('DOING_AJAX') && DOING_AJAX)) {
     trigger_error(
         'SEWN_WS_ENV_DEFAULT_PORT is deprecated and will be removed in version 2.0.0. Use SEWN_WS_DEFAULT_PORT instead.',
         E_USER_DEPRECATED
@@ -84,6 +84,7 @@ if (defined('SEWN_WS_ENV_DEFAULT_PORT')) {
 !defined('SEWN_WS_SERVER_PID_FILE') && define('SEWN_WS_SERVER_PID_FILE', SEWN_WS_SERVER_CONTROL_PATH . 'server.pid');
 !defined('SEWN_WS_SERVER_LOG_FILE') && define('SEWN_WS_SERVER_LOG_FILE', SEWN_WS_PATH . 'logs/server.log');
 !defined('SEWN_WS_SERVER_CONFIG_FILE') && define('SEWN_WS_SERVER_CONFIG_FILE', SEWN_WS_NODE_SERVER . 'config.json');
+!defined('SEWN_WS_SERVER_STATUS_CHECK_ACTION') && define('SEWN_WS_SERVER_STATUS_CHECK_ACTION', 'sewn_ws_check_server_status');
 
 // WebSocket Stats Constants
 !defined('SEWN_WS_STATS_UPDATE_INTERVAL') && define('SEWN_WS_STATS_UPDATE_INTERVAL', 10000);

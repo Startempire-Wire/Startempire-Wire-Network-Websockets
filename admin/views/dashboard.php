@@ -41,20 +41,20 @@ $status_text = $node_status['running'] ? '✓ Operational' :
 
 // Get configuration from WordPress constants
 $server_config = [
-    'port' => SEWN_WS_DEFAULT_PORT,
+    'port' => \SEWN_WS_DEFAULT_PORT,
     'environment' => [
-        'is_local' => SEWN_WS_IS_LOCAL,
-        'ssl_enabled' => get_option(SEWN_WS_OPTION_SSL_CERT) && get_option(SEWN_WS_OPTION_SSL_KEY),
+        'ssl_enabled' => (get_option(\SEWN_WS_OPTION_SSL_CERT) && get_option(\SEWN_WS_OPTION_SSL_KEY)) || (strpos(site_url(), 'https://') === 0),
+        'is_local' => \SEWN_WS_IS_LOCAL,
         'debug_enabled' => defined('WP_DEBUG') && WP_DEBUG
     ],
     'server' => [
-        'status' => get_option(SEWN_WS_OPTION_SERVER_STATUS, SEWN_WS_SERVER_STATUS_UNINITIALIZED),
+        'status' => get_option(\SEWN_WS_OPTION_SERVER_STATUS, \SEWN_WS_SERVER_STATUS_UNINITIALIZED),
         'connection_timeout' => 45000,
         'reconnection_attempts' => 3
     ],
     'stats' => [
-        'update_interval' => SEWN_WS_STATS_UPDATE_INTERVAL,
-        'max_history_points' => SEWN_WS_HISTORY_MAX_POINTS
+        'update_interval' => \SEWN_WS_STATS_UPDATE_INTERVAL,
+        'max_history_points' => \SEWN_WS_HISTORY_MAX_POINTS
     ]
 ];
 
@@ -204,7 +204,7 @@ $server_config = [
                     </p>
                     <p>
                         <strong><?php _e('Port:', 'sewn-ws'); ?></strong>
-                        <span class="port"><?php echo esc_html(SEWN_WS_DEFAULT_PORT); ?></span>
+                        <span class="port"><?php echo esc_html(\SEWN_WS_DEFAULT_PORT); ?></span>
                     </p>
                 </div>
                 <?php if (get_option('sewn_ws_local_mode', false)): ?>
@@ -1099,8 +1099,8 @@ jQuery(document).ready(function($) {
             url: ajaxurl,
             type: 'POST',
             data: {
-                action: 'sewn_ws_check_server_status',
-                nonce: '<?php echo wp_create_nonce("sewn_ws_status_check"); ?>'
+                action: '<?php echo \SEWN_WS_SERVER_STATUS_CHECK_ACTION; ?>',
+                nonce: '<?php echo wp_create_nonce(\SEWN_WS_NONCE_ACTION); ?>'
             },
             success: function(response) {
                 if (response.success) {
@@ -1136,11 +1136,11 @@ jQuery(document).ready(function($) {
         // Determine if we're in a local development environment
         const isLocalDev = config.environment.is_local;
 
-        // Protocol selection logic
+        // Force secure WebSocket connection if the page is loaded over HTTPS
         let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let host = window.location.hostname;
-        let port = <?php echo SEWN_WS_DEFAULT_PORT; ?>;
-
+        // Use the port from the server config
+        let port = config.port;
         const wsUrl = `${protocol}//${host}:${port}`;
         console.log('Initializing WebSocket connection:', {
             url: wsUrl,

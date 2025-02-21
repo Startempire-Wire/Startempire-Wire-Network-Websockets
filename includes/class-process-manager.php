@@ -16,7 +16,17 @@ if (!defined('ABSPATH')) {
     exit;
 } 
 
+/**
+ * Process Manager Class
+ * 
+ * Handles Node.js process management and monitoring
+ */
 class Process_Manager {
+    /**
+     * @var Process_Manager|null Singleton instance
+     */
+    private static $instance = null;
+
     /**
      * @var string Path to PID file
      */
@@ -33,16 +43,36 @@ class Process_Manager {
     private $server_script;
 
     /**
-     * Constructor
+     * Get singleton instance
+     * 
+     * @return Process_Manager
      */
-    public function __construct() {
-        $this->pid_file = SEWN_WS_PATH . 'tmp/server.pid';
-        $this->log_file = SEWN_WS_PATH . 'logs/server.log';
-        $this->server_script = SEWN_WS_NODE_SERVER . 'server.js';
-        
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
+     * Private constructor to prevent direct instantiation
+     */
+    private function __construct() {
+        // Initialize properties
+        $this->pid_file = SEWN_WS_PLUGIN_DIR . 'tmp/server.pid';
+        $this->log_file = SEWN_WS_PLUGIN_DIR . 'logs/server.log';
+        $this->server_script = SEWN_WS_PLUGIN_DIR . 'node-server/server.js';
+
         // Ensure directories exist
         wp_mkdir_p(dirname($this->pid_file));
         wp_mkdir_p(dirname($this->log_file));
+    }
+
+    /**
+     * Initialize hooks
+     */
+    public function init() {
+        add_action('wp_ajax_sewn_ws_check_server_status', [$this, 'ajax_check_server_status']);
     }
 
     /**
@@ -61,25 +91,13 @@ class Process_Manager {
     }
 
     private function get_server_port() {
-        // Get port configuration with deprecation support
-        $default_port = defined('\SEWN_WS_ENV_DEFAULT_PORT') 
-            ? \SEWN_WS_ENV_DEFAULT_PORT 
-            : \SEWN_WS_DEFAULT_PORT;
-
-        if (defined('\SEWN_WS_ENV_DEFAULT_PORT')) {
-            error_log('[SEWN WebSocket] Warning: Using deprecated SEWN_WS_ENV_DEFAULT_PORT constant. Please update to SEWN_WS_DEFAULT_PORT.');
-        }
-
-        $port = get_option('sewn_ws_port', $default_port);
-        error_log(sprintf('[SEWN WebSocket] Port configuration: %s (Default: %s)', $port, $default_port));
-
-        // Validate port number
+        $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
+        error_log(sprintf('[SEWN WebSocket] Port configuration: %s (Default: %s)', $port, SEWN_WS_DEFAULT_PORT));
         $port = absint($port);
         if ($port < 1024 || $port > 65535) {
-            error_log(sprintf('[SEWN WebSocket] Invalid port %d, using default port %d', $port, \SEWN_WS_DEFAULT_PORT));
-            return \SEWN_WS_DEFAULT_PORT;
+            error_log(sprintf('[SEWN WebSocket] Invalid port %d, using default port %d', $port, SEWN_WS_DEFAULT_PORT));
+            return SEWN_WS_DEFAULT_PORT;
         }
-
         return $port;
     }
 
@@ -287,7 +305,13 @@ class Process_Manager {
             return false;
         }
 
-        $pid = (int) file_get_contents($this->pid_file);
+        $contents = file_get_contents($this->pid_file);
+        $data = json_decode($contents, true);
+        if (is_array($data) && isset($data['pid'])) {
+            $pid = (int)$data['pid'];
+        } else {
+            $pid = (int)$contents;
+        }
         
         // First check if process exists
         if (!posix_kill($pid, 0)) {
@@ -427,8 +451,6 @@ class Process_Manager {
             date_default_timezone_set('America/Los_Angeles');
             shell_exec('ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime');
 
-            // 5. Register AJAX handlers
-            add_action('wp_ajax_sewn_ws_check_server_status', [__CLASS__, 'ajax_check_server_status']);
         } catch(\Throwable $e) {
             update_option('sewn_ws_activation_error', $e->getMessage());
         }
@@ -623,31 +645,147 @@ class Process_Manager {
     }
 
     /**
-     * AJAX handler for server status checks
+     * AJAX handler for checking server status
      */
-    public static function ajax_check_server_status() {
-        check_ajax_referer('sewn_ws_status_check', 'nonce');
+    public function ajax_check_server_status() {
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Unauthorized');
         }
 
-        $process_manager = new self();
-        $status = $process_manager->get_status();
-
-        // Get stats file content if available
         $stats_file = SEWN_WS_PATH . 'tmp/stats.json';
+        $stats = [];
+
         if (file_exists($stats_file)) {
             $stats = json_decode(file_get_contents($stats_file), true);
-            $status['stats'] = $stats;
         }
 
-        // Format uptime
-        if ($status['uptime'] > 0) {
-            $status['uptime_formatted'] = human_time_diff(time() - $status['uptime'], time());
-        }
+        wp_send_json_success([
+            'running' => $this->is_server_running(),
+            'stats' => $stats
+        ]);
+    }
 
-        wp_send_json_success($status);
+    /**
+     * Detect if a server is already running (including external processes)
+     */
+    public function detect_running_server() {
+        $port = get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT);
+        
+        // First check if port is in use
+        $sock = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
+        if ($sock) {
+            fclose($sock);
+            
+            // Get process using port
+            if (PHP_OS_FAMILY === 'Windows') {
+                exec("netstat -ano | findstr :$port", $output);
+                $pid = !empty($output) ? end(explode(' ', trim(end($output)))) : null;
+            } else {
+                exec("lsof -i:$port -t 2>/dev/null", $output);
+                $pid = !empty($output) ? trim($output[0]) : null;
+            }
+            
+            if ($pid) {
+                // Verify it's our Node.js process
+                if ($this->verify_node_process($pid)) {
+                    $this->update_process_status($pid);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Verify if a process ID belongs to a Node.js process
+     */
+    private function verify_node_process($pid) {
+        if (PHP_OS_FAMILY === 'Windows') {
+            exec("tasklist /FI \"PID eq $pid\" /FO CSV /NH", $output);
+            return !empty($output) && strpos($output[0], 'node.exe') !== false;
+        } else {
+            exec("ps -p $pid -o command=", $output);
+            return !empty($output) && strpos($output[0], 'node') !== false;
+        }
+    }
+
+    /**
+     * Update process status and details
+     */
+    private function update_process_status($pid) {
+        // Update PID file
+        file_put_contents($this->pid_file, $pid);
+        
+        // Get process stats
+        $stats = $this->get_process_stats($pid);
+        
+        // Update WordPress options
+        update_option('sewn_ws_node_status', 'running');
+        update_option('sewn_ws_node_details', [
+            'pid' => $pid,
+            'uptime' => $stats['uptime'],
+            'memory' => $stats['memory'],
+            'connections' => $stats['connections'],
+            'last_update' => time(),
+            'external_start' => true
+        ]);
+    }
+
+    /**
+     * Get detailed process statistics
+     */
+    private function get_process_stats($pid) {
+        $stats = [
+            'uptime' => 0,
+            'memory' => 0,
+            'connections' => 0
+        ];
+        
+        if (PHP_OS_FAMILY === 'Windows') {
+            // Windows stats collection
+            exec("wmic process where ProcessId=$pid get WorkingSetSize", $memory);
+            $stats['memory'] = isset($memory[1]) ? (int)$memory[1] : 0;
+            
+            exec("wmic process where ProcessId=$pid get CreationDate", $created);
+            if (isset($created[1])) {
+                $stats['uptime'] = time() - strtotime($created[1]);
+            }
+        } else {
+            // Unix stats collection
+            exec("ps -o etimes= -p $pid", $uptime);
+            $stats['uptime'] = isset($uptime[0]) ? (int)$uptime[0] : 0;
+            
+            exec("ps -o rss= -p $pid", $memory);
+            $stats['memory'] = isset($memory[0]) ? (int)$memory[0] * 1024 : 0;
+        }
+        
+        // Get active connections
+        $port = get_option(SEWN_WS_OPTION_PORT, SEWN_WS_DEFAULT_PORT);
+        if (PHP_OS_FAMILY === 'Windows') {
+            exec("netstat -an | findstr :$port | findstr ESTABLISHED", $connections);
+            $stats['connections'] = count($connections);
+        } else {
+            exec("netstat -an | grep :$port | grep ESTABLISHED | wc -l", $connections);
+            $stats['connections'] = (int)trim($connections[0]);
+        }
+        
+        return $stats;
+    }
+
+    /**
+     * Get the current process ID from PID file
+     * 
+     * @return int|null Process ID if available, null otherwise
+     */
+    public function get_current_pid() {
+        if (!file_exists($this->pid_file)) {
+            return null;
+        }
+        
+        $pid = intval(file_get_contents($this->pid_file));
+        return $pid > 0 ? $pid : null;
     }
 }
 
@@ -660,3 +798,5 @@ add_action('admin_notices', function() {
         delete_option('sewn_ws_activation_error');
     }
 });
+
+// End of file

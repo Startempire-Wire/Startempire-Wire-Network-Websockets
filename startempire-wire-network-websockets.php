@@ -181,6 +181,12 @@ if(SEWN_WS_DEBUG) {
     ini_set('display_errors', 1);
 }
 
+// Initialize Process Manager early
+add_action('init', function() {
+    $process_manager = new Process_Manager();
+    $process_manager->init();
+}, 5); // Priority 5 to run before default priority
+
 // CORRECTED BOOTSTRAP
 add_action('init', function() {
     require_once SEWN_WS_PATH . DIRECTORY_SEPARATOR . 'class-socket-manager.php';

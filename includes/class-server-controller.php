@@ -16,6 +16,7 @@ class Server_Controller {
     private $node_binary = null;
     private $server_script;
     private $pid_file;
+    private $constants_file;
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -28,8 +29,53 @@ class Server_Controller {
         add_action('wp_ajax_sewn_ws_server_control', [$this, 'handle_server_control']);
         add_action('wp_ajax_sewn_ws_get_stats', [$this, 'handle_stats_request']);
 
-        $this->server_script = SEWN_WS_PATH . 'server/server.js';
-        $this->pid_file = SEWN_WS_PATH . 'server/server.pid';
+        $this->server_script = SEWN_WS_NODE_SERVER . 'server.js';
+        $this->pid_file = SEWN_WS_NODE_SERVER . 'server.pid';
+        $this->constants_file = SEWN_WS_NODE_SERVER . 'wp-constants.json';
+    }
+
+    /**
+     * Generates the wp-constants.json file with all necessary WordPress constants
+     * for the Node.js server to use.
+     *
+     * @return bool True if successful, false otherwise
+     */
+    private function generate_constants_file() {
+        try {
+            // Create constants array
+            $constants = [
+                'SEWN_WS_DEFAULT_PORT' => SEWN_WS_DEFAULT_PORT,
+                'SEWN_WS_SERVER_CONTROL_PATH' => './tmp',
+                'SEWN_WS_SERVER_PID_FILE' => './tmp/server.pid',
+                'SEWN_WS_SERVER_LOG_FILE' => './logs/server.log',
+                'SEWN_WS_NODE_SERVER' => './',
+                'SEWN_WS_ENV_DEBUG_ENABLED' => defined('WP_DEBUG') && WP_DEBUG,
+                'SEWN_WS_STATS_UPDATE_INTERVAL' => SEWN_WS_STATS_UPDATE_INTERVAL,
+                'SEWN_WS_HISTORY_MAX_POINTS' => SEWN_WS_HISTORY_MAX_POINTS,
+                'SEWN_WS_IS_LOCAL' => SEWN_WS_IS_LOCAL,
+                'SEWN_WS_ENV_CONTAINER_MODE' => defined('SEWN_WS_ENV_CONTAINER_MODE') ? SEWN_WS_ENV_CONTAINER_MODE : false,
+                'SEWN_WS_SSL_ENABLED' => !empty(SEWN_WS_ENV_OVERRIDABLE['SEWN_WS_ENV_SSL_CERT_PATH']) && !empty(SEWN_WS_ENV_OVERRIDABLE['SEWN_WS_ENV_SSL_KEY_PATH']),
+                'SEWN_WS_SSL_CERT' => SEWN_WS_ENV_OVERRIDABLE['SEWN_WS_ENV_SSL_CERT_PATH'] ?? '',
+                'SEWN_WS_SSL_KEY' => SEWN_WS_ENV_OVERRIDABLE['SEWN_WS_ENV_SSL_KEY_PATH'] ?? ''
+            ];
+
+            // Ensure node-server directory exists
+            if (!file_exists(dirname($this->constants_file))) {
+                if (!wp_mkdir_p(dirname($this->constants_file))) {
+                    throw new \Exception('Failed to create node-server directory');
+                }
+            }
+
+            // Write constants to file
+            if (file_put_contents($this->constants_file, json_encode($constants, JSON_PRETTY_PRINT)) === false) {
+                throw new \Exception('Failed to write constants file');
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            error_log('WebSocket Server: Failed to generate constants file: ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function handle_server_control() {
@@ -114,27 +160,49 @@ class Server_Controller {
 
     public function start() {
         try {
-            // Get port from settings
-            $port = get_option('sewn_ws_port', SEWN_WS_DEFAULT_PORT);
-            
-            // Create new server process
-            $server = new Server_Process($port);
-            
-            // Attempt to start the server
-            if (!$server->start()) {
-                throw new \Exception('Failed to start server: ' . $server->get_last_error());
+            if ($this->is_server_running()) {
+                throw new \Exception('Server is already running');
             }
-            
-            return [
-                'status' => 'running',
-                'port' => $port,
-                'pid' => $server->get_pid(),
-                'message' => 'Server started successfully'
-            ];
-            
+
+            // Generate constants file first
+            if (!$this->generate_constants_file()) {
+                throw new \Exception('Failed to generate wp-constants.json');
+            }
+
+            // Get Node.js binary path
+            $this->node_binary = $this->get_node_binary();
+            if (!$this->node_binary) {
+                throw new \Exception('Node.js binary not found');
+            }
+
+            // Start the server
+            $command = sprintf(
+                '%s %s > %s 2>&1 & echo $! > %s',
+                escapeshellcmd($this->node_binary),
+                escapeshellarg($this->server_script),
+                escapeshellarg(SEWN_WS_SERVER_LOG_FILE),
+                escapeshellarg($this->pid_file)
+            );
+
+            $output = [];
+            $return_var = 0;
+            exec($command, $output, $return_var);
+
+            if ($return_var !== 0) {
+                throw new \Exception('Failed to start server process');
+            }
+
+            // Wait briefly to ensure process started
+            usleep(100000); // 100ms
+
+            if (!$this->is_server_running()) {
+                throw new \Exception('Server process failed to start');
+            }
+
+            return true;
         } catch (\Exception $e) {
-            error_log('WebSocket Server Start Error: ' . $e->getMessage());
-            throw $e;
+            error_log('WebSocket Server: Start failed: ' . $e->getMessage());
+            return false;
         }
     }
     
