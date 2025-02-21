@@ -106,8 +106,8 @@ class Socket_Manager {
             in_array($host, ['localhost', '127.0.0.1'])
         );
 
-        // For local development, use WS even with HTTPS
-        $ws_protocol = ($is_ssl && !$is_local_dev) ? 'wss' : 'ws';
+        // Always use WS for local development
+        $ws_protocol = $is_local_dev ? 'ws' : ($is_ssl ? 'wss' : 'ws');
 
         // Initialize configuration
         $config = [

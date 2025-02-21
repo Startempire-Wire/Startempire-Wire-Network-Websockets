@@ -313,96 +313,50 @@ jQuery(document).ready(function ($) {
     }
 
     function initializeSocketMonitoring() {
-        if (!verifySocketIOLoaded() || !verifyConfig()) {
-            return;
+        console.log('Initializing WebSocket connection:', SEWN_WS_CONFIG);
+
+        // Force WS protocol for local development
+        let socketUrl = SEWN_WS_CONFIG.url;
+        if (SEWN_WS_CONFIG.isLocalDev) {
+            socketUrl = socketUrl.replace('wss://', 'ws://');
         }
 
-        const wsUrl = getWebSocketUrl();
-        if (!wsUrl) {
-            return;
-        }
+        const socket = io(socketUrl, {
+            transports: ['websocket'],
+            reconnectionAttempts: SEWN_WS_CONFIG.maxReconnectAttempts,
+            reconnectionDelay: SEWN_WS_CONFIG.reconnectDelay,
+            timeout: SEWN_WS_CONFIG.timeout,
+            auth: {
+                token: SEWN_WS_CONFIG.token
+            }
+        });
 
-        try {
-            const socket = io(wsUrl, {
-                path: '/socket.io',
-                transports: ['websocket'],
-                reconnectionAttempts: maxReconnectAttempts,
-                reconnectionDelay: 1000,
-                timeout: 5000,
-                auth: {
-                    token: window.SEWN_WS_CONFIG.token
-                }
-            });
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('[SEWN WebSocket] Admin socket connected');
+            updateServerStatus('running');
+        });
 
-            // Connection event handlers
-            socket.on('connect', function () {
-                console.log('[SEWN WebSocket] Admin socket connected');
-                socketInitialized = true;
-                socketReconnectAttempts = 0;
-                $('#socket-status')
-                    .text('Connected')
-                    .removeClass('status-error')
-                    .addClass('status-ok');
-            });
+        socket.on('connect_error', (error) => {
+            console.warn('[SEWN WebSocket] Connection error:', error.message);
+            updateServerStatus('error');
+        });
 
-            socket.on('connect_error', function (error) {
-                console.warn('[SEWN WebSocket] Connection error:', error.message);
-                socketReconnectAttempts++;
+        socket.on('error', (error) => {
+            console.error('[SEWN WebSocket] Socket error:', error);
+            updateServerStatus('error');
+        });
 
-                const statusMessage = socketReconnectAttempts >= maxReconnectAttempts
-                    ? 'Connection Failed (Max Retries)'
-                    : `Connection Error (Attempt ${socketReconnectAttempts}/${maxReconnectAttempts})`;
+        socket.on('disconnect', (reason) => {
+            console.log('[SEWN WebSocket] Disconnected:', reason);
+            updateServerStatus('stopped');
+        });
 
-                $('#socket-status')
-                    .text(statusMessage)
-                    .removeClass('status-ok')
-                    .addClass('status-error');
+        socket.on('stats', (stats) => {
+            updateStats(stats);
+        });
 
-                if (socketReconnectAttempts >= maxReconnectAttempts) {
-                    console.error('[SEWN WebSocket] Max reconnection attempts reached. Please check your configuration.');
-                    socket.close();
-                }
-            });
-
-            socket.on('disconnect', function (reason) {
-                console.log('[SEWN WebSocket] Disconnected:', reason);
-                $('#socket-status')
-                    .text('Disconnected: ' + reason)
-                    .removeClass('status-ok')
-                    .addClass('status-error');
-            });
-
-            socket.on('error', function (error) {
-                console.error('[SEWN WebSocket] Socket error:', error);
-                $('#socket-status')
-                    .text('Error: ' + (error.message || 'Unknown error'))
-                    .removeClass('status-ok')
-                    .addClass('status-error');
-            });
-
-            // Server stats handler
-            socket.on('server_stats', function (stats) {
-                try {
-                    updateServerUI(stats, false);
-                } catch (e) {
-                    console.error('[SEWN WebSocket] Error updating UI:', e);
-                }
-            });
-
-            // Handle window unload
-            window.addEventListener('beforeunload', function () {
-                if (socket.connected) {
-                    socket.close();
-                }
-            });
-
-        } catch (e) {
-            console.error('[SEWN WebSocket] Error initializing socket:', e);
-            $('#socket-status')
-                .text('Initialization Error')
-                .removeClass('status-ok')
-                .addClass('status-error');
-        }
+        return socket;
     }
 
     function checkServerStatus() {

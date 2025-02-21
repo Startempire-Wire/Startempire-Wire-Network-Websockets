@@ -369,11 +369,17 @@ async function initializeServer() {
 
         // Initialize Socket.IO with CORS settings
         io = new Server(server, {
-            cors: config.cors || {
+            cors: {
                 origin: "*",
-                methods: ["GET", "POST"]
+                methods: ["GET", "POST", "OPTIONS"],
+                credentials: true
             },
-            transports: ['websocket', 'polling']
+            transports: ['websocket', 'polling'],
+            path: '/socket.io',
+            allowEIO3: true,
+            connectTimeout: 45000,
+            pingTimeout: 60000,
+            pingInterval: 25000
         });
 
         // Initialize managers
@@ -388,6 +394,11 @@ async function initializeServer() {
 
         // Set up admin namespace authentication
         adminNamespace.use(async (socket, next) => {
+            if (isLocalDev) {
+                // Skip token verification in local development
+                return next();
+            }
+
             try {
                 const token = socket.handshake.auth.token;
                 if (!token) {
