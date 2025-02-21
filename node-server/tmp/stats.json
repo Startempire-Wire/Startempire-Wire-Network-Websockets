@@ -1,33 +1,16 @@
 {
-  "channels": {
-    "message": {
-      "subscribers": 0,
-      "messages": 0
-    },
-    "presence": {
-      "subscribers": 0,
-      "messages": 0
-    },
-    "status": {
-      "subscribers": 0,
-      "messages": 0
-    }
+  "uptime": 111,
+  "memory": {
+    "heapUsed": "15.23MB",
+    "external": 2.17,
+    "rss": 50.72
   },
-  "tiers": {
-    "free": {
-      "connections": 0,
-      "bandwidth": 0
-    },
-    "api": {
-      "connections": 0,
-      "bandwidth": 0
-    },
-    "admin": {
-      "connections": 0,
-      "bandwidth": 0
-    }
-  },
-  "namespaces": {},
-  "shutdown_time": 1740130025775,
-  "shutdown_reason": "normal"
+  "connections": 0,
+  "messages": {
+    "in": 0,
+    "out": 0,
+    "errors": 0,
+    "rateIn": 0,
+    "rateOut": 0
+  }
 }

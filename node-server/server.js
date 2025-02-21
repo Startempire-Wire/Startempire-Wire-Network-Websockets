@@ -40,12 +40,14 @@ let connectionManager;
 let app = express(); // Initialize Express app globally
 let metrics = {
     startTime: Date.now(),
-    messagesIn: 0,
-    messagesOut: 0,
-    errors: 0,
-    connections: 0,
-    messageRateIn: 0,
-    messageRateOut: 0
+    messages: {
+        in: 0,
+        out: 0,
+        errors: 0,
+        rateIn: 0,
+        rateOut: 0
+    },
+    connections: 0
 };
 let namespaces = {};
 
@@ -450,11 +452,40 @@ async function initializeServer() {
 
         // Set up connection logging
         io.on('connection', (socket) => {
-            logger.info(`Client connected: ${socket.id}`);
+            try {
+                logger.info(`Client connected: ${socket.id}`);
+                metrics.connections++;
 
-            socket.on('disconnect', () => {
-                logger.info(`Client disconnected: ${socket.id}`);
-            });
+                socket.on('disconnect', () => {
+                    try {
+                        logger.info(`Client disconnected: ${socket.id}`);
+                        metrics.connections = Math.max(0, metrics.connections - 1);
+                    } catch (err) {
+                        logger.error('Error in disconnect handler:', err);
+                    }
+                });
+
+                socket.on('message', (data) => {
+                    try {
+                        metrics.messages.in++;
+                        // Handle message processing here
+                    } catch (err) {
+                        logger.error('Error in message handler:', err);
+                        metrics.messages.errors++;
+                    }
+                });
+
+                socket.on('error', (error) => {
+                    try {
+                        logger.error('Socket error:', error);
+                        metrics.messages.errors++;
+                    } catch (err) {
+                        logger.error('Error in error handler:', err);
+                    }
+                });
+            } catch (err) {
+                logger.error('Error in connection handler:', err);
+            }
         });
 
         // Start stats emission after server is initialized
@@ -540,9 +571,14 @@ const authenticateJWT = async (socket, next) => {
 function emitStats() {
     try {
         const now = Date.now();
-        const uptime = Math.floor((now - metrics.startTime) / 1000); // Uptime in seconds
+        const uptime = Math.floor((now - metrics.startTime) / 1000);
         const memoryUsage = process.memoryUsage();
-        const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100; // MB with 2 decimal places
+        const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100;
+
+        // Calculate message rates
+        const elapsedTime = (now - metrics.startTime) / 1000; // Convert to seconds
+        metrics.messages.rateIn = Math.round((metrics.messages.in / elapsedTime) * 100) / 100;
+        metrics.messages.rateOut = Math.round((metrics.messages.out / elapsedTime) * 100) / 100;
 
         const stats = {
             uptime,
@@ -552,13 +588,7 @@ function emitStats() {
                 rss: Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100
             },
             connections: metrics.connections,
-            messages: {
-                in: metrics.messagesIn,
-                out: metrics.messagesOut,
-                errors: metrics.errors,
-                rateIn: metrics.messageRateIn,
-                rateOut: metrics.messageRateOut
-            }
+            messages: metrics.messages
         };
 
         // Write stats to file if statsFile is defined

@@ -426,6 +426,9 @@ class Process_Manager {
             // Sync VM timezone with host
             date_default_timezone_set('America/Los_Angeles');
             shell_exec('ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime');
+
+            // 5. Register AJAX handlers
+            add_action('wp_ajax_sewn_ws_check_server_status', [__CLASS__, 'ajax_check_server_status']);
         } catch(\Throwable $e) {
             update_option('sewn_ws_activation_error', $e->getMessage());
         }
@@ -617,6 +620,34 @@ class Process_Manager {
         }
         
         return posix_kill($pid, 0);
+    }
+
+    /**
+     * AJAX handler for server status checks
+     */
+    public static function ajax_check_server_status() {
+        check_ajax_referer('sewn_ws_status_check', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        $process_manager = new self();
+        $status = $process_manager->get_status();
+
+        // Get stats file content if available
+        $stats_file = SEWN_WS_PATH . 'tmp/stats.json';
+        if (file_exists($stats_file)) {
+            $stats = json_decode(file_get_contents($stats_file), true);
+            $status['stats'] = $stats;
+        }
+
+        // Format uptime
+        if ($status['uptime'] > 0) {
+            $status['uptime_formatted'] = human_time_diff(time() - $status['uptime'], time());
+        }
+
+        wp_send_json_success($status);
     }
 }
 

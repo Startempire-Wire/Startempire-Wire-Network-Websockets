@@ -15,8 +15,8 @@ namespace SEWN\WebSockets\Admin;
 
 if (!defined('ABSPATH')) exit;
 
-use SEWN\WebSockets\Process_Manager;
 use SEWN\WebSockets\Config;
+use SEWN\WebSockets\Process_Manager;
 
 // Extract environment data
 $environment = $data['environment'] ?? [];
@@ -193,6 +193,20 @@ $server_config = [
                 <span class="status-text">
                     <?php echo esc_html($status_text); ?>
                 </span>
+                <div class="server-info">
+                    <p>
+                        <strong><?php _e('Process ID:', 'sewn-ws'); ?></strong>
+                        <span class="pid"><?php echo esc_html($node_status['pid'] ?? 'N/A'); ?></span>
+                    </p>
+                    <p>
+                        <strong><?php _e('Uptime:', 'sewn-ws'); ?></strong>
+                        <span class="uptime"><?php echo esc_html($node_status['uptime_formatted'] ?? '0s'); ?></span>
+                    </p>
+                    <p>
+                        <strong><?php _e('Port:', 'sewn-ws'); ?></strong>
+                        <span class="port"><?php echo esc_html(SEWN_WS_DEFAULT_PORT); ?></span>
+                    </p>
+                </div>
                 <?php if (get_option('sewn_ws_local_mode', false)): ?>
                     <div class="environment-info">
                         <p>
@@ -1038,12 +1052,82 @@ $server_config = [
     font-size: 0.8em;
     margin-right: 5px;
 }
+
+.sewn-ws-status .status-text {
+    font-weight: 600;
+    font-size: 16px;
+    margin-left: 5px;
+}
+
+.server-info {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.server-info p {
+    margin: 5px 0;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+}
+
+.server-info strong {
+    min-width: 100px;
+    display: inline-block;
+    color: #50575e;
+}
+
+.server-info .pid,
+.server-info .uptime,
+.server-info .port {
+    font-family: monospace;
+    background: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
 </style>
 
 <script>
 jQuery(document).ready(function($) {
     // Add Socket.IO configuration using WordPress constants
     window.SEWN_WS_CONFIG = <?php echo json_encode($server_config); ?>;
+
+    // Add server status polling
+    function pollServerStatus() {
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'sewn_ws_check_server_status',
+                nonce: '<?php echo wp_create_nonce("sewn_ws_status_check"); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    const status = response.data;
+                    updateServerStatus(
+                        status.running ? 'running' : 'stopped',
+                        status.message || ''
+                    );
+                    
+                    // Update stats if available
+                    if (status.stats) {
+                        updateDashboardStats(status.stats);
+                    }
+
+                    // Update server info
+                    if (status.running) {
+                        $('.server-info .pid').text(status.pid || 'N/A');
+                        $('.server-info .uptime').text(status.uptime || '0s');
+                    }
+                }
+            },
+            complete: function() {
+                // Poll every 5 seconds
+                setTimeout(pollServerStatus, 5000);
+            }
+        });
+    }
 
     // Initialize Socket.IO monitoring
     function initializeSocketMonitoring() {
@@ -1053,28 +1137,16 @@ jQuery(document).ready(function($) {
         const isLocalDev = config.environment.is_local;
 
         // Protocol selection logic
-        let protocol;
-        if (isLocalDev) {
-            // In local dev, always use the protocol that matches the server's SSL setting
-            protocol = config.environment.ssl_enabled ? 'wss:' : 'ws:';
-        } else {
-            // In production, always match the page protocol
-            protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        }
+        let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let host = window.location.hostname;
+        let port = <?php echo SEWN_WS_DEFAULT_PORT; ?>;
 
-        // If we're forcing HTTPS but server isn't SSL-enabled, show warning
-        if (window.location.protocol === 'https:' && !config.environment.ssl_enabled && isLocalDev) {
-            console.warn('Warning: Page is HTTPS but WebSocket server is not SSL-enabled. ' +
-                        'Connection may fail due to mixed content restrictions.');
-        }
-
-        const wsUrl = `${protocol}//${window.location.hostname}:${config.server.port}`;
+        const wsUrl = `${protocol}//${host}:${port}`;
         console.log('Initializing WebSocket connection:', {
             url: wsUrl,
             isLocalDev,
             pageProtocol: window.location.protocol,
-            wsProtocol: protocol,
-            sslEnabled: config.environment.ssl_enabled
+            wsProtocol: protocol
         });
 
         // Initialize admin namespace connection
@@ -1082,48 +1154,25 @@ jQuery(document).ready(function($) {
             path: '/socket.io',
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionAttempts: config.server.reconnection_attempts,
-            timeout: config.server.connection_timeout,
-            secure: protocol === 'wss:',
-            rejectUnauthorized: !(isLocalDev && !config.environment.ssl_enabled),
+            reconnectionAttempts: 3,
+            timeout: 45000,
             auth: {
-                token: config.adminToken
+                token: '<?php echo wp_create_nonce("sewn_ws_admin"); ?>'
             }
         });
 
         // Enhanced error handling
         adminSocket.on('connect_error', (error) => {
             console.error('Admin socket connection error:', error);
-            console.log('Connection details:', {
-                url: wsUrl,
-                secure: protocol === 'wss:',
-                isLocalDev,
-                sslEnabled: config.environment.ssl_enabled,
-                pageProtocol: window.location.protocol
-            });
-            
-            // Provide more specific error messages
-            let errorMessage = error.message;
-            if (error.message.includes('Mixed Content') || error.message.includes('WebSocket connection failed')) {
-                errorMessage = 'Connection failed - SSL mismatch between page and WebSocket server. ' +
-                             'Either enable SSL on the server or access the page via HTTP.';
-            }
-            
-            updateServerStatus('error', errorMessage);
+            updateServerStatus('error', error.message);
         });
 
         adminSocket.on('connect', () => {
-            // Send explicit connect packet
-            adminSocket.emit('connect');
-            console.log('Admin socket connected, sending CONNECT packet');
-        });
-
-        adminSocket.on('connect_confirmed', (data) => {
-            console.log('Admin socket connection confirmed:', data);
+            console.log('Admin socket connected');
             updateServerStatus('running');
         });
 
-        adminSocket.on('stats_update', (stats) => {
+        adminSocket.on('stats', (stats) => {
             updateDashboardStats(stats);
         });
 
@@ -1168,30 +1217,64 @@ jQuery(document).ready(function($) {
         }
     }
 
-    // Initialize monitoring when document is ready
-    const adminSocket = initializeSocketMonitoring();
-
-    // Update server control handlers
-    $('.sewn-ws-controls button').on('click', function() {
-        const action = $(this).data('action');
-        const button = $(this);
+    // Update dashboard stats
+    function updateDashboardStats(stats) {
+        // Update connections
+        $('#live-connections-count').text(stats.connections || 0);
         
-        button.prop('disabled', true);
+        // Update message rate
+        const messageRate = stats.messages ? stats.messages.rateIn.toFixed(1) : '0.0';
+        $('#message-throughput').text(messageRate + ' msg/s');
         
-        if (adminSocket && adminSocket.connected) {
-            adminSocket.emit('server_control', { action }, (response) => {
-                if (response.success) {
-                    updateServerStatus(action === 'start' ? 'starting' : 'stopped');
-                } else {
-                    updateServerStatus('error', response.message);
-                }
-                button.prop('disabled', false);
-            });
-        } else {
-            console.error('Admin socket not connected');
-            updateServerStatus('error', 'Not connected to server');
-            button.prop('disabled', false);
+        // Update memory usage
+        const memoryUsed = stats.memory ? (stats.memory.heapUsed || '0MB') : '0MB';
+        $('#memory-usage').text(memoryUsed);
+        
+        // Update graphs if they exist
+        if (window.connectionGraph) {
+            window.connectionGraph.addPoint(stats.connections);
         }
+        if (window.memoryGraph) {
+            window.memoryGraph.addPoint(parseFloat(memoryUsed));
+        }
+
+        // Add class to show update animation
+        $('.metric-card').addClass('updating');
+        setTimeout(() => {
+            $('.metric-card').removeClass('updating');
+        }, 1000);
+    }
+
+    // Start polling when document is ready
+    $(document).ready(function() {
+        // Initial status check
+        pollServerStatus();
+        
+        // Initialize WebSocket monitoring
+        const adminSocket = initializeSocketMonitoring();
+
+        // Update server control handlers
+        $('.sewn-ws-controls button').on('click', function() {
+            const action = $(this).data('action');
+            const button = $(this);
+            
+            button.prop('disabled', true);
+            
+            if (adminSocket && adminSocket.connected) {
+                adminSocket.emit('server_control', { action }, (response) => {
+                    if (response.success) {
+                        updateServerStatus(action === 'start' ? 'starting' : 'stopped');
+                    } else {
+                        updateServerStatus('error', response.message);
+                    }
+                    button.prop('disabled', false);
+                });
+            } else {
+                console.error('Admin socket not connected');
+                updateServerStatus('error', 'Not connected to server');
+                button.prop('disabled', false);
+            }
+        });
     });
 });
 </script> 
