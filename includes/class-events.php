@@ -47,7 +47,7 @@ class Events {
     }
 
     public function get_channel_stats() {
-        check_ajax_referer('sewn_ws_admin');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION);
         
         $stats = [];
         foreach ($this->channels as $name => $channel) {

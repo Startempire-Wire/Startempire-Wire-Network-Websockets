@@ -9,38 +9,63 @@
  */
 namespace SEWN\WebSockets;
 
-class Ajax_Handler {
-    public function __construct() {
-        add_action('wp_ajax_sewn_ws_get_status', [$this, 'handle_status_request']);
-        add_action('wp_ajax_nopriv_sewn_ws_get_status', [$this, 'handle_unauthenticated']);
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Class AJAX_Handler
+ */
+class AJAX_Handler {
+
+    /**
+     * Initialize the AJAX handler
+     */
+    public static function init() {
+        add_action('wp_ajax_sewn_ws_refresh_nonce', [__CLASS__, 'refresh_nonce']);
+        add_action('wp_ajax_sewn_ws_check_server_status', [__CLASS__, 'check_server_status']);
     }
 
-    public function handle_status_request() {
-        check_ajax_referer(
-            defined('SEWN_WS_NONCE_ACTION') ? SEWN_WS_NONCE_ACTION : 'sewn_ws_nonce',
-            'nonce'
-        );
-
+    /**
+     * Refresh the nonce
+     */
+    public static function refresh_nonce() {
         if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized', 403);
+            wp_send_json_error('Insufficient permissions');
+            return;
         }
 
-        $status = get_option(
-            defined('SEWN_WS_OPTION_SERVER_STATUS') ? SEWN_WS_OPTION_SERVER_STATUS : 'sewn_ws_server_status',
-            'stopped'
-        );
-
         wp_send_json_success([
-            'status' => $status,
-            'timestamp' => time(),
-            'environment' => defined('WP_ENVIRONMENT_TYPE') ? WP_ENVIRONMENT_TYPE : 'production'
+            'nonce' => wp_create_nonce(SEWN_WS_NONCE_ACTION)
         ]);
     }
 
-    public function handle_unauthenticated() {
-        wp_send_json_error('Authentication required', 401);
+    /**
+     * Check server status
+     */
+    public static function check_server_status() {
+        if (!check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce', false)) {
+            wp_send_json_error('Invalid nonce');
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+
+        $server_status = new Server_Status();
+        $status = $server_status->get_status();
+        
+        wp_send_json_success([
+            'running' => $status['running'],
+            'pid' => $status['pid'],
+            'port' => $status['port'],
+            'uptime' => $status['uptime'] ?? 0,
+            'connections' => $status['connections'] ?? 0
+        ]);
     }
 }
 
-// Initialize in your plugin bootstrap file
-new Ajax_Handler(); 
+// Initialize the AJAX handler
+AJAX_Handler::init(); 

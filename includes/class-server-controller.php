@@ -17,6 +17,7 @@ class Server_Controller {
     private $server_script;
     private $pid_file;
     private $constants_file;
+    private $server_controller;
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -32,6 +33,9 @@ class Server_Controller {
         $this->server_script = SEWN_WS_NODE_SERVER . 'server.js';
         $this->pid_file = SEWN_WS_NODE_SERVER . 'server.pid';
         $this->constants_file = SEWN_WS_NODE_SERVER . 'wp-constants.json';
+        
+        // Initialize server controller
+        $this->server_controller = $this;
     }
 
     /**
@@ -79,67 +83,70 @@ class Server_Controller {
     }
 
     public function handle_server_control() {
+        static $is_processing = false;
+        
         try {
-            // Verify nonce first
-            check_ajax_referer(SEWN_WS_NONCE_ACTION, 'nonce');
+            error_log('WebSocket Server Control: Request received');
+            error_log('POST data: ' . print_r($_POST, true));
+            
+            if ($is_processing) {
+                error_log('WebSocket Server Control: Request already in progress');
+                wp_send_json_error([
+                    'message' => __('Another request is in progress', 'sewn-ws'),
+                    'code' => 'LOCKED'
+                ], 423);
+                return;
+            }
+            
+            $is_processing = true;
+            
+            check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
             
             if (!current_user_can('manage_options')) {
-                error_log('WebSocket Server: Unauthorized access attempt');
+                error_log('WebSocket Server Control: Insufficient permissions');
                 wp_send_json_error([
-                    'message' => 'Insufficient permissions',
-                    'code' => 'FORBIDDEN',
-                    'php_version' => PHP_VERSION,
-                    'node_path' => $this->node_binary
+                    'message' => __('Insufficient permissions to manage WebSocket server', 'sewn-ws'),
+                    'code' => 'FORBIDDEN'
                 ], 403);
                 return;
             }
-
-            $command = sanitize_text_field($_POST['command'] ?? '');
-            if (!in_array($command, ['start', 'stop', 'restart'])) {
-                throw new \Exception('Invalid command: ' . $command);
-            }
-
-            // Initialize node binary path
-            if (!$this->node_binary) {
-                $this->node_binary = $this->get_node_binary();
-            }
-
-            if (!$this->node_binary) {
-                throw new \Exception('Node.js binary not found. Please check server requirements.');
-            }
-
-            // Log the command attempt
-            error_log("WebSocket Server: Attempting {$command} command");
-
-            // Execute command and return response
-            $result = $this->execute_server_command($command);
             
-            // Log success
-            error_log("WebSocket Server: {$command} command executed successfully");
+            if (!$this->server_controller) {
+                error_log('WebSocket Server Control: Server controller not initialized');
+                wp_send_json_error([
+                    'message' => __('Server controller not initialized', 'sewn-ws'),
+                    'code' => 'SERVER_ERROR'
+                ], 500);
+                return;
+            }
+            
+            $command = $_POST['command'] ?? '';
+            
+            if(!method_exists($this->server_controller, $command)) {
+                error_log('WebSocket Server Control: Invalid command - ' . $command);
+                throw new \Exception("Invalid server command: $command");
+            }
+            
+            error_log('WebSocket Server Control: Executing command - ' . $command);
+            $result = $this->server_controller->$command();
+            error_log('WebSocket Server Control: Command result - ' . print_r($result, true));
+            
+            // Get fresh server status
+            $status = $this->server_controller->get_server_status();
             
             wp_send_json_success([
-                'status' => $this->get_server_status(),
-                'message' => "Server {$command} executed successfully",
-                'php_version' => PHP_VERSION,
-                'node_path' => $this->node_binary,
-                'result' => $result
+                'status' => $status['running'] ? 'running' : 'stopped',
+                'details' => $status
             ]);
-
+            
         } catch (\Exception $e) {
             error_log('WebSocket Server Control Error: ' . $e->getMessage());
-            error_log('Stack trace: ' . $e->getTraceAsString());
-            
             wp_send_json_error([
                 'message' => $e->getMessage(),
-                'code' => 'ERROR',
-                'php_version' => PHP_VERSION,
-                'node_path' => $this->node_binary ?? 'undefined',
-                'debug' => [
-                    'error_type' => get_class($e),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine()
-                ]
+                'code' => 'ERROR'
             ], 500);
+        } finally {
+            $is_processing = false;
         }
     }
 

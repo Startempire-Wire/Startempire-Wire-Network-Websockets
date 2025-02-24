@@ -20,7 +20,7 @@ class Log_Handler {
     }
 
     public function handle_log_request() {
-        check_ajax_referer('sewn_ws_admin');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION);
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);
@@ -35,7 +35,7 @@ class Log_Handler {
     }
 
     public function handle_clear_logs() {
-        check_ajax_referer('sewn_ws_admin');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION);
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);

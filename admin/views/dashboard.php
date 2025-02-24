@@ -39,13 +39,20 @@ $status_class = $node_status['running'] ? 'running' :
 $status_text = $node_status['running'] ? '✓ Operational' : 
     (isset($node_status['status']) && $node_status['status'] === 'uninitialized' ? 'Uninitialized' : '✗ Stopped');
 
-// Get configuration from WordPress constants
+// Get configuration from WordPress constants with enhanced protocol handling
 $server_config = [
     'port' => \SEWN_WS_DEFAULT_PORT,
+    'host' => \SEWN_WS_HOST,
     'environment' => [
-        'ssl_enabled' => (get_option(\SEWN_WS_OPTION_SSL_CERT) && get_option(\SEWN_WS_OPTION_SSL_KEY)) || (strpos(site_url(), 'https://') === 0),
+        'type' => \SEWN_WS_ENV_TYPE,
         'is_local' => \SEWN_WS_IS_LOCAL,
+        'ssl_enabled' => \SEWN_WS_SSL,
         'debug_enabled' => defined('WP_DEBUG') && WP_DEBUG
+    ],
+    'ssl' => [
+        'enabled' => \SEWN_WS_SSL,
+        'cert_path' => get_option(\SEWN_WS_OPTION_SSL_CERT),
+        'key_path' => get_option(\SEWN_WS_OPTION_SSL_KEY)
     ],
     'server' => [
         'status' => get_option(\SEWN_WS_OPTION_SERVER_STATUS, \SEWN_WS_SERVER_STATUS_UNINITIALIZED),
@@ -55,6 +62,22 @@ $server_config = [
     'stats' => [
         'update_interval' => \SEWN_WS_STATS_UPDATE_INTERVAL,
         'max_history_points' => \SEWN_WS_HISTORY_MAX_POINTS
+    ],
+    'nonce' => wp_create_nonce(\SEWN_WS_NONCE_ACTION),
+    'ajax_url' => admin_url('admin-ajax.php'),
+    'protocol' => \SEWN_WS_PROTOCOL,
+    'page_protocol' => is_ssl() ? 'https' : 'http',
+    'transports' => ['polling', 'websocket'],
+    'socket' => [
+        'path' => '/socket.io',
+        'reconnection' => true,
+        'reconnectionAttempts' => 5,
+        'reconnectionDelay' => 1000,
+        'reconnectionDelayMax' => 5000,
+        'timeout' => 20000,
+        'autoConnect' => false,
+        'rejectUnauthorized' => false,
+        'secure' => \SEWN_WS_SSL
     ]
 ];
 
@@ -64,29 +87,36 @@ $server_config = [
     <h1 class="wp-heading-inline"><?php _e('WebSocket Server Dashboard', 'sewn-ws'); ?></h1>
     
     <?php 
-    $env_type = $environment['container_info']['type'] ?? 'production';
+    // Enhanced environment type detection
+    $env_type = $server_config['environment']['type'];
+    $is_local = $server_config['environment']['is_local'];
+    $ssl_enabled = $server_config['ssl']['enabled'];
 
     $env_classes = [
-        'local_by_flywheel' => 'notice-info',
-        'xampp' => 'notice-warning',
-        'mamp' => 'notice-warning',
-        'development' => 'notice-warning',
+        'local' => 'notice-info',
+        'staging' => 'notice-warning',
         'production' => 'notice-success'
     ];
+    
     $env_icons = [
-        'local_by_flywheel' => 'dashicons-desktop',
-        'xampp' => 'dashicons-laptop',
-        'mamp' => 'dashicons-laptop',
-        'development' => 'dashicons-code-standards',
+        'local' => 'dashicons-desktop',
+        'staging' => 'dashicons-code-standards',
         'production' => 'dashicons-cloud'
     ];
+    
     $env_labels = [
-        'local_by_flywheel' => __('Local by Flywheel Environment', 'sewn-ws'),
-        'xampp' => __('XAMPP Development Environment', 'sewn-ws'),
-        'mamp' => __('MAMP Development Environment', 'sewn-ws'),
-        'development' => __('Development Environment', 'sewn-ws'),
+        'local' => __('Local Development Environment', 'sewn-ws'),
+        'staging' => __('Staging Environment', 'sewn-ws'),
         'production' => __('Production Environment', 'sewn-ws')
     ];
+    
+    // Add protocol information to the environment panel
+    $protocol_info = sprintf(
+        '%s://%s:%d',
+        $server_config['protocol'],
+        $server_config['host'],
+        $server_config['port']
+    );
     ?>
 
     <div class="sewn-ws-environment-panel">
@@ -98,68 +128,64 @@ $server_config = [
             
             <div class="environment-details">
                 <div class="detail-column">
-                    <h3><?php _e('Server Information', 'sewn-ws'); ?></h3>
+                    <h3><?php _e('WebSocket Configuration', 'sewn-ws'); ?></h3>
                     <ul>
                         <li>
-                            <strong><?php _e('Server Software:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['server_info']['software'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Protocol:', 'sewn-ws'); ?></strong>
+                            <?php echo esc_html($server_config['protocol']); ?>
                         </li>
                         <li>
-                            <strong><?php _e('Operating System:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['server_info']['os'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Host:', 'sewn-ws'); ?></strong>
+                            <?php echo esc_html($server_config['host']); ?>
                         </li>
                         <li>
-                            <strong><?php _e('PHP Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['version'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Port:', 'sewn-ws'); ?></strong>
+                            <?php echo esc_html($server_config['port']); ?>
                         </li>
                         <li>
-                            <strong><?php _e('MySQL Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['wordpress_info']['mysql_version'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Full URL:', 'sewn-ws'); ?></strong>
+                            <?php echo esc_html($protocol_info); ?>
                         </li>
                     </ul>
                 </div>
 
                 <div class="detail-column">
-                    <h3><?php _e('WordPress Configuration', 'sewn-ws'); ?></h3>
+                    <h3><?php _e('SSL Configuration', 'sewn-ws'); ?></h3>
                     <ul>
                         <li>
-                            <strong><?php _e('WordPress Version:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['wordpress_info']['version'] ?? 'Unknown'); ?>
-                        </li>
-                        <li>
                             <strong><?php _e('SSL Enabled:', 'sewn-ws'); ?></strong>
-                            <?php echo $environment['ssl_info']['has_valid_cert'] ? '✓' : '✗'; ?>
+                            <?php echo $ssl_enabled ? '✓' : '✗'; ?>
+                        </li>
+                        <?php if ($ssl_enabled): ?>
+                        <li>
+                            <strong><?php _e('Certificate:', 'sewn-ws'); ?></strong>
+                            <?php echo $server_config['ssl']['cert_path'] ? '✓' : '✗'; ?>
                         </li>
                         <li>
-                            <strong><?php _e('Memory Limit:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['memory_limit'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Private Key:', 'sewn-ws'); ?></strong>
+                            <?php echo $server_config['ssl']['key_path'] ? '✓' : '✗'; ?>
                         </li>
-                        <li>
-                            <strong><?php _e('Max Execution Time:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['max_execution_time'] ?? 'Unknown'); ?>s
-                        </li>
+                        <?php endif; ?>
                     </ul>
                 </div>
 
-                <?php if ($env_type !== 'production'): ?>
+                <?php if ($is_local): ?>
                 <div class="detail-column development-info">
-                    <h3><?php _e('Development Settings', 'sewn-ws'); ?></h3>
+                    <h3><?php _e('Local Development Settings', 'sewn-ws'); ?></h3>
                     <ul>
                         <li>
-                            <strong><?php _e('Upload Max Filesize:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['upload_max_filesize'] ?? 'Unknown'); ?>
+                            <strong><?php _e('Debug Mode:', 'sewn-ws'); ?></strong>
+                            <?php echo $server_config['environment']['debug_enabled'] ? '✓' : '✗'; ?>
                         </li>
                         <li>
-                            <strong><?php _e('Post Max Size:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['post_max_size'] ?? 'Unknown'); ?>
-                        </li>
-                        <li>
-                            <strong><?php _e('Max Input Vars:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['max_input_vars'] ?? 'Unknown'); ?>
-                        </li>
-                        <li>
-                            <strong><?php _e('Max Input Time:', 'sewn-ws'); ?></strong>
-                            <?php echo esc_html($environment['php_info']['max_input_time'] ?? 'Unknown'); ?>s
+                            <strong><?php _e('SSL Mode:', 'sewn-ws'); ?></strong>
+                            <?php 
+                            if ($ssl_enabled) {
+                                echo $server_config['ssl']['cert_path'] ? __('Custom Certificate', 'sewn-ws') : __('Auto SSL', 'sewn-ws');
+                            } else {
+                                _e('Disabled', 'sewn-ws');
+                            }
+                            ?>
                         </li>
                     </ul>
                 </div>
@@ -1086,195 +1112,131 @@ $server_config = [
     padding: 2px 6px;
     border-radius: 3px;
 }
+
+.sewn-ws-status.error {
+    background-color: #ffebee;
+    border-color: #ef5350;
+}
+
+.sewn-ws-status.ssl-error {
+    background-color: #fff3e0;
+    border-color: #ff9800;
+}
+
+.sewn-ws-status .error-message {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.sewn-ws-status.connected .status-dot {
+    background-color: #4caf50;
+}
+
+.sewn-ws-status.disconnected .status-dot {
+    background-color: #f44336;
+}
+
+.sewn-ws-status .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
 </style>
 
 <script>
 jQuery(document).ready(function($) {
-    // Add Socket.IO configuration using WordPress constants
-    window.SEWN_WS_CONFIG = <?php echo json_encode($server_config); ?>;
+    const serverConfig = <?php echo json_encode($server_config); ?>;
+    const isLocal = serverConfig.environment.is_local;
+    const protocol = serverConfig.protocol;
+    const host = serverConfig.host;
+    const port = serverConfig.port;
+    const nonce = serverConfig.nonce;
 
-    // Add server status polling
-    function pollServerStatus() {
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: '<?php echo \SEWN_WS_SERVER_STATUS_CHECK_ACTION; ?>',
-                nonce: '<?php echo wp_create_nonce(\SEWN_WS_NONCE_ACTION); ?>'
-            },
-            success: function(response) {
-                if (response.success) {
-                    const status = response.data;
-                    updateServerStatus(
-                        status.running ? 'running' : 'stopped',
-                        status.message || ''
-                    );
-                    
-                    // Update stats if available
-                    if (status.stats) {
-                        updateDashboardStats(status.stats);
-                    }
-
-                    // Update server info
-                    if (status.running) {
-                        $('.server-info .pid').text(status.pid || 'N/A');
-                        $('.server-info .uptime').text(status.uptime || '0s');
-                    }
-                }
-            },
-            complete: function() {
-                // Poll every 5 seconds
-                setTimeout(pollServerStatus, 5000);
-            }
-        });
+    // Debug logging in local environment
+    if (serverConfig.environment.debug_enabled) {
+        console.log('Server Configuration:', serverConfig);
     }
 
     // Initialize Socket.IO monitoring
     function initializeSocketMonitoring() {
-        const config = window.SEWN_WS_CONFIG;
+        const socketUrl = `${serverConfig.protocol}://${serverConfig.host}:${serverConfig.port}`;
         
-        // Determine if we're in a local development environment
-        const isLocalDev = config.environment.is_local;
+        if (serverConfig.environment.debug_enabled) {
+            console.log('Socket Configuration:', {
+                url: socketUrl,
+                isLocal: serverConfig.environment.is_local,
+                ssl: serverConfig.ssl,
+                protocol: serverConfig.protocol
+            });
+        }
 
-        // Force secure WebSocket connection if the page is loaded over HTTPS
-        let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        let host = window.location.hostname;
-        // Use the port from the server config
-        let port = config.port;
-        const wsUrl = `${protocol}//${host}:${port}`;
-        console.log('Initializing WebSocket connection:', {
-            url: wsUrl,
-            isLocalDev,
-            pageProtocol: window.location.protocol,
-            wsProtocol: protocol
-        });
-
-        // Initialize admin namespace connection
-        const adminSocket = io(`${wsUrl}/admin`, {
-            path: '/socket.io',
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 3,
-            timeout: 45000,
+        const socket = io(socketUrl, {
+            transports: serverConfig.transports,
+            secure: serverConfig.socket.secure,
+            rejectUnauthorized: serverConfig.socket.rejectUnauthorized,
+            forceNew: true,
+            reconnection: serverConfig.socket.reconnection,
+            reconnectionAttempts: serverConfig.socket.reconnectionAttempts,
+            reconnectionDelay: serverConfig.socket.reconnectionDelay,
+            timeout: serverConfig.socket.timeout,
+            path: serverConfig.socket.path,
             auth: {
-                token: '<?php echo wp_create_nonce("sewn_ws_admin"); ?>'
-            }
+                nonce: serverConfig.nonce
+            },
+            // Debug settings for local environment
+            debug: serverConfig.environment.debug_enabled
         });
 
-        // Enhanced error handling
-        adminSocket.on('connect_error', (error) => {
-            console.error('Admin socket connection error:', error);
-            updateServerStatus('error', error.message);
-        });
-
-        adminSocket.on('connect', () => {
-            console.log('Admin socket connected');
+        // Socket connection handlers
+        socket.on('connect', function() {
             updateServerStatus('running');
-        });
-
-        adminSocket.on('stats', (stats) => {
-            updateDashboardStats(stats);
-        });
-
-        adminSocket.on('server_shutdown', (data) => {
-            console.log('Server shutting down:', data);
-            updateServerStatus('stopped', data.reason);
-        });
-
-        return adminSocket;
-    }
-
-    // Update server status display
-    function updateServerStatus(status, message = '') {
-        const statusDot = $('.status-dot');
-        const statusText = $('.status-text');
-        const realTimeIndicators = $('.real-time-indicator');
-
-        statusDot.removeClass('running stopped error starting');
-        realTimeIndicators.removeClass('running stopped error starting');
-
-        switch(status) {
-            case 'running':
-                statusDot.addClass('running');
-                realTimeIndicators.addClass('running');
-                statusText.text('✓ Operational');
-                break;
-            case 'stopped':
-                statusDot.addClass('stopped');
-                realTimeIndicators.addClass('stopped');
-                statusText.text('✗ Stopped' + (message ? `: ${message}` : ''));
-                break;
-            case 'error':
-                statusDot.addClass('error');
-                realTimeIndicators.addClass('error');
-                statusText.text('⚠ Error: ' + message);
-                break;
-            case 'starting':
-                statusDot.addClass('starting');
-                realTimeIndicators.addClass('starting');
-                statusText.text('Starting...');
-                break;
-        }
-    }
-
-    // Update dashboard stats
-    function updateDashboardStats(stats) {
-        // Update connections
-        $('#live-connections-count').text(stats.connections || 0);
-        
-        // Update message rate
-        const messageRate = stats.messages ? stats.messages.rateIn.toFixed(1) : '0.0';
-        $('#message-throughput').text(messageRate + ' msg/s');
-        
-        // Update memory usage
-        const memoryUsed = stats.memory ? (stats.memory.heapUsed || '0MB') : '0MB';
-        $('#memory-usage').text(memoryUsed);
-        
-        // Update graphs if they exist
-        if (window.connectionGraph) {
-            window.connectionGraph.addPoint(stats.connections);
-        }
-        if (window.memoryGraph) {
-            window.memoryGraph.addPoint(parseFloat(memoryUsed));
-        }
-
-        // Add class to show update animation
-        $('.metric-card').addClass('updating');
-        setTimeout(() => {
-            $('.metric-card').removeClass('updating');
-        }, 1000);
-    }
-
-    // Start polling when document is ready
-    $(document).ready(function() {
-        // Initial status check
-        pollServerStatus();
-        
-        // Initialize WebSocket monitoring
-        const adminSocket = initializeSocketMonitoring();
-
-        // Update server control handlers
-        $('.sewn-ws-controls button').on('click', function() {
-            const action = $(this).data('action');
-            const button = $(this);
-            
-            button.prop('disabled', true);
-            
-            if (adminSocket && adminSocket.connected) {
-                adminSocket.emit('server_control', { action }, (response) => {
-                    if (response.success) {
-                        updateServerStatus(action === 'start' ? 'starting' : 'stopped');
-                    } else {
-                        updateServerStatus('error', response.message);
-                    }
-                    button.prop('disabled', false);
-                });
-            } else {
-                console.error('Admin socket not connected');
-                updateServerStatus('error', 'Not connected to server');
-                button.prop('disabled', false);
+            if (serverConfig.environment.debug_enabled) {
+                console.log('Socket connected successfully');
+                console.log('Transport:', socket.io.engine.transport.name);
             }
         });
+
+        socket.on('connect_error', function(error) {
+            if (serverConfig.environment.debug_enabled) {
+                console.error('Socket connection error:', error);
+                console.log('Current transport:', socket.io.engine.transport?.name);
+                console.log('Available transports:', socket.io.engine.opts.transports);
+            }
+            updateServerStatus('error');
+        });
+
+        socket.on('disconnect', function(reason) {
+            if (serverConfig.environment.debug_enabled) {
+                console.log('Socket disconnected:', reason);
+            }
+            updateServerStatus('stopped');
+        });
+
+        // Transport upgrade handling
+        socket.io.engine.on("upgrade", () => {
+            if (serverConfig.environment.debug_enabled) {
+                console.log('Transport upgraded to:', socket.io.engine.transport.name);
+            }
+        });
+
+        return socket;
+    }
+
+    // Don't initialize socket monitoring automatically
+    // It will be initialized when the start button is clicked
+    let socket = null;
+
+    // Server control button handlers with proper state management
+    $('.sewn-ws-controls button').on('click', function(e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        if (window.wsAdmin) {
+            window.wsAdmin.handleServerAction(action);
+        }
     });
 });
 </script> 

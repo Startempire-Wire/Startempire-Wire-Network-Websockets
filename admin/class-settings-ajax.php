@@ -100,7 +100,7 @@ class Settings_Ajax {
         }
 
         // Verify nonce
-        if (!check_ajax_referer('sewn_ws_admin', 'nonce', false)) {
+        if (!check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce', false)) {
             return false;
         }
 
@@ -180,7 +180,7 @@ class Settings_Ajax {
                 throw new \Exception('Insufficient permissions');
             }
 
-            check_ajax_referer('sewn_ws_admin', 'nonce');
+            check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
             $cert_path = isset($_POST['cert']) ? sanitize_text_field($_POST['cert']) : '';
             $key_path = isset($_POST['key']) ? sanitize_text_field($_POST['key']) : '';
@@ -333,7 +333,7 @@ class Settings_Ajax {
             wp_send_json_error('Insufficient permissions');
         }
 
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         $module_id = isset($_POST['module']) ? sanitize_text_field($_POST['module']) : '';
         if (empty($module_id)) {

@@ -54,11 +54,11 @@
      */
     function checkServerStatus() {
         $.ajax({
-            url: sewn_ws_admin.ajax_url,
+            url: ajaxurl,
             type: 'POST',
             data: {
                 action: 'sewn_ws_check_server_status',
-                nonce: sewn_ws_admin.nonce
+                nonce: sewnWsAdmin.nonce
             },
             success: function (response) {
                 if (response.success) {
@@ -112,19 +112,35 @@
         // Initialize Socket.IO connection
         socket = io(sewn_ws_admin.server_url, {
             path: sewn_ws_admin.socket_path,
-            transports: ['websocket', 'polling'],
-            secure: sewn_ws_admin.ssl_enabled === '1'
+            transports: ['polling', 'websocket'],
+            secure: sewn_ws_admin.ssl_enabled === '1',
+            rejectUnauthorized: sewn_ws_admin.ssl_enabled !== '1',
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5,
+            timeout: 20000,
+            debug: sewn_ws_admin.debug_enabled === '1'
         });
 
-        // Connection event handlers
+        // Connection event handlers with enhanced logging
         socket.on('connect', function () {
             $connectionStatus.text('Connected');
             $connectionProtocol.text(socket.io.engine.transport.name);
+
+            if (sewn_ws_admin.debug_enabled === '1') {
+                console.log('Test connection established');
+                console.log('Transport:', socket.io.engine.transport.name);
+            }
+
             startPingTest();
         });
 
-        socket.on('disconnect', function () {
+        socket.on('disconnect', function (reason) {
             $connectionStatus.text('Disconnected');
+            if (sewn_ws_admin.debug_enabled === '1') {
+                console.log('Test connection disconnected:', reason);
+            }
             stopPingTest();
         });
 
@@ -132,7 +148,21 @@
             console.error('Connection error:', error);
             $connectionStatus.text('Connection Error');
             $testStatus.text('Connection failed: ' + error.message);
+
+            if (sewn_ws_admin.debug_enabled === '1') {
+                console.log('Current transport:', socket.io.engine.transport?.name);
+                console.log('Available transports:', socket.io.engine.opts.transports);
+            }
+
             stopTest();
+        });
+
+        // Transport upgrade handling
+        socket.io.engine.on("upgrade", () => {
+            if (sewn_ws_admin.debug_enabled === '1') {
+                console.log('Transport upgraded to:', socket.io.engine.transport.name);
+            }
+            $connectionProtocol.text(socket.io.engine.transport.name);
         });
 
         socket.on('pong', function () {

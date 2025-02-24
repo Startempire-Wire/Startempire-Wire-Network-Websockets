@@ -17,6 +17,7 @@ const winston = require('winston');
 const Redis = require('redis');
 const { networkInterfaces } = require('os');
 const { ensureDirectoryExists } = require('./utils');
+const cors = require('cors');
 
 // Determine if we're in local development
 const isLocalDev = process.env.NODE_ENV === 'development' ||
@@ -25,7 +26,8 @@ const isLocalDev = process.env.NODE_ENV === 'development' ||
         process.env.WP_HOST.includes('.local') ||
         process.env.WP_HOST.includes('.test') ||
         ['localhost', '127.0.0.1'].includes(process.env.WP_HOST)
-    ));
+    )) ||
+    fs.existsSync(path.join(process.env.HOME || '', 'Library/Application Support/Local'));
 
 // Load appropriate config
 const config = isLocalDev ? require('./config.local') : require('./config');
@@ -276,10 +278,36 @@ async function isPortAvailable(port) {
 
 // Function to try binding to a port with retries
 async function tryBindPort(server, startPort, maxRetries = 10) {
-    let currentPort = startPort;
+    const MIN_PORT = 49152;
+    const MAX_PORT = 65535;
+    let currentPort = Math.max(startPort, MIN_PORT);
     let attempts = 0;
 
-    while (attempts < maxRetries) {
+    // First check for existing process
+    try {
+        const pidFile = path.join(__dirname, 'server.pid');
+        if (fs.existsSync(pidFile)) {
+            const existingPid = parseInt(fs.readFileSync(pidFile, 'utf8'));
+            if (existingPid) {
+                try {
+                    process.kill(existingPid, 0);
+                    logger.warn(`Found existing server process (PID: ${existingPid})`);
+                    process.kill(existingPid);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    logger.info(`Successfully terminated existing process (PID: ${existingPid})`);
+                } catch (e) {
+                    if (e.code === 'ESRCH') {
+                        logger.info(`No process found with PID ${existingPid}, cleaning up stale PID file`);
+                    }
+                }
+                fs.unlinkSync(pidFile);
+            }
+        }
+    } catch (err) {
+        logger.warn('Error checking for existing process:', err);
+    }
+
+    while (attempts < maxRetries && currentPort <= MAX_PORT) {
         try {
             // Check if port is available
             const isAvailable = await isPortAvailable(currentPort);
@@ -290,7 +318,7 @@ async function tryBindPort(server, startPort, maxRetries = 10) {
                 continue;
             }
 
-            // Try to bind the server
+            // Try to bind the server with timeout
             await new Promise((resolve, reject) => {
                 const bindTimeout = setTimeout(() => {
                     server.removeAllListeners();
@@ -310,6 +338,10 @@ async function tryBindPort(server, startPort, maxRetries = 10) {
                 server.listen(currentPort, host);
             });
 
+            // Write new PID file after successful binding
+            const pidFile = path.join(__dirname, 'server.pid');
+            fs.writeFileSync(pidFile, process.pid.toString());
+
             logger.info(`Successfully bound to port ${currentPort}`);
             return { success: true, port: currentPort };
         } catch (err) {
@@ -323,159 +355,140 @@ async function tryBindPort(server, startPort, maxRetries = 10) {
         }
     }
 
-    throw new Error(`Failed to find available port after ${maxRetries} attempts`);
+    throw new Error(`Failed to find available port after ${attempts} attempts. Last tried port: ${currentPort}`);
 }
 
-// Main server initialization
+// Add SSL certificate detection
+function detectLocalSSL() {
+    if (!isLocalDev) return null;
+
+    const home = process.env.HOME || '';
+    const host = process.env.WP_HOST?.replace(/\.local$/, '') || 'localhost';
+    const certPath = path.join(home, 'Library/Application Support/Local/run/router/nginx/certs', `${host}.crt`);
+    const keyPath = path.join(home, 'Library/Application Support/Local/run/router/nginx/certs', `${host}.key`);
+
+    if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+        return { cert: certPath, key: keyPath };
+    }
+    return null;
+}
+
+// Update server initialization
 async function initializeServer() {
     try {
-        logger.info('Starting server initialization...', {
-            nodeVersion: process.version,
-            platform: process.platform,
-            pid: process.pid
-        });
+        // Check for Local SSL certificates
+        const localSSL = detectLocalSSL();
+        const useSSL = localSSL || (config.ssl && config.ssl.cert && config.ssl.key);
 
-        // Ensure directories exist
-        await Promise.all([
-            ensureDirectoryExists(path.dirname(statsFile)),
-            ensureDirectoryExists(path.dirname(pidFile)),
-            ensureDirectoryExists(path.dirname(logFile))
-        ]);
-
-        // Initialize Redis if configured
-        await initializeRedis();
-
-        // Create Express app
-        app = express();
-
-        // Setup CORS if configured
-        if (config.cors) {
-            const cors = require('cors');
-            app.use(cors(config.cors));
-        }
-
-        // Create HTTP/HTTPS server based on config
-        if (config.environment.ssl.enabled && !config.environment.isLocal) {
-            const sslOptions = {
-                key: fs.readFileSync(config.environment.ssl.key),
-                cert: fs.readFileSync(config.environment.ssl.cert)
+        // Create server with appropriate SSL configuration
+        if (useSSL) {
+            const sslOptions = localSSL ? {
+                key: fs.readFileSync(localSSL.key),
+                cert: fs.readFileSync(localSSL.cert),
+                rejectUnauthorized: false // Allow self-signed certs in local
+            } : {
+                key: fs.readFileSync(config.ssl.key),
+                cert: fs.readFileSync(config.ssl.cert)
             };
             server = https.createServer(sslOptions, app);
-            logger.info('Created HTTPS server with SSL');
         } else {
             server = http.createServer(app);
-            logger.info('Created HTTP server' + (config.environment.isLocal ? ' (local development)' : ''));
         }
 
-        // Initialize Socket.IO with CORS settings
+        // Initialize Socket.IO with enhanced configuration
         io = new Server(server, {
+            path: '/socket.io',
             cors: {
-                origin: "*",
-                methods: ["GET", "POST", "OPTIONS"],
+                origin: isLocalDev ? true : config.cors.origin,
+                methods: ['GET', 'POST'],
                 credentials: true
             },
-            transports: ['websocket', 'polling'],
-            path: '/socket.io',
-            allowEIO3: true,
-            connectTimeout: 45000,
+            transports: ['polling', 'websocket'],
+            allowUpgrades: true,
             pingTimeout: 60000,
-            pingInterval: 25000
+            pingInterval: 25000,
+            connectTimeout: 45000,
+            maxHttpBufferSize: 1e8
         });
 
-        // Initialize managers
-        const ConnectionManager = require('./lib/connection-manager');
-        const AuthManager = require('./lib/auth-manager');
-        connectionManager = new ConnectionManager(io);
-        authManager = new AuthManager(io, connectionManager);
-
-        // Set up admin namespace
-        adminNamespace = io.of('/admin');
-        namespaces.admin = adminNamespace;
-
-        // Set up admin namespace authentication
-        adminNamespace.use(async (socket, next) => {
-            if (isLocalDev) {
-                // Skip token verification in local development
-                return next();
-            }
-
-            try {
-                const token = socket.handshake.auth.token;
-                if (!token) {
-                    return next(new Error('Authentication token required'));
-                }
-
-                const isValid = await verifyAdminToken(token);
-                if (!isValid) {
-                    return next(new Error('Invalid admin token'));
-                }
-
-                next();
-            } catch (error) {
-                next(new Error('Authentication failed'));
-            }
+        // Add connection error logging
+        io.engine.on("connection_error", (err) => {
+            logger.error('Socket.IO connection error:', {
+                code: err.code,
+                message: err.message,
+                context: err.context
+            });
         });
 
-        // Set up connection logging
+        // Enhanced connection handling
         io.on('connection', (socket) => {
-            try {
-                logger.info(`Client connected: ${socket.id}`);
-                metrics.connections++;
+            logger.info('Client connected:', {
+                transport: socket.conn.transport.name,
+                address: socket.handshake.address,
+                isLocal: isLocalDev
+            });
 
-                socket.on('disconnect', () => {
-                    try {
-                        logger.info(`Client disconnected: ${socket.id}`);
-                        metrics.connections = Math.max(0, metrics.connections - 1);
-                    } catch (err) {
-                        logger.error('Error in disconnect handler:', err);
-                    }
+            // Monitor transport upgrades
+            socket.conn.on("upgrade", () => {
+                logger.info('Transport upgraded:', {
+                    from: socket.conn.transport.name,
+                    address: socket.handshake.address
                 });
+            });
 
-                socket.on('message', (data) => {
-                    try {
-                        metrics.messages.in++;
-                        // Handle message processing here
-                    } catch (err) {
-                        logger.error('Error in message handler:', err);
-                        metrics.messages.errors++;
-                    }
+            socket.on('disconnect', (reason) => {
+                logger.info('Client disconnected:', {
+                    reason,
+                    transport: socket.conn.transport.name,
+                    address: socket.handshake.address
                 });
-
-                socket.on('error', (error) => {
-                    try {
-                        logger.error('Socket error:', error);
-                        metrics.messages.errors++;
-                    } catch (err) {
-                        logger.error('Error in error handler:', err);
-                    }
-                });
-            } catch (err) {
-                logger.error('Error in connection handler:', err);
-            }
+            });
         });
 
-        // Start stats emission after server is initialized
-        setInterval(emitStats, 1000);
+        // Log server configuration
+        logger.info('Server initialized with configuration:', {
+            environment: isLocalDev ? 'local' : 'production',
+            protocol: 'wss', // Always use secure protocol
+            host,
+            port,
+            secure: useSSL,
+            transports: ['polling', 'websocket']
+        });
 
-        return server;
+        return true;
     } catch (error) {
         logger.error('Server initialization failed:', error);
         throw error;
     }
 }
 
-// Start server with error handling
-initializeServer().catch(async (error) => {
-    logger.error('Fatal error during server initialization:', error);
-
+// Start server with proper error handling
+async function startServer() {
     try {
-        await cleanup('initialization_error');
-    } catch (cleanupError) {
-        logger.error('Error during cleanup:', cleanupError);
-    }
+        if (!await initializeServer()) {
+            throw new Error('Server initialization failed');
+        }
 
-    process.exit(1);
-});
+        server.listen(port, host, () => {
+            serverState.isRunning = true;
+            serverState.startTime = Date.now();
+            logger.info(`Server running at ${isLocalDev ? 'ws' : 'wss'}://${host}:${port}`);
+        });
+
+        server.on('error', (error) => {
+            logger.error('Server error:', error);
+            serverState.errors.push({
+                time: Date.now(),
+                error: error.message
+            });
+        });
+
+        return true;
+    } catch (error) {
+        logger.error('Failed to start server:', error);
+        return false;
+    }
+}
 
 // Add helper function to find available port
 async function findAvailablePort(startPort) {
@@ -1065,6 +1078,24 @@ async function cleanup(reason = 'normal') {
     const errors = [];
 
     try {
+        // Close all socket connections first
+        if (io) {
+            try {
+                const sockets = await io.fetchSockets();
+                logger.info(`Closing ${sockets.length} socket connections`);
+                await Promise.all(sockets.map(socket =>
+                    new Promise((resolve) => {
+                        socket.emit('server_shutdown', { reason });
+                        socket.disconnect(true);
+                        resolve();
+                    })
+                ));
+            } catch (error) {
+                errors.push(`Error closing sockets: ${error.message}`);
+                logger.error('Error closing sockets:', error);
+            }
+        }
+
         // Close namespace connections gracefully
         for (const [name, namespace] of Object.entries(namespaces)) {
             try {
@@ -1111,6 +1142,7 @@ async function cleanup(reason = 'normal') {
 
         // Remove PID file
         try {
+            const pidFile = path.join(__dirname, 'server.pid');
             if (await fsPromises.access(pidFile).then(() => true).catch(() => false)) {
                 await fsPromises.unlink(pidFile);
                 logger.info('PID file removed');
@@ -1123,14 +1155,34 @@ async function cleanup(reason = 'normal') {
         // Close server if still listening
         if (server && server.listening) {
             await new Promise((resolve) => {
+                const closeTimeout = setTimeout(() => {
+                    logger.warn('Server close timeout, forcing shutdown');
+                    resolve();
+                }, 5000);
+
                 server.close(() => {
+                    clearTimeout(closeTimeout);
                     logger.info('Server closed');
                     resolve();
                 });
             });
         }
 
-        logger.info('Cleanup completed' + (errors.length ? ' with errors' : ' successfully'));
+        // Final cleanup
+        try {
+            // Clear any remaining intervals
+            if (global.statsInterval) clearInterval(global.statsInterval);
+            if (global.cleanupInterval) clearInterval(global.cleanupInterval);
+
+            // Release any file handles
+            if (global.logStream) await global.logStream.end();
+
+            logger.info('Cleanup completed' + (errors.length ? ' with errors' : ' successfully'));
+        } catch (error) {
+            errors.push(`Error in final cleanup: ${error.message}`);
+            logger.error('Error in final cleanup:', error);
+        }
+
         return {
             success: errors.length === 0,
             errors: errors.length ? errors : undefined
@@ -1141,6 +1193,11 @@ async function cleanup(reason = 'normal') {
             success: false,
             errors: [...errors, `Fatal error: ${error.message}`]
         };
+    } finally {
+        // Ensure process exits after cleanup
+        if (reason !== 'normal') {
+            process.exit(reason === 'SIGTERM' ? 0 : 1);
+        }
     }
 }
 

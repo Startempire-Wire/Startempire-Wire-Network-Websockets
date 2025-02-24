@@ -130,7 +130,7 @@ class Install_Handler {
     }
 
     public function handle_install() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);
@@ -163,7 +163,7 @@ class Install_Handler {
     }
 
     public function handle_installation_check() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);
@@ -181,7 +181,7 @@ class Install_Handler {
     }
 
     public function handle_server_initialization() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);

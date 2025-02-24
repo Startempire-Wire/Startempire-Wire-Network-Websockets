@@ -11,6 +11,16 @@
 namespace SEWN\WebSockets;
 
 /**
+ * Server Status Handler
+ *
+ * @package SEWN\WebSockets
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
  * Server Status Class
  * 
  * Handles WebSocket server status monitoring and health checks
@@ -44,6 +54,63 @@ class Server_Status {
     private function __construct() {
         $this->stats_file = SEWN_WS_PLUGIN_DIR . 'tmp/server-stats.json';
         wp_mkdir_p(dirname($this->stats_file));
+    }
+
+    /**
+     * Get server status including PID, port, uptime and connections
+     *
+     * @return array Server status data
+     */
+    public function get_status() {
+        $status = [
+            'running' => false,
+            'pid' => null,
+            'port' => SEWN_WS_DEFAULT_PORT,
+            'uptime' => 0,
+            'connections' => 0
+        ];
+
+        $pid_file = SEWN_WS_PATH . '/node-server/server.pid';
+        $stats_file = SEWN_WS_PATH . '/node-server/stats.json';
+
+        if (file_exists($pid_file)) {
+            $pid = trim(file_get_contents($pid_file));
+            if ($pid && $this->is_process_running($pid)) {
+                $status['running'] = true;
+                $status['pid'] = (int)$pid;
+
+                if (file_exists($stats_file)) {
+                    $stats = json_decode(file_get_contents($stats_file), true);
+                    if ($stats) {
+                        $status['uptime'] = time() - ($stats['startTime'] ?? time());
+                        $status['connections'] = $stats['connections'] ?? 0;
+                        $status['port'] = $stats['port'] ?? SEWN_WS_DEFAULT_PORT;
+                    }
+                }
+            } else {
+                @unlink($pid_file);
+            }
+        }
+
+        return $status;
+    }
+
+    /**
+     * Check if a process is running
+     *
+     * @param int $pid Process ID
+     * @return bool Whether process is running
+     */
+    private function is_process_running($pid) {
+        if (!function_exists('posix_kill')) {
+            return false;
+        }
+
+        try {
+            return posix_kill($pid, 0);
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 
     /**

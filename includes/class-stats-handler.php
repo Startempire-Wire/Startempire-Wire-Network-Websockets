@@ -216,7 +216,7 @@ class Stats_Handler {
      * Handle channel stats request via AJAX.
      */
     public function handle_channel_stats(): void {
-        check_ajax_referer('sewn_ws_admin', '_ajax_nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, '_ajax_nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Insufficient permissions']);

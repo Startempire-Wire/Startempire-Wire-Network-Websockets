@@ -25,7 +25,7 @@ define('SEWN_WS_NODE_SERVER', SEWN_WS_PLUGIN_DIR . 'node-server' . DIRECTORY_SEP
 !defined('SEWN_WS_TRANSIENT_CONNECTIONS') && define('SEWN_WS_TRANSIENT_CONNECTIONS', 'sewn_ws_connections');
 
 // Nonce and security
-!defined('SEWN_WS_NONCE_ACTION') && define('SEWN_WS_NONCE_ACTION', 'sewn_ws_nonce');
+!defined('SEWN_WS_NONCE_ACTION') && define('SEWN_WS_NONCE_ACTION', 'sewn_ws_admin_nonce');
 
 // Script handles
 !defined('SEWN_WS_SCRIPT_HANDLE_ADMIN') && define('SEWN_WS_SCRIPT_HANDLE_ADMIN', 'sewn-ws-admin');
@@ -89,11 +89,71 @@ if (defined('SEWN_WS_ENV_DEFAULT_PORT') && !(defined('DOING_AJAX') && DOING_AJAX
 !defined('SEWN_WS_STATS_UPDATE_INTERVAL') && define('SEWN_WS_STATS_UPDATE_INTERVAL', 10000);
 !defined('SEWN_WS_STATS_MAX_POINTS') && define('SEWN_WS_STATS_MAX_POINTS', 20);
 
-// Development mode detection
+// Development mode detection - Enhanced for better local environment detection
 define('SEWN_WS_IS_LOCAL', (
+    // Check for common local development domains
     strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
-    strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
+    strpos($_SERVER['HTTP_HOST'], '.test') !== false ||
+    strpos($_SERVER['HTTP_HOST'], 'localhost') !== false ||
+    $_SERVER['HTTP_HOST'] === 'localhost' ||
+    $_SERVER['SERVER_NAME'] === 'localhost' ||
+    in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']) ||
+    // Check for Local by Flywheel
+    isset($_SERVER['IS_FLYWHEEL']) ||
+    // Check for MAMP
+    (isset($_SERVER['SERVER_SOFTWARE']) && strpos($_SERVER['SERVER_SOFTWARE'], 'MAMP') !== false) ||
+    // Check for XAMPP
+    (isset($_SERVER['SERVER_SOFTWARE']) && strpos($_SERVER['SERVER_SOFTWARE'], 'XAMPP') !== false) ||
+    // Check for WP_LOCAL_DEV constant
+    (defined('WP_LOCAL_DEV') && WP_LOCAL_DEV === true)
 ));
+
+// Enhanced environment type detection
+define('SEWN_WS_ENV_TYPE', (function() {
+    if (SEWN_WS_IS_LOCAL) {
+        return 'local';
+    } else if (
+        strpos($_SERVER['HTTP_HOST'], 'staging.') !== false ||
+        strpos($_SERVER['HTTP_HOST'], 'test.') !== false ||
+        defined('WP_ENVIRONMENT_TYPE') && WP_ENVIRONMENT_TYPE === 'staging'
+    ) {
+        return 'staging';
+    }
+    return 'production';
+})());
+
+// SSL Configuration (for server setup, not protocol selection)
+if (SEWN_WS_IS_LOCAL) {
+    $ssl_cert = get_option('sewn_ws_ssl_cert');
+    $ssl_key = get_option('sewn_ws_ssl_key');
+    $has_valid_local_ssl = $ssl_cert && $ssl_key && file_exists($ssl_cert) && file_exists($ssl_key);
+    
+    !defined('SEWN_WS_SSL') && define('SEWN_WS_SSL', $has_valid_local_ssl);
+} else {
+    !defined('SEWN_WS_SSL') && define('SEWN_WS_SSL', true);
+}
+
+// Protocol is determined by environment only
+define('SEWN_WS_PROTOCOL', SEWN_WS_IS_LOCAL ? 'ws' : 'wss');
+
+// Add debug logging for local development with enhanced SSL info
+if (SEWN_WS_IS_LOCAL && defined('WP_DEBUG') && WP_DEBUG) {
+    !defined('SEWN_WS_DEBUG_LOG') && define('SEWN_WS_DEBUG_LOG', true);
+    !defined('SEWN_WS_DEBUG_DISPLAY') && define('SEWN_WS_DEBUG_DISPLAY', true);
+    
+    // Log SSL configuration in debug mode
+    if (WP_DEBUG_LOG) {
+        error_log(sprintf(
+            '[SEWN WebSocket] Environment: %s, SSL Enabled: %s, Protocol: %s',
+            SEWN_WS_ENV_TYPE,
+            SEWN_WS_SSL ? 'Yes' : 'No',
+            SEWN_WS_PROTOCOL
+        ));
+    }
+} else {
+    !defined('SEWN_WS_DEBUG_LOG') && define('SEWN_WS_DEBUG_LOG', false);
+    !defined('SEWN_WS_DEBUG_DISPLAY') && define('SEWN_WS_DEBUG_DISPLAY', false);
+}
 
 // Update ENV_OVERRIDABLE constants
 !defined('SEWN_WS_ENV_OVERRIDABLE') && define('SEWN_WS_ENV_OVERRIDABLE', [
@@ -131,5 +191,12 @@ define('SEWN_WS_IS_LOCAL', (
 // SSL Configuration Options
 !defined('SEWN_WS_OPTION_SSL_CERT') && define('SEWN_WS_OPTION_SSL_CERT', 'sewn_ws_ssl_cert');
 !defined('SEWN_WS_OPTION_SSL_KEY') && define('SEWN_WS_OPTION_SSL_KEY', 'sewn_ws_ssl_key');
+
+// WebSocket Server Port Configuration
+!defined('SEWN_WS_PORT') && define('SEWN_WS_PORT', SEWN_WS_DEFAULT_PORT);
+
+if (!defined('SEWN_WS_HOST')) {
+    define('SEWN_WS_HOST', $_SERVER['HTTP_HOST']);
+}
 
 // End of file 

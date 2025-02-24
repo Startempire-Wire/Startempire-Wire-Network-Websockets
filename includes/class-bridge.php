@@ -35,7 +35,7 @@ class Bridge {
     }
 
     public function handle_authentication() {
-        check_ajax_referer('sewn_ws_auth');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION);
         
         try {
             // Verify admin status
@@ -64,7 +64,7 @@ class Bridge {
     }
 
     public function handle_broadcast() {
-        check_ajax_referer('sewn_ws_broadcast');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION);
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Unauthorized']);

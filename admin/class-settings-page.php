@@ -351,7 +351,7 @@ class Settings_Page {
             wp_send_json_error('Insufficient permissions');
         }
 
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         $enabled = isset($_POST['enabled']) ? rest_sanitize_boolean($_POST['enabled']) : false;
         update_option('sewn_ws_debug_enabled', $enabled);

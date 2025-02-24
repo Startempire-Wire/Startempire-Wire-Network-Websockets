@@ -286,4 +286,77 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 2000);
         });
     });
-}); 
+});
+
+function checkServerStatus() {
+    jQuery.ajax({
+        url: ajaxurl,
+        type: 'POST',
+        data: {
+            action: 'sewn_ws_check_server_status',
+            nonce: serverConfig.nonce
+        },
+        success: function (response) {
+            if (response.success) {
+                const status = response.data;
+                updateServerStatus(status.running);
+                updateServerStats(status);
+            } else {
+                console.error('Server status check error:', response.data);
+                refreshNonce();
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error('Server status check error:', error);
+            refreshNonce();
+        }
+    });
+}
+
+function refreshNonce() {
+    jQuery.ajax({
+        url: ajaxurl,
+        type: 'POST',
+        data: {
+            action: 'sewn_ws_refresh_nonce',
+            current_nonce: serverConfig.nonce
+        },
+        success: function (response) {
+            if (response.success) {
+                serverConfig.nonce = response.data.nonce;
+            } else {
+                console.error('Nonce refresh error:', response.data);
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error('Nonce refresh error:', error);
+        }
+    });
+}
+
+function updateServerStatus(running) {
+    const statusIndicator = jQuery('#server-status-indicator');
+    const statusText = jQuery('#server-status-text');
+
+    if (running) {
+        statusIndicator.removeClass('status-stopped').addClass('status-running');
+        statusText.text('Running');
+    } else {
+        statusIndicator.removeClass('status-running').addClass('status-stopped');
+        statusText.text('Stopped');
+    }
+}
+
+function updateServerStats(stats) {
+    if (stats.running) {
+        jQuery('#server-pid').text(stats.pid || 'N/A');
+        jQuery('#server-port').text(stats.port || SEWN_WS_DEFAULT_PORT);
+        jQuery('#server-uptime').text(formatUptime(stats.uptime));
+        jQuery('#server-connections').text(stats.connections || 0);
+    } else {
+        jQuery('#server-pid').text('N/A');
+        jQuery('#server-port').text(SEWN_WS_DEFAULT_PORT);
+        jQuery('#server-uptime').text('0s');
+        jQuery('#server-connections').text('0');
+    }
+} 

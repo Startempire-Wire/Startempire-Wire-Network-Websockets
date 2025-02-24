@@ -490,7 +490,7 @@ class Module_Admin {
     }
 
     public function handle_stats_request() {
-        check_ajax_referer('sewn_ws_nonce', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         wp_send_json_success([
             'connections' => get_transient('sewn_ws_connections'),

@@ -129,9 +129,9 @@ class Socket_Manager {
 
         // Localize script
         wp_localize_script('sewn-ws-admin', 'SEWN_WS_CONFIG', $config);
-        wp_localize_script('sewn-ws-admin', 'sewn_ws_admin', [
+        wp_localize_script('sewn-ws-admin', 'sewnWsAdmin', [
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('sewn_ws_admin'),
+            'nonce' => wp_create_nonce(\SEWN_WS_NONCE_ACTION),
             'i18n' => [
                 'connecting' => __('Connecting...', 'sewn-ws'),
                 'connected' => __('Connected', 'sewn-ws'),
@@ -279,7 +279,7 @@ class Socket_Manager {
      * Handle AJAX request to check server status
      */
     public function ajax_check_server_status() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
@@ -293,7 +293,7 @@ class Socket_Manager {
      * Handle AJAX request to start server
      */
     public function ajax_start_server() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
@@ -312,7 +312,7 @@ class Socket_Manager {
      * Handle AJAX request to stop server
      */
     public function ajax_stop_server() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');

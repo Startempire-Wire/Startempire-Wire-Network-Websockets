@@ -174,106 +174,101 @@ jQuery(document).ready(function ($) {
     // Trigger initial state
     $localMode.trigger('change');
 
-    (function ($) {
-        'use strict';
+    class WebSocketAdmin {
+        constructor(config) {
+            // Force SSL if page is HTTPS
+            if (window.location.protocol === 'https:') {
+                config.protocol = 'wss';
+                config.ssl.enabled = true;
+            }
 
-        const WsAdmin = {
-            init: function () {
-                this.statsRefresh = null;
-                this.bindEvents();
-                this.startStatsRefresh();
-            },
+            this.config = config;
+            debugLog.info('Server Configuration:', this.config);
 
-            bindEvents: function () {
-                $('.sewn-ws-controls button').on('click', this.handleServerAction.bind(this));
-            },
+            this.pendingRequests = false;
+            this.initializeControls();
+        }
 
-            startStatsRefresh: function () {
-                this.updateStats();
-                this.statsRefresh = setInterval(() => {
-                    this.updateStats();
-                }, sewnWsAdmin.refresh_interval);
-            },
+        initializeControls() {
+            const self = this;
+            $('.sewn-ws-controls button').on('click', function (e) {
+                e.preventDefault();
+                const action = $(this).data('action');
+                self.handleServerAction(action);
+            });
+        }
 
-            updateStats: function () {
-                $.ajax({
-                    url: sewnWsAdmin.ajax_url,
-                    type: 'POST',
-                    data: {
-                        action: 'sewn_ws_get_stats',
-                        nonce: sewnWsAdmin.nonce
-                    },
-                    success: (response) => {
-                        if (response.success) {
-                            this.updateDashboard(response.data);
-                        }
-                    }
-                });
-            },
+        async handleServerAction(action) {
+            if (this.pendingRequests) {
+                console.log('Request already in progress...');
+                return;
+            }
 
-            updateDashboard: function (data) {
-                // Update server status
-                const statusDot = $('.status-dot');
-                const statusText = $('.status-text');
+            try {
+                this.pendingRequests = true;
+                this.updateServerStatus('starting');
+                console.log(`Sending ${action} request to server...`);
 
-                if (data.server_status === 'running') {
-                    statusDot.addClass('active').removeClass('inactive');
-                    statusText.text('Running');
-                } else {
-                    statusDot.addClass('inactive').removeClass('active');
-                    statusText.text('Stopped');
-                }
-
-                // Update connection stats
-                $('#live-connections-count').text(data.connections.active);
-                $('#total-connections').text(data.connections.total);
-                $('#peak-connections').text(data.connections.peak);
-
-                // Update message rate
-                $('#message-rate').text(data.message_rate + ' msg/s');
-
-                // Update memory usage
-                const memoryMB = (data.memory_usage / 1024 / 1024).toFixed(1);
-                $('#memory-usage').text(memoryMB + ' MB');
-
-                // Update uptime
-                $('#server-uptime').text(data.uptime);
-
-                // Update graphs if they exist
-                if (window.connectionGraph) {
-                    window.connectionGraph.addPoint(data.connections.active);
-                }
-                if (window.memoryGraph) {
-                    window.memoryGraph.addPoint(parseFloat(memoryMB));
-                }
-            },
-
-            handleServerAction: function (e) {
-                const action = $(e.currentTarget).data('action');
-
-                $.ajax({
-                    url: sewnWsAdmin.ajax_url,
+                const response = await $.ajax({
+                    url: this.config.ajax_url,
                     type: 'POST',
                     data: {
                         action: 'sewn_ws_server_control',
-                        command: action,
-                        nonce: sewnWsAdmin.nonce
-                    },
-                    success: (response) => {
-                        if (response.success) {
-                            this.updateStats();
-                        } else {
-                            alert(response.data.message || 'Action failed');
-                        }
+                        server_action: action,
+                        nonce: this.config.nonce
                     }
                 });
-            }
-        };
 
-        $(document).ready(function () {
-            WsAdmin.init();
-        });
-    })(jQuery);
+                console.log('Server response received:', response.status);
+                console.log('Response data:', response);
+
+                if (response.success) {
+                    const serverStatus = response.data?.status || 'error';
+                    console.log('Extracted server status:', serverStatus);
+                    this.updateServerStatus(serverStatus);
+
+                    if (response.data?.details) {
+                        console.log('Updating stats with:', response.data.details);
+                        this.updateStats(response.data.details);
+                    }
+                } else {
+                    console.error('Server request failed:', response.data?.message || 'Unknown error');
+                    this.updateServerStatus('error');
+                }
+            } catch (error) {
+                console.error('Server request error:', error);
+                this.updateServerStatus('error');
+            } finally {
+                this.pendingRequests = false;
+            }
+        }
+
+        updateServerStatus(status) {
+            console.log('Updating server status to:', status);
+            $('.sewn-ws-status')
+                .removeClass('uninitialized stopped starting running error')
+                .addClass(status);
+
+            $('.sewn-ws-status .status-text').text(status);
+        }
+
+        updateStats(stats) {
+            if (!stats) return;
+
+            const { running, pid, uptime, memory } = stats;
+            $('.server-stats .stat-value.running').text(running ? 'Yes' : 'No');
+            $('.server-stats .stat-value.pid').text(pid || 'N/A');
+            $('.server-stats .stat-value.uptime').text(uptime ? `${uptime}s` : 'N/A');
+            $('.server-stats .stat-value.memory').text(memory ? `${memory}MB` : 'N/A');
+        }
+    }
+
+    // Initialize WebSocket Admin when document is ready
+    jQuery(document).ready(function ($) {
+        if (typeof serverConfig !== 'undefined') {
+            window.wsAdmin = new WebSocketAdmin(serverConfig);
+        }
+    });
 
     function verifySocketIOLoaded() {
         if (typeof io === 'undefined') {
@@ -312,71 +307,143 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    function initializeSocketMonitoring() {
-        console.log('Initializing WebSocket connection:', SEWN_WS_CONFIG);
+    // Add debug logging system
+    const DEBUG = true;  // Enable/disable debug logging
+    const debugLog = {
+        info: function (...args) {
+            if (DEBUG) {
+                console.info('[SEWN WebSocket]', ...args);
+            }
+        },
+        warn: function (...args) {
+            if (DEBUG) {
+                console.warn('[SEWN WebSocket]', ...args);
+            }
+        },
+        error: function (...args) {
+            if (DEBUG) {
+                console.error('[SEWN WebSocket]', ...args);
+            }
+        }
+    };
 
-        // Force WS protocol for local development
-        let socketUrl = SEWN_WS_CONFIG.url;
-        if (SEWN_WS_CONFIG.isLocalDev) {
-            socketUrl = socketUrl.replace('wss://', 'ws://');
+    // Update socket initialization with enhanced logging
+    function initializeSocket(config) {
+        debugLog.info('Initializing socket with config:', config);
+
+        if (!config || !config.host) {
+            debugLog.error('Invalid socket configuration:', config);
+            return null;
         }
 
-        const socket = io(socketUrl, {
-            transports: ['websocket'],
-            reconnectionAttempts: SEWN_WS_CONFIG.maxReconnectAttempts,
-            reconnectionDelay: SEWN_WS_CONFIG.reconnectDelay,
-            timeout: SEWN_WS_CONFIG.timeout,
-            auth: {
-                token: SEWN_WS_CONFIG.token
-            }
+        // Determine correct protocol
+        const isSecure = window.location.protocol === 'https:';
+        const wsProtocol = isSecure ? 'wss://' : 'ws://';
+        const socketHost = `${wsProtocol}${config.host}`;
+
+        debugLog.info('Using WebSocket host:', socketHost);
+
+        const socket = io(socketHost, {
+            path: '/socket.io',
+            transports: ['polling', 'websocket'],
+            autoConnect: false,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
+            rejectUnauthorized: false, // Allow self-signed certs in local
+            secure: isSecure, // Match page protocol
+            withCredentials: true // Important for local SSL
         });
 
-        // Socket event handlers
-        socket.on('connect', () => {
-            console.log('[SEWN WebSocket] Admin socket connected');
-            updateServerStatus('running');
+        // Connection monitoring with enhanced logging
+        socket.on("connect", () => {
+            debugLog.info('Socket connected!', {
+                transport: socket.io.engine.transport.name,
+                id: socket.id,
+                protocol: wsProtocol
+            });
+
+            socket.io.engine.on("upgrade", () => {
+                debugLog.info('Transport upgraded:', {
+                    from: socket.io.engine.transport.name,
+                    id: socket.id
+                });
+            });
         });
 
-        socket.on('connect_error', (error) => {
-            console.warn('[SEWN WebSocket] Connection error:', error.message);
-            updateServerStatus('error');
+        // Enhanced error handling
+        socket.on("connect_error", (err) => {
+            debugLog.error('Connection error:', {
+                message: err.message,
+                description: err.description,
+                context: err.context,
+                type: err.type,
+                protocol: wsProtocol,
+                host: socketHost
+            });
         });
 
-        socket.on('error', (error) => {
-            console.error('[SEWN WebSocket] Socket error:', error);
-            updateServerStatus('error');
+        socket.on("disconnect", (reason) => {
+            debugLog.warn('Socket disconnected:', {
+                reason,
+                wasConnected: socket.connected,
+                id: socket.id
+            });
         });
 
-        socket.on('disconnect', (reason) => {
-            console.log('[SEWN WebSocket] Disconnected:', reason);
-            updateServerStatus('stopped');
+        socket.on("error", (error) => {
+            debugLog.error('Socket error:', {
+                error,
+                id: socket.id,
+                state: socket.connected ? 'connected' : 'disconnected'
+            });
         });
 
-        socket.on('stats', (stats) => {
-            updateStats(stats);
+        // Add ping monitoring
+        socket.on("ping", () => {
+            debugLog.info('Ping received');
+        });
+
+        socket.on("pong", (latency) => {
+            debugLog.info('Pong received, latency:', latency, 'ms');
         });
 
         return socket;
     }
 
+    // Update server status checking with logging
     function checkServerStatus() {
+        debugLog.info('Checking server status...');
+
         $.post(ajaxurl, {
             action: 'sewn_ws_check_server_status',
-            nonce: sewn_ws_admin.nonce
-        }).done(function (response) {
-            if (response.success && response.data) {
-                updateServerUI(response.data.details || {}, response.data.external || false);
-                if (!socketInitialized && response.data.running) {
-                    initializeSocketMonitoring();
+            nonce: sewnWsAdmin.nonce
+        })
+            .done(function (response) {
+                debugLog.info('Server status response:', response);
+
+                if (response.success && response.data) {
+                    updateServerUI(response.data.details || {}, response.data.external || false);
+
+                    if (!socketInitialized && response.data.running) {
+                        debugLog.info('Server is running, initializing socket...');
+                        const socket = initializeSocket(response.data.details);
+                        if (socket) {
+                            socketInitialized = true;
+                            socket.connect();
+                        }
+                    }
+                } else {
+                    debugLog.warn('Invalid server status response:', response);
+                    updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
                 }
-            } else {
-                console.warn('[SEWN WebSocket] Invalid server status response:', response);
+            })
+            .fail(function (error) {
+                debugLog.error('Server status check failed:', error);
                 updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
-            }
-        }).fail(function (error) {
-            console.error('[SEWN WebSocket] Server status check failed:', error);
-            updateServerUI({ running: false, pid: null, uptime: 0, memory: 0 });
-        });
+            });
     }
 
     function updateServerUI(details, isExternal) {
@@ -446,7 +513,7 @@ jQuery(document).ready(function ($) {
     $('#start-server').on('click', function () {
         $.post(ajaxurl, {
             action: 'sewn_ws_start_server',
-            nonce: sewn_ws_admin.nonce
+            nonce: sewnWsAdmin.nonce
         }).done(function (response) {
             if (response.success) {
                 checkServerStatus();
@@ -459,7 +526,7 @@ jQuery(document).ready(function ($) {
     $('#stop-server').on('click', function () {
         $.post(ajaxurl, {
             action: 'sewn_ws_stop_server',
-            nonce: sewn_ws_admin.nonce
+            nonce: sewnWsAdmin.nonce
         }).done(function (response) {
             if (response.success) {
                 checkServerStatus();

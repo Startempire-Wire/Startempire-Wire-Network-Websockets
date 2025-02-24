@@ -45,7 +45,7 @@ class Ajax_Handler {
      * Toggle debug mode
      */
     public function toggle_debug() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
@@ -76,7 +76,7 @@ class Ajax_Handler {
      * Get error logs with pagination
      */
     public function get_logs() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
@@ -106,7 +106,7 @@ class Ajax_Handler {
      * Clear error logs
      */
     public function clear_logs() {
-        check_ajax_referer('sewn_ws_admin', 'nonce');
+        check_ajax_referer(\SEWN_WS_NONCE_ACTION, 'nonce');
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');

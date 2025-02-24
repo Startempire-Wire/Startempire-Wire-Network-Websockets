@@ -1,9 +1,9 @@
 {
-  "uptime": 111,
+  "uptime": 5241,
   "memory": {
-    "heapUsed": "15.23MB",
-    "external": 2.17,
-    "rss": 50.72
+    "heapUsed": "15.95MB",
+    "external": 2.16,
+    "rss": 29.34
   },
   "connections": 0,
   "messages": {
