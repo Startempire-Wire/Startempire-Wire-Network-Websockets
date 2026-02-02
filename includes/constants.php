@@ -90,14 +90,17 @@ if (defined('SEWN_WS_ENV_DEFAULT_PORT') && !(defined('DOING_AJAX') && DOING_AJAX
 !defined('SEWN_WS_STATS_MAX_POINTS') && define('SEWN_WS_STATS_MAX_POINTS', 20);
 
 // Development mode detection - Enhanced for better local environment detection
+$_sewn_http_host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+$_sewn_server_name = isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : '';
+$_sewn_remote_addr = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '';
 define('SEWN_WS_IS_LOCAL', (
     // Check for common local development domains
-    strpos($_SERVER['HTTP_HOST'], '.local') !== false || 
-    strpos($_SERVER['HTTP_HOST'], '.test') !== false ||
-    strpos($_SERVER['HTTP_HOST'], 'localhost') !== false ||
-    $_SERVER['HTTP_HOST'] === 'localhost' ||
-    $_SERVER['SERVER_NAME'] === 'localhost' ||
-    in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']) ||
+    strpos($_sewn_http_host, '.local') !== false || 
+    strpos($_sewn_http_host, '.test') !== false ||
+    strpos($_sewn_http_host, 'localhost') !== false ||
+    $_sewn_http_host === 'localhost' ||
+    $_sewn_server_name === 'localhost' ||
+    in_array($_sewn_remote_addr, ['127.0.0.1', '::1']) ||
     // Check for Local by Flywheel
     isset($_SERVER['IS_FLYWHEEL']) ||
     // Check for MAMP
@@ -113,8 +116,8 @@ define('SEWN_WS_ENV_TYPE', (function() {
     if (SEWN_WS_IS_LOCAL) {
         return 'local';
     } else if (
-        strpos($_SERVER['HTTP_HOST'], 'staging.') !== false ||
-        strpos($_SERVER['HTTP_HOST'], 'test.') !== false ||
+        strpos($_sewn_http_host, 'staging.') !== false ||
+        strpos($_sewn_http_host, 'test.') !== false ||
         defined('WP_ENVIRONMENT_TYPE') && WP_ENVIRONMENT_TYPE === 'staging'
     ) {
         return 'staging';
@@ -196,7 +199,7 @@ if (SEWN_WS_IS_LOCAL && defined('WP_DEBUG') && WP_DEBUG) {
 !defined('SEWN_WS_PORT') && define('SEWN_WS_PORT', SEWN_WS_DEFAULT_PORT);
 
 if (!defined('SEWN_WS_HOST')) {
-    define('SEWN_WS_HOST', $_SERVER['HTTP_HOST']);
+    define('SEWN_WS_HOST', $_sewn_http_host ?: 'startempirewire.network');
 }
 
 // End of file 
